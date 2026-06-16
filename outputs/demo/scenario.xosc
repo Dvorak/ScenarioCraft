@@ -1,0 +1,125 @@
+<?xml version='1.0' encoding='utf-8'?>
+<OpenSCENARIO xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="OpenScenario.xsd">
+    <FileHeader description="rainy_pedestrian_occlusion" author="scenarioCraft" revMajor="1" revMinor="3" date="2026-06-15T21:16:24.830690"/>
+    <CatalogLocations/>
+    <RoadNetwork/>
+    <Entities>
+        <ScenarioObject name="ego">
+            <Vehicle name="ego" vehicleCategory="car">
+                <BoundingBox>
+                    <Center x="0.0" y="0.0" z="0.9"/>
+                    <Dimensions width="2.0" length="4.5" height="1.8"/>
+                </BoundingBox>
+                <Performance maxSpeed="69.4" maxDeceleration="10.0" maxAcceleration="10.0"/>
+                <Axles>
+                    <FrontAxle maxSteering="0.5" wheelDiameter="0.6" trackWidth="1.8" positionX="2.8" positionZ="0.3"/>
+                    <RearAxle maxSteering="0.5" wheelDiameter="0.6" trackWidth="1.8" positionX="0.0" positionZ="0.3"/>
+                </Axles>
+            </Vehicle>
+        </ScenarioObject>
+        <ScenarioObject name="parked_van">
+            <Vehicle name="parked_van" vehicleCategory="van">
+                <BoundingBox>
+                    <Center x="0.0" y="0.0" z="0.9"/>
+                    <Dimensions width="2.0" length="4.8" height="1.8"/>
+                </BoundingBox>
+                <Performance maxSpeed="69.4" maxDeceleration="10.0" maxAcceleration="10.0"/>
+                <Axles>
+                    <FrontAxle maxSteering="0.5" wheelDiameter="0.6" trackWidth="1.8" positionX="2.8" positionZ="0.3"/>
+                    <RearAxle maxSteering="0.5" wheelDiameter="0.6" trackWidth="1.8" positionX="0.0" positionZ="0.3"/>
+                </Axles>
+            </Vehicle>
+        </ScenarioObject>
+        <ScenarioObject name="pedestrian">
+            <Pedestrian name="pedestrian" pedestrianCategory="pedestrian" model3d="adult" mass="80.0">
+                <BoundingBox>
+                    <Center x="0.0" y="0.0" z="0.9"/>
+                    <Dimensions width="0.6" length="0.6" height="1.8"/>
+                </BoundingBox>
+            </Pedestrian>
+        </ScenarioObject>
+    </Entities>
+    <Storyboard>
+        <Init>
+            <Actions>
+                <Private entityRef="ego">
+                    <PrivateAction>
+                        <TeleportAction>
+                            <Position>
+                                <WorldPosition x="0.0" y="0.0" z="0.0" h="0.0"/>
+                            </Position>
+                        </TeleportAction>
+                    </PrivateAction>
+                    <PrivateAction>
+                        <LongitudinalAction>
+                            <SpeedAction>
+                                <SpeedActionDynamics dynamicsShape="step" value="0.0" dynamicsDimension="time"/>
+                                <SpeedActionTarget>
+                                    <AbsoluteTargetSpeed value="9.722222222222221"/>
+                                </SpeedActionTarget>
+                            </SpeedAction>
+                        </LongitudinalAction>
+                    </PrivateAction>
+                </Private>
+                <Private entityRef="parked_van">
+                    <PrivateAction>
+                        <TeleportAction>
+                            <Position>
+                                <WorldPosition x="32.0" y="-3.5" z="0.0" h="0.0"/>
+                            </Position>
+                        </TeleportAction>
+                    </PrivateAction>
+                </Private>
+                <Private entityRef="pedestrian">
+                    <PrivateAction>
+                        <TeleportAction>
+                            <Position>
+                                <WorldPosition x="34.0" y="-5.5" z="0.0" h="0.0"/>
+                            </Position>
+                        </TeleportAction>
+                    </PrivateAction>
+                </Private>
+            </Actions>
+        </Init>
+        <Story name="rainy_pedestrian_occlusion">
+            <Act name="pedestrian_occlusion_act">
+                <ManeuverGroup name="pedestrian_crossing" maximumExecutionCount="1">
+                    <Actors selectTriggeringEntities="false">
+                        <EntityRef entityRef="pedestrian"/>
+                    </Actors>
+                    <Maneuver name="crossing_maneuver">
+                        <Event name="pedestrian_starts_crossing" priority="override" maximumExecutionCount="1">
+                            <Action name="pedestrian_speed_action">
+                                <PrivateAction>
+                                    <LongitudinalAction>
+                                        <SpeedAction>
+                                            <SpeedActionDynamics dynamicsShape="step" value="0.0" dynamicsDimension="time"/>
+                                            <SpeedActionTarget>
+                                                <AbsoluteTargetSpeed value="1.5"/>
+                                            </SpeedActionTarget>
+                                        </SpeedAction>
+                                    </LongitudinalAction>
+                                </PrivateAction>
+                            </Action>
+                            <StartTrigger>
+                                <ConditionGroup>
+                                    <Condition name="relative_distance" delay="0.0" conditionEdge="rising">
+                                        <ByEntityCondition>
+                                            <TriggeringEntities triggeringEntitiesRule="any">
+                                                <EntityRef entityRef="ego"/>
+                                            </TriggeringEntities>
+                                            <EntityCondition>
+                                                <RelativeDistanceCondition value="18" freespace="false" entityRef="parked_van" rule="lessThan" relativeDistanceType="longitudinal" coordinateSystem="entity"/>
+                                            </EntityCondition>
+                                        </ByEntityCondition>
+                                    </Condition>
+                                </ConditionGroup>
+                            </StartTrigger>
+                        </Event>
+                    </Maneuver>
+                </ManeuverGroup>
+                <StopTrigger/>
+            </Act>
+        </Story>
+    </Storyboard>
+</OpenSCENARIO>

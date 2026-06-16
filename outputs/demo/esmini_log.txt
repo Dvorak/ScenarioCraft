@@ -1,0 +1,10 @@
+command: esmini --osc outputs/demo/scenario.xosc --headless --quit_at_end
+available: False
+required: False
+return_code: None
+
+stdout:
+
+
+stderr:
+esmini was not found.
