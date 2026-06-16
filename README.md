@@ -49,6 +49,17 @@ Generated artifacts:
 - `esmini_log.txt`
 - `validation_report.md`
 
+## Web UI
+
+Install the optional web dependency and start Streamlit:
+
+```bash
+python -m pip install --no-build-isolation -e ".[web]"
+streamlit run src/scenariocraft/web/app.py
+```
+
+The web UI uses the existing mock provider and deterministic tool pipeline. It can generate and edit `ScenarioSpec` JSON, build and view OpenSCENARIO XML, run semantic validation, run ASAM QC when available, run esmini when available, and view `validation_report.md`.
+
 ## OpenSCENARIO Builder
 
 The default builder is `ScenariogenerationBuilder`, backed by the `pyoscx/scenariogeneration` package. A small deterministic XML fallback remains in the codebase so the artifact path stays inspectable if the default builder fails in an unusual environment.
@@ -118,4 +129,4 @@ python -m scenariocraft.main --input examples/pedestrian_occlusion.txt --out out
 
 - Only the deterministic rainy pedestrian occlusion scenario is implemented.
 - The generated scenario is intentionally small and suitable for a research artifact trail, not a complete simulation environment.
-- No CARLA, CAMEL, Streamlit, Docker, repair loop, OpenAI provider, or local LLM provider is included in this version.
+- No CARLA, CAMEL, Docker, repair loop, OpenAI provider, or local LLM provider is included in this version.
