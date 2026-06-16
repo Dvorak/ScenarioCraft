@@ -1,9 +1,12 @@
-command: /missing/esmini --osc outputs/demo/scenario.xosc --headless --quit_at_end --disable_log
+command: /missing/esmini --osc scenario.xosc --headless --quit_at_end --disable_log
+working_dir: outputs/demo
 available: False
 required: False
 timeout_s: 20.0
 timed_out: False
 return_code: None
+executed: None
+error_message: esmini was not found.
 
 stdout:
 

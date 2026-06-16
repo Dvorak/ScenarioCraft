@@ -10,7 +10,7 @@ def test_report_includes_missing_tool_warnings(tmp_path: Path) -> None:
     spec = MockScenarioGenerator().generate_spec("scenario text")
     build_result = build_openscenario(spec, tmp_path)
     qc_result = AsamQcResult(False, ["asam-qc-openscenarioxml", "scenario.xosc"], None, "", "", None)
-    esmini_result = EsminiResult(False, ["esmini", "--osc", "scenario.xosc"], None, "", "", None, None)
+    esmini_result = EsminiResult(False, ["esmini", "--osc", "scenario.xosc"], None, None, "", "", None, None, None)
 
     report_path = generate_validation_report(
         "scenario text",

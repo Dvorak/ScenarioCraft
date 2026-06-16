@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <OpenSCENARIO xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="OpenScenario.xsd">
-    <FileHeader description="rainy_pedestrian_occlusion" author="scenarioCraft" revMajor="1" revMinor="3" date="2026-06-16T11:26:35.437980"/>
+    <FileHeader description="rainy_pedestrian_occlusion" author="scenarioCraft" revMajor="1" revMinor="3" date="2026-06-16T21:05:04.375415"/>
     <CatalogLocations/>
     <RoadNetwork/>
     <Entities>

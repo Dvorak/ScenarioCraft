@@ -60,6 +60,7 @@ def _render_report(
 ## Generated Artifacts
 
 - `scenario_spec.json`
+- `preview_2d.png`
 {artifact_lines}
 - `qc_config.xml`
 - `qc_report.json`
@@ -84,7 +85,8 @@ Overall result: `{'passed' if semantic_result.passed else 'failed'}`
 ## Known Limitations
 
 - The OpenSCENARIO XML builder used `{build_result.builder}`.
-- No CARLA, CAMEL, Streamlit, OpenAI provider, local LLM provider, Docker setup, or repair loop is included in this version.
+- No CARLA, CAMEL, OpenAI provider, local LLM provider, Docker setup, or full repair loop is included in this version.
+- esmini currently acts as an optional execution/load check; browser video rendering is future work.
 - External ASAM QC and esmini checks are optional and may be skipped when the tools are unavailable.
 
 ## Repair Suggestions
@@ -130,9 +132,11 @@ def _esmini_summary(result: EsminiResult) -> str:
         return "\n".join(lines)
     return "\n".join([
         f"- Command: `{' '.join(result.command)}`",
+        f"- Working directory: `{result.working_dir}`",
         f"- Required: `{result.required}`",
         f"- Timeout seconds: `{result.timeout_s}`",
         f"- Timed out: `{result.timed_out}`",
         f"- Return code: `{result.return_code}`",
         f"- Executed: `{result.executed}`",
+        f"- Error message: `{result.error_message}`",
     ])

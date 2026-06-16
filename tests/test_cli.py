@@ -16,6 +16,7 @@ def test_cli_happy_path_with_mock_provider(monkeypatch, tmp_path: Path) -> None:
     assert exit_code == 0
     assert (output_dir / "input.txt").exists()
     assert (output_dir / "scenario_spec.json").exists()
+    assert (output_dir / "preview_2d.png").exists()
     assert (output_dir / "scenario.xosc").exists()
     assert (output_dir / "qc_report.json").exists()
     assert (output_dir / "esmini_log.txt").exists()
@@ -72,3 +73,37 @@ def test_cli_uses_explicit_esmini_binary(monkeypatch, tmp_path: Path) -> None:
 
     assert exit_code == 0
     assert "available: True" in (output_dir / "esmini_log.txt").read_text(encoding="utf-8")
+
+
+def test_cli_load_xosc_runs_esmini_from_xosc_parent(monkeypatch, tmp_path: Path) -> None:
+    reference_dir = tmp_path / "reference"
+    output_dir = tmp_path / "out"
+    xosc_path = reference_dir / "reference.xosc"
+    reference_dir.mkdir()
+    xosc_path.write_text("<OpenSCENARIO/>", encoding="utf-8")
+    captured = {}
+    monkeypatch.setattr("shutil.which", lambda _binary: "/fake/esmini")
+
+    def fake_run(*args, **kwargs):
+        captured["command"] = args[0]
+        captured["cwd"] = kwargs["cwd"]
+        return subprocess.CompletedProcess(args[0], 0, "loaded", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    exit_code = main([
+        "--load-xosc",
+        str(xosc_path),
+        "--out",
+        str(output_dir),
+        "--run-esmini",
+    ])
+
+    assert exit_code == 0
+    assert captured["cwd"] == reference_dir
+    assert captured["command"][2] == "reference.xosc"
+    assert not (output_dir / "reference.xosc").exists()
+    assert not (output_dir / "scenario_spec.json").exists()
+    assert (output_dir / "esmini_log.txt").exists()
+    assert (output_dir / "esmini_stdout.txt").read_text(encoding="utf-8") == "loaded"
+    assert "Loaded OpenSCENARIO" in (output_dir / "validation_report.md").read_text(encoding="utf-8")

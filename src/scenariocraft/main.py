@@ -4,13 +4,24 @@ import argparse
 from pathlib import Path
 
 from scenariocraft.generators import MockScenarioGenerator, ScenarioGenerator
-from scenariocraft.tools import build_openscenario, generate_validation_report, run_asam_qc, run_esmini, validate_semantics
+from scenariocraft.tools import (
+    EsminiResult,
+    build_openscenario,
+    generate_2d_preview,
+    generate_validation_report,
+    run_asam_qc,
+    run_esmini,
+    validate_semantics,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    input_path = Path(args.input)
     output_dir = Path(args.out)
+    if args.load_xosc is not None:
+        return _run_loaded_xosc(args, output_dir)
+
+    input_path = Path(args.input)
     scenario_text = input_path.read_text(encoding="utf-8")
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "input.txt").write_text(scenario_text, encoding="utf-8")
@@ -19,6 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     spec = generator.generate_spec(scenario_text)
     (output_dir / "scenario_spec.json").write_text(spec.to_json() + "\n", encoding="utf-8")
 
+    preview_path = generate_2d_preview(spec, output_dir / "preview_2d.png")
     build_result = build_openscenario(spec, output_dir)
     qc_result = run_asam_qc(build_result.xosc_path, output_dir)
     esmini_result = run_esmini(
@@ -39,6 +51,7 @@ def main(argv: list[str] | None = None) -> int:
         output_dir,
     )
     print(f"Wrote ScenarioSpec: {output_dir / 'scenario_spec.json'}")
+    print(f"Wrote 2D preview: {preview_path}")
     print(f"Wrote OpenSCENARIO: {build_result.xosc_path}")
     print(f"Wrote validation report: {report_path}")
     if args.require_esmini and not esmini_result.esmini_available:
@@ -52,6 +65,21 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--input", default="examples/pedestrian_occlusion.txt", help="Path to natural-language scenario text.")
     parser.add_argument("--out", default="outputs/demo", help="Output artifact directory.")
     parser.add_argument("--provider", default="mock", choices=["mock"], help="Scenario generator provider.")
+    parser.add_argument(
+        "--load-xosc",
+        default=None,
+        help="Run checks against an existing OpenSCENARIO .xosc file without generating a ScenarioSpec.",
+    )
+    parser.add_argument(
+        "--run-esmini",
+        action="store_true",
+        help="Run the optional esmini load/execution check for --load-xosc.",
+    )
+    parser.add_argument(
+        "--xosc-working-dir",
+        default=None,
+        help="Working directory for --load-xosc. Defaults to the loaded .xosc file's parent directory.",
+    )
     parser.add_argument(
         "--esmini-bin",
         default=None,
@@ -69,6 +97,107 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="Maximum seconds to wait for the esmini load/run check.",
     )
     return parser.parse_args(argv)
+
+
+def _run_loaded_xosc(args: argparse.Namespace, output_dir: Path) -> int:
+    xosc_path = Path(args.load_xosc).expanduser()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if not xosc_path.exists():
+        print(f"OpenSCENARIO file was not found: {xosc_path}")
+        return 2
+    working_dir = Path(args.xosc_working_dir).expanduser() if args.xosc_working_dir else None
+    if args.run_esmini:
+        esmini_result = run_esmini(
+            xosc_path,
+            output_dir,
+            working_dir=working_dir,
+            required=args.require_esmini,
+            binary=args.esmini_bin,
+            timeout_s=args.esmini_timeout,
+        )
+    else:
+        resolved_xosc = xosc_path.resolve()
+        resolved_working_dir = working_dir.resolve() if working_dir else resolved_xosc.parent
+        esmini_result = EsminiResult(
+            esmini_available=False,
+            command=[],
+            working_dir=_display_path(resolved_working_dir),
+            return_code=None,
+            stdout="",
+            stderr="esmini check was not requested.",
+            executed=None,
+            error_message="esmini check was not requested.",
+            playback_path=None,
+            required=args.require_esmini,
+            timeout_s=args.esmini_timeout,
+        )
+        (output_dir / "esmini_log.txt").write_text("esmini check was not requested.\n", encoding="utf-8")
+        (output_dir / "esmini_stdout.txt").write_text("", encoding="utf-8")
+        (output_dir / "esmini_stderr.txt").write_text(esmini_result.stderr, encoding="utf-8")
+    report_path = _write_loaded_xosc_report(xosc_path, esmini_result, output_dir)
+    print(f"Loaded OpenSCENARIO: {xosc_path}")
+    print(f"Wrote esmini log: {output_dir / 'esmini_log.txt'}")
+    print(f"Wrote validation report: {report_path}")
+    if args.require_esmini and not esmini_result.esmini_available:
+        print("Required esmini binary was not found. Set ESMINI_BIN or add esmini to PATH.")
+        return 2
+    return 0
+
+
+def _write_loaded_xosc_report(xosc_path: Path, result: EsminiResult, output_dir: Path) -> Path:
+    report_path = output_dir / "validation_report.md"
+    if not result.esmini_available:
+        esmini_section = "\n".join([
+            "esmini was not found. Scenario playback/execution check was skipped."
+            if result.command
+            else "esmini execution check was not requested.",
+            f"- Working directory: `{result.working_dir}`",
+            f"- Error message: `{result.error_message}`",
+        ])
+    else:
+        esmini_section = "\n".join([
+            f"- Command: `{' '.join(result.command)}`",
+            f"- Working directory: `{result.working_dir}`",
+            f"- Timeout seconds: `{result.timeout_s}`",
+            f"- Timed out: `{result.timed_out}`",
+            f"- Return code: `{result.return_code}`",
+            f"- Executed: `{result.executed}`",
+            f"- Error message: `{result.error_message}`",
+        ])
+    report_path.write_text(
+        f"""# scenarioCraft Loaded OpenSCENARIO Report
+
+## Loaded OpenSCENARIO
+
+- Source file: `{xosc_path}`
+- The file was executed in place; it was not copied into the output directory.
+
+## esmini Execution / Playback
+
+{esmini_section}
+
+## Generated Artifacts
+
+- `esmini_log.txt`
+- `esmini_stdout.txt`
+- `esmini_stderr.txt`
+- `validation_report.md`
+
+## Known Limitations
+
+- This mode does not parse external OpenSCENARIO files into ScenarioSpec.
+- esmini is used only as an optional load/execution check; MP4/GIF rendering is not implemented.
+""",
+        encoding="utf-8",
+    )
+    return report_path
+
+
+def _display_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(Path.cwd().resolve()))
+    except ValueError:
+        return str(path)
 
 
 def _get_generator(provider: str) -> ScenarioGenerator:
