@@ -91,7 +91,14 @@ class ScenariogenerationBuilder(ScenarioBuilder):
         act.add_maneuver_group(maneuver_group)
         story = xosc.Story(spec.scenario_name)
         story.add_act(act)
-        storyboard = xosc.StoryBoard(init)
+        stop_trigger = xosc.ValueTrigger(
+            "stop_after_8s",
+            0,
+            xosc.ConditionEdge.rising,
+            xosc.SimulationTimeCondition(8, xosc.Rule.greaterThan),
+            triggeringpoint="stop",
+        )
+        storyboard = xosc.StoryBoard(init, stop_trigger)
         storyboard.add_story(story)
 
         scenario = xosc.Scenario(
@@ -200,7 +207,7 @@ def _build_xml_tree(spec: ScenarioSpec) -> ET.Element:
     ET.SubElement(target, "AbsoluteTargetSpeed", {"value": str(pedestrian.speed_mps if pedestrian else 1.5)})
     _append_trigger(event, spec)
     ET.SubElement(act, "StopTrigger")
-    ET.SubElement(storyboard, "StopTrigger")
+    _append_stop_trigger(storyboard)
     return root
 
 
@@ -261,3 +268,15 @@ def _append_trigger(parent: ET.Element, spec: ScenarioSpec) -> None:
         "rule": "lessThan",
     })
     relative.text = ""
+
+
+def _append_stop_trigger(parent: ET.Element) -> None:
+    stop_trigger = ET.SubElement(parent, "StopTrigger")
+    condition_group = ET.SubElement(stop_trigger, "ConditionGroup")
+    condition = ET.SubElement(condition_group, "Condition", {
+        "name": "stop_after_8s",
+        "delay": "0",
+        "conditionEdge": "rising",
+    })
+    by_value = ET.SubElement(condition, "ByValueCondition")
+    ET.SubElement(by_value, "SimulationTimeCondition", {"value": "8", "rule": "greaterThan"})

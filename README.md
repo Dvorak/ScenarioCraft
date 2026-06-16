@@ -27,7 +27,7 @@ python -m scenariocraft.main --input examples/pedestrian_occlusion.txt --out out
 pytest
 ```
 
-The default `mock` provider requires no API key, simulator, GPU, CARLA, or esmini installation.
+The default `mock` provider requires no API key, simulator, GPU, CARLA, or esmini installation. When esmini is available, the CLI includes it in the validation flow as a load/run check.
 
 ## CLI
 
@@ -83,10 +83,30 @@ ASAM_QC_OPENSCENARIOXML_BIN=/path/to/qc_openscenario
 esmini:
 
 ```bash
-ESMINI_BIN=esmini
+python scripts/install_esmini.py --package bin
+export ESMINI_BIN="$(cat third_party/esmini/ESMINI_BIN)"
+python -m scenariocraft.main --input examples/pedestrian_occlusion.txt --out outputs/demo --provider mock --require-esmini
 ```
 
-Download a prebuilt esmini release package from `https://github.com/esmini/esmini/releases/latest`, unzip it, and either add the executable directory to `PATH` or set `ESMINI_BIN` to the executable path.
+The installer downloads the matching prebuilt esmini release asset for the current OS from `https://github.com/esmini/esmini/releases/latest`, extracts it under `third_party/esmini/`, and writes the resolved executable path to `third_party/esmini/ESMINI_BIN`.
+
+The esmini wrapper resolves the executable in this order:
+
+- `--esmini-bin /path/to/esmini`
+- `ESMINI_BIN=/path/to/esmini`
+- `esmini` on `PATH`
+- a downloaded executable under `third_party/esmini/` or `tools/esmini/`
+
+If you already downloaded esmini manually, point the CLI at the compiled binary:
+
+```bash
+python -m scenariocraft.main \
+  --input examples/pedestrian_occlusion.txt \
+  --out outputs/demo \
+  --provider mock \
+  --esmini-bin /path/to/esmini \
+  --require-esmini
+```
 
 If either ASAM QC or esmini is not installed, the CLI still completes and writes a clear warning into `validation_report.md`. To make missing esmini a hard failure:
 

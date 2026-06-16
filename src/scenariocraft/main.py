@@ -21,7 +21,13 @@ def main(argv: list[str] | None = None) -> int:
 
     build_result = build_openscenario(spec, output_dir)
     qc_result = run_asam_qc(build_result.xosc_path, output_dir)
-    esmini_result = run_esmini(build_result.xosc_path, output_dir, required=args.require_esmini)
+    esmini_result = run_esmini(
+        build_result.xosc_path,
+        output_dir,
+        required=args.require_esmini,
+        binary=args.esmini_bin,
+        timeout_s=args.esmini_timeout,
+    )
     semantic_result = validate_semantics(spec)
     report_path = generate_validation_report(
         scenario_text,
@@ -47,9 +53,20 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--out", default="outputs/demo", help="Output artifact directory.")
     parser.add_argument("--provider", default="mock", choices=["mock"], help="Scenario generator provider.")
     parser.add_argument(
+        "--esmini-bin",
+        default=None,
+        help="Path to an esmini executable. Overrides ESMINI_BIN, PATH, and local third_party/tools lookup.",
+    )
+    parser.add_argument(
         "--require-esmini",
         action="store_true",
-        help="Return a non-zero exit code if esmini is not available on PATH or via ESMINI_BIN.",
+        help="Return a non-zero exit code if esmini is not available.",
+    )
+    parser.add_argument(
+        "--esmini-timeout",
+        type=float,
+        default=20.0,
+        help="Maximum seconds to wait for the esmini load/run check.",
     )
     return parser.parse_args(argv)
 

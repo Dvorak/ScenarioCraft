@@ -124,10 +124,15 @@ def _qc_summary(result: AsamQcResult) -> str:
 
 def _esmini_summary(result: EsminiResult) -> str:
     if not result.esmini_available:
-        return "esmini was not found. Scenario playback/execution check was skipped."
+        lines = ["esmini was not found. Scenario playback/execution check was skipped."]
+        if result.install_hint:
+            lines.append(f"- Install hint: {result.install_hint}")
+        return "\n".join(lines)
     return "\n".join([
         f"- Command: `{' '.join(result.command)}`",
         f"- Required: `{result.required}`",
+        f"- Timeout seconds: `{result.timeout_s}`",
+        f"- Timed out: `{result.timed_out}`",
         f"- Return code: `{result.return_code}`",
         f"- Executed: `{result.executed}`",
     ])
