@@ -1,6 +1,8 @@
-command: esmini --osc outputs/demo/scenario.xosc --headless --quit_at_end
+command: /missing/esmini --osc outputs/demo/scenario.xosc --headless --quit_at_end --disable_log
 available: False
 required: False
+timeout_s: 20.0
+timed_out: False
 return_code: None
 
 stdout:
@@ -8,3 +10,6 @@ stdout:
 
 stderr:
 esmini was not found.
+
+install_hint:
+Install a prebuilt esmini release with `python scripts/install_esmini.py --package bin`, set ESMINI_BIN, or add esmini to PATH.

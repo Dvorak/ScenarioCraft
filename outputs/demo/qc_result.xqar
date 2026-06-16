@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='UTF-8' standalone='no'?>
 <CheckerResults version="v1.0.0-rc.1">
-  <CheckerBundle build_date="2026-06-15" description="OpenScenario checker bundle" name="xoscBundle" version="v1.0.0-rc.1" summary="17 checker(s) are executed. 16 checker(s) are completed. 1 checker(s) are skipped. 0 checker(s) have internal error and 0 checker(s) do not contain status.">
+  <CheckerBundle build_date="2026-06-16" description="OpenScenario checker bundle" name="xoscBundle" version="v1.0.0-rc.1" summary="17 checker(s) are executed. 16 checker(s) are completed. 1 checker(s) are skipped. 0 checker(s) have internal error and 0 checker(s) do not contain status.">
     <Param name="InputFile" value="outputs/demo/scenario.xosc"/>
     <Param name="resultFile" value="outputs/demo/qc_result.xqar"/>
     <Checker status="completed" checkerId="check_asam_xosc_xml_valid_xml_document" description="The given file to check must be a valid XML document." summary="0 issue(s) are found.">

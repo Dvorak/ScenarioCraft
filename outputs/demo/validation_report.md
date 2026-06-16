@@ -35,34 +35,35 @@ A rainy urban pedestrian occlusion scenario where the ego vehicle approaches a p
 
 stderr:
 ```text
-2026-06-15 21:16:25,017 - Initializing checks
-2026-06-15 21:16:25,020 - Executing valid_xml_document check
-2026-06-15 21:16:25,020 - - It is an xml document.
-2026-06-15 21:16:25,021 - Executing root_tag_is_openscenario check
-2026-06-15 21:16:25,021 - - Root tag is 'OpenSCENARIO'
-2026-06-15 21:16:25,021 - Executing fileheader_is_present check
-2026-06-15 21:16:25,022 - - Root tag contains FileHeader -> OK
-2026-06-15 21:16:25,022 - Executing version_is_defined check
-2026-06-15 21:16:25,022 - Executing valid_schema check
-2026-06-15 21:16:25,028 - - XML is valid.
-2026-06-15 21:16:25,029 - Executing uniquely_resolvable_entity_references check
-2026-06-15 21:16:25,030 - Executing resolvable_signal_id_in_traffic_signal_state_action check
-2026-06-15 21:16:25,030 - Executing resolvable_traffic_signal_controller_by_traffic_signal_controller_ref check
-2026-06-15 21:16:25,030 - Executing valid_actor_reference_in_private_actions check
-2026-06-15 21:16:25,031 - Executing resolvable_entity_references check
-2026-06-15 21:16:25,031 - Executing resolvable_variable_reference check
-2026-06-15 21:16:25,031 - Executing resolvable_storyboard_element_reference check
-2026-06-15 21:16:25,031 - Executing unique_element_names_on_same_level check
-2026-06-15 21:16:25,032 - Executing valid_parameter_declaration_in_catalogs check
-2026-06-15 21:16:25,032 - Executing allowed_operators check
-2026-06-15 21:16:25,032 - Executing non_negative_transition_time_in_light_state_action check
-2026-06-15 21:16:25,033 - Executing positive_duration_in_phase check
-2026-06-15 21:16:25,034 - Done
+2026-06-16 11:26:35,646 - Initializing checks
+2026-06-16 11:26:35,649 - Executing valid_xml_document check
+2026-06-16 11:26:35,649 - - It is an xml document.
+2026-06-16 11:26:35,650 - Executing root_tag_is_openscenario check
+2026-06-16 11:26:35,650 - - Root tag is 'OpenSCENARIO'
+2026-06-16 11:26:35,650 - Executing fileheader_is_present check
+2026-06-16 11:26:35,651 - - Root tag contains FileHeader -> OK
+2026-06-16 11:26:35,651 - Executing version_is_defined check
+2026-06-16 11:26:35,652 - Executing valid_schema check
+2026-06-16 11:26:35,660 - - XML is valid.
+2026-06-16 11:26:35,661 - Executing uniquely_resolvable_entity_references check
+2026-06-16 11:26:35,662 - Executing resolvable_signal_id_in_traffic_signal_state_action check
+2026-06-16 11:26:35,662 - Executing resolvable_traffic_signal_controller_by_traffic_signal_controller_ref check
+2026-06-16 11:26:35,662 - Executing valid_actor_reference_in_private_actions check
+2026-06-16 11:26:35,663 - Executing resolvable_entity_references check
+2026-06-16 11:26:35,663 - Executing resolvable_variable_reference check
+2026-06-16 11:26:35,663 - Executing resolvable_storyboard_element_reference check
+2026-06-16 11:26:35,664 - Executing unique_element_names_on_same_level check
+2026-06-16 11:26:35,664 - Executing valid_parameter_declaration_in_catalogs check
+2026-06-16 11:26:35,664 - Executing allowed_operators check
+2026-06-16 11:26:35,665 - Executing non_negative_transition_time_in_light_state_action check
+2026-06-16 11:26:35,665 - Executing positive_duration_in_phase check
+2026-06-16 11:26:35,667 - Done
 ```
 
 ## esmini Execution / Playback
 
 esmini was not found. Scenario playback/execution check was skipped.
+- Install hint: Install a prebuilt esmini release with `python scripts/install_esmini.py --package bin`, set ESMINI_BIN, or add esmini to PATH.
 
 ## Semantic Validation
 
