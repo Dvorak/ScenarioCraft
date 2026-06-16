@@ -1,5 +1,6 @@
 from scenariocraft.tools.asam_qc_tool import AsamQcResult, run_asam_qc
 from scenariocraft.tools.esmini_tool import EsminiResult, run_esmini
+from scenariocraft.tools.preview_2d import estimate_ttc_s, generate_2d_preview
 from scenariocraft.tools.report_tool import generate_validation_report
 from scenariocraft.tools.scenario_builder import (
     BuildResult,
@@ -21,6 +22,8 @@ __all__ = [
     "SemanticValidationResult",
     "build_openscenario",
     "generate_validation_report",
+    "estimate_ttc_s",
+    "generate_2d_preview",
     "run_asam_qc",
     "run_esmini",
     "validate_semantics",
