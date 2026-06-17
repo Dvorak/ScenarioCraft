@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenSCENARIO>
+  <FileHeader revMajor="1" revMinor="3" date="2026-01-01" description="fixture" author="tests"/>
+  <ParameterDeclarations>
+    <ParameterDeclaration name="EgoSpeed" parameterType="double" value="13.9"/>
+  </ParameterDeclarations>
+  <CatalogLocations>
+    <VehicleCatalog><Directory path="../Catalogs/Vehicles"/></VehicleCatalog>
+  </CatalogLocations>
+  <RoadNetwork>
+    <LogicFile filepath="../Maps/fixture.xodr"/>
+  </RoadNetwork>
+  <Entities>
+    <ScenarioObject name="ego"/>
+  </Entities>
+  <Storyboard>
+    <Story name="story">
+      <Act name="act">
+        <ManeuverGroup name="group">
+          <Maneuver name="maneuver">
+            <Event name="event">
+              <StartTrigger>
+                <ConditionGroup>
+                  <Condition name="condition"/>
+                </ConditionGroup>
+              </StartTrigger>
+            </Event>
+          </Maneuver>
+        </ManeuverGroup>
+      </Act>
+    </Story>
+  </Storyboard>
+</OpenSCENARIO>
