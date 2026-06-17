@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from scenariocraft.generators import MockScenarioGenerator, ScenarioGenerator
+from scenariocraft.references import XoscMetadata, extract_xosc_metadata
 from scenariocraft.tools import (
     EsminiResult,
     build_openscenario,
@@ -134,7 +135,8 @@ def _run_loaded_xosc(args: argparse.Namespace, output_dir: Path) -> int:
         (output_dir / "esmini_log.txt").write_text("esmini check was not requested.\n", encoding="utf-8")
         (output_dir / "esmini_stdout.txt").write_text("", encoding="utf-8")
         (output_dir / "esmini_stderr.txt").write_text(esmini_result.stderr, encoding="utf-8")
-    report_path = _write_loaded_xosc_report(xosc_path, esmini_result, output_dir)
+    metadata = extract_xosc_metadata(xosc_path)
+    report_path = _write_loaded_xosc_report(xosc_path, metadata, esmini_result, output_dir)
     print(f"Loaded OpenSCENARIO: {xosc_path}")
     print(f"Wrote esmini log: {output_dir / 'esmini_log.txt'}")
     print(f"Wrote validation report: {report_path}")
@@ -144,7 +146,12 @@ def _run_loaded_xosc(args: argparse.Namespace, output_dir: Path) -> int:
     return 0
 
 
-def _write_loaded_xosc_report(xosc_path: Path, result: EsminiResult, output_dir: Path) -> Path:
+def _write_loaded_xosc_report(
+    xosc_path: Path,
+    metadata: XoscMetadata,
+    result: EsminiResult,
+    output_dir: Path,
+) -> Path:
     report_path = output_dir / "validation_report.md"
     if not result.esmini_available:
         esmini_section = "\n".join([
@@ -172,6 +179,10 @@ def _write_loaded_xosc_report(xosc_path: Path, result: EsminiResult, output_dir:
 - Source file: `{xosc_path}`
 - The file was executed in place; it was not copied into the output directory.
 
+## Extracted Metadata
+
+{_metadata_section(metadata)}
+
 ## esmini Execution / Playback
 
 {esmini_section}
@@ -191,6 +202,31 @@ def _write_loaded_xosc_report(xosc_path: Path, result: EsminiResult, output_dir:
         encoding="utf-8",
     )
     return report_path
+
+
+def _metadata_section(metadata: XoscMetadata) -> str:
+    if not metadata.file_exists:
+        return "OpenSCENARIO file does not exist."
+    if not metadata.parse_success:
+        return f"OpenSCENARIO XML parsing failed: `{metadata.parse_error}`"
+    lines = [
+        f"- Parse success: `{metadata.parse_success}`",
+        f"- OpenSCENARIO version: `{metadata.open_scenario_version}`",
+        f"- FileHeader: `{metadata.file_header}`",
+        f"- Logic files: `{metadata.logic_file_paths}`",
+        f"- Scene graph files: `{metadata.scene_graph_file_paths}`",
+        f"- Catalog locations: `{metadata.catalog_locations}`",
+        f"- Parameters: `{metadata.parameter_names}`",
+        f"- Scenario objects: `{metadata.scenario_object_names}`",
+        f"- Has storyboard: `{metadata.has_storyboard}`",
+        "- Approximate counts: "
+        f"parameters={metadata.parameter_count}, "
+        f"scenario_objects={metadata.scenario_object_count}, "
+        f"maneuvers={metadata.maneuver_count}, "
+        f"events={metadata.event_count}, "
+        f"conditions={metadata.condition_count}",
+    ]
+    return "\n".join(lines)
 
 
 def _display_path(path: Path) -> str:

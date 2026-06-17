@@ -80,7 +80,15 @@ def test_cli_load_xosc_runs_esmini_from_xosc_parent(monkeypatch, tmp_path: Path)
     output_dir = tmp_path / "out"
     xosc_path = reference_dir / "reference.xosc"
     reference_dir.mkdir()
-    xosc_path.write_text("<OpenSCENARIO/>", encoding="utf-8")
+    xosc_path.write_text(
+        """<OpenSCENARIO>
+  <FileHeader revMajor="1" revMinor="3" description="reference"/>
+  <Entities><ScenarioObject name="ego"/></Entities>
+  <Storyboard/>
+</OpenSCENARIO>
+""",
+        encoding="utf-8",
+    )
     captured = {}
     monkeypatch.setattr("shutil.which", lambda _binary: "/fake/esmini")
 
@@ -106,4 +114,7 @@ def test_cli_load_xosc_runs_esmini_from_xosc_parent(monkeypatch, tmp_path: Path)
     assert not (output_dir / "scenario_spec.json").exists()
     assert (output_dir / "esmini_log.txt").exists()
     assert (output_dir / "esmini_stdout.txt").read_text(encoding="utf-8") == "loaded"
-    assert "Loaded OpenSCENARIO" in (output_dir / "validation_report.md").read_text(encoding="utf-8")
+    report = (output_dir / "validation_report.md").read_text(encoding="utf-8")
+    assert "Loaded OpenSCENARIO" in report
+    assert "Extracted Metadata" in report
+    assert "ego" in report
