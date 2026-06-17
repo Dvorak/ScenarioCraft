@@ -7,5 +7,7 @@ build/
 dist/
 outputs/require-esmini-demo/
 AGENTS.md
-third_party/esmini/
-tools/esmini/
+docs/
+external/
+third_party/
+outputs/
