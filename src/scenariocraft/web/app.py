@@ -8,6 +8,7 @@ from pathlib import Path
 import streamlit as st
 
 from scenariocraft.generators import MockScenarioGenerator, ScenarioGenerator
+from scenariocraft.references import ReferenceScenarioOption, XoscMetadata, discover_external_scenarios, extract_xosc_metadata
 from scenariocraft.schemas import ActorSpec, CriticalitySpec, ScenarioSpec, TriggerSpec
 from scenariocraft.tools import (
     AsamQcResult,
@@ -29,7 +30,10 @@ DEFAULT_SCENARIO_TEXT = (
     "and a pedestrian suddenly crosses from behind it."
 )
 DEFAULT_OUTPUT_DIR = Path("outputs/web-demo")
+DEFAULT_EXTERNAL_ROOT = Path("external")
+WORKFLOW_MODES = ("Generate from prompt", "Load existing .xosc")
 DEMO_MODES = ("Normal good scenario", "Missing pedestrian", "Low criticality")
+REFERENCE_SOURCES = ("All", "OSC-NCAP-scenarios", "ALKS scenarios", "Other external scenarios")
 CRITICALITY_MAX_TTC_S = 3.0
 
 
@@ -54,7 +58,13 @@ def main() -> None:
 
 def _render_request_panel() -> None:
     st.markdown("### Scenario Request")
-    scenario_text = st.text_area("Request", value=st.session_state.scenario_text, height=185, label_visibility="collapsed")
+    workflow_mode = st.selectbox("Mode", WORKFLOW_MODES, index=WORKFLOW_MODES.index(st.session_state.workflow_mode))
+    st.session_state.workflow_mode = workflow_mode
+    if _is_load_mode():
+        _render_load_request_panel()
+        return
+
+    scenario_text = st.text_area("Request", value=st.session_state.scenario_text, height=145, label_visibility="collapsed")
     st.session_state.scenario_text = scenario_text
     provider_name = st.selectbox("Provider", ["mock"], index=0)
     demo_mode = st.selectbox("Demo Mode", DEMO_MODES, index=DEMO_MODES.index(st.session_state.demo_mode))
@@ -94,10 +104,83 @@ def _render_request_panel() -> None:
     st.caption(f"Artifacts: `{st.session_state.output_dir}`")
 
 
+def _render_load_request_panel() -> None:
+    _ensure_reference_options_loaded()
+
+    refresh_col, count_col = st.columns([0.56, 0.44])
+    with refresh_col:
+        if st.button("Refresh scenario list", width="stretch"):
+            _refresh_reference_options()
+    with count_col:
+        st.caption(f"{len(_reference_options())} discovered .xosc files")
+
+    source_filter = st.selectbox(
+        "Source",
+        REFERENCE_SOURCES,
+        index=REFERENCE_SOURCES.index(st.session_state.reference_source_filter),
+    )
+    st.session_state.reference_source_filter = source_filter
+    options = _filtered_reference_options(source_filter)
+    if not _reference_options():
+        st.info("No external scenarios found. Place ALKS/NCAP repositories under external/ or use custom path.")
+    elif not options:
+        st.info("No scenarios found for the selected source filter.")
+    else:
+        labels = [option.label for option in options]
+        current_label = st.session_state.selected_reference_label
+        index = labels.index(current_label) if current_label in labels else 0
+        selected_label = st.selectbox("Scenario", labels, index=index)
+        st.session_state.selected_reference_label = selected_label
+        selected_option = _option_by_label(options, selected_label)
+        if selected_option is not None:
+            st.caption(f"Source: `{selected_option.source}`")
+            st.caption(f"Relative path: `{selected_option.relative_path}`")
+            actions = st.columns(2)
+            with actions[0]:
+                if st.button("Load selected scenario", type="primary", width="stretch"):
+                    _load_reference_option(Path(st.session_state.output_dir), selected_option)
+            with actions[1]:
+                if st.button("Run Checks", width="stretch"):
+                    _run_loaded_xosc_checks(Path(st.session_state.output_dir))
+
+    st.markdown(_status_label(), unsafe_allow_html=True)
+
+    with st.expander("Advanced: custom .xosc path", expanded=False):
+        xosc_path = st.text_input("Local .xosc path", value=st.session_state.loaded_xosc_path)
+        st.session_state.loaded_xosc_path = xosc_path
+        if st.button("Load custom XOSC", width="stretch"):
+            _load_existing_xosc(Path(st.session_state.output_dir), xosc_path)
+
+    with st.expander("Advanced settings", expanded=False):
+        external_root = Path(st.text_input("External scenario root", st.session_state.external_root))
+        if str(external_root) != st.session_state.external_root:
+            st.session_state.external_root = str(external_root)
+            _refresh_reference_options()
+        output_dir = Path(st.text_input("Output directory", st.session_state.output_dir))
+        st.session_state.output_dir = str(output_dir)
+        require_esmini = st.checkbox("Require esmini", value=st.session_state.require_esmini)
+        st.session_state.require_esmini = require_esmini
+        esmini_timeout = st.number_input(
+            "esmini timeout",
+            min_value=1.0,
+            max_value=120.0,
+            value=st.session_state.esmini_timeout,
+            step=1.0,
+        )
+        st.session_state.esmini_timeout = float(esmini_timeout)
+        esmini_bin = st.text_input("esmini binary", value=st.session_state.esmini_bin)
+        st.session_state.esmini_bin = esmini_bin
+    st.caption(f"Artifacts: `{st.session_state.output_dir}`")
+
+
 def _render_xml_panel(output_dir: Path) -> None:
     st.markdown("### Generated OpenSCENARIO XML")
     xml_value = st.text_area("OpenSCENARIO XML", value=st.session_state.xosc_text, height=365, label_visibility="collapsed")
     st.session_state.xosc_text = xml_value
+
+    if _is_load_mode():
+        st.caption("Loaded external XML is displayed read-only by convention. ScenarioCraft does not modify the source file.")
+        return
 
     buttons = st.columns(3)
     with buttons[0]:
@@ -119,6 +202,9 @@ def _render_xml_panel(output_dir: Path) -> None:
 
 def _render_preview_panel() -> None:
     st.markdown("### Playback / 2D Preview")
+    if _is_load_mode():
+        _render_loaded_playback_panel()
+        return
     spec = _current_spec(show_error=False)
     if spec is None:
         st.info("Generate a ScenarioSpec to see the 2D preview.")
@@ -154,9 +240,25 @@ def _render_preview_panel() -> None:
 
 def _render_advanced_artifacts(output_dir: Path) -> None:
     st.markdown("### Advanced")
-    with st.expander("ScenarioSpec JSON", expanded=False):
-        spec_json = st.text_area("ScenarioSpec JSON", value=st.session_state.spec_json, height=320, label_visibility="collapsed")
-        st.session_state.spec_json = spec_json
+    if not _is_load_mode():
+        with st.expander("ScenarioSpec JSON", expanded=False):
+            spec_json = st.text_area("ScenarioSpec JSON", value=st.session_state.spec_json, height=320, label_visibility="collapsed")
+            st.session_state.spec_json = spec_json
+    with st.expander("Loaded XOSC metadata", expanded=_is_load_mode()):
+        metadata = _current_metadata()
+        if metadata is None:
+            st.info("No external .xosc metadata loaded.")
+        else:
+            if st.session_state.loaded_xosc_source:
+                st.caption(f"Selected source: `{st.session_state.loaded_xosc_source}`")
+            if st.session_state.loaded_xosc_relative_path:
+                st.caption(f"Selected relative path: `{st.session_state.loaded_xosc_relative_path}`")
+            st.json(metadata.to_dict())
+            if metadata.logic_file_paths:
+                st.info(
+                    "OpenDRIVE LogicFile references were detected. esmini checks preserve these relative paths by "
+                    "running from the .xosc file's parent directory."
+                )
     with st.expander("Semantic validation", expanded=False):
         semantic_result = st.session_state.semantic_result
         if isinstance(semantic_result, SemanticValidationResult):
@@ -201,6 +303,17 @@ def _ensure_state() -> None:
         "esmini_result": None,
         "repair_history": [],
         "output_dir": str(DEFAULT_OUTPUT_DIR),
+        "external_root": str(DEFAULT_EXTERNAL_ROOT),
+        "reference_options": [],
+        "reference_browser_initialized": False,
+        "reference_source_filter": REFERENCE_SOURCES[0],
+        "selected_reference_label": "",
+        "loaded_xosc_source": "",
+        "loaded_xosc_relative_path": "",
+        "loaded_xosc_working_dir": "",
+        "workflow_mode": WORKFLOW_MODES[0],
+        "loaded_xosc_path": "",
+        "loaded_xosc_metadata": None,
         "demo_mode": DEMO_MODES[0],
         "run_esmini_check": False,
         "require_esmini": False,
@@ -218,6 +331,110 @@ def _generator(provider_name: str) -> ScenarioGenerator:
     if provider_name == "mock":
         return MockScenarioGenerator()
     raise ValueError(f"Unsupported provider: {provider_name}")
+
+
+def _is_load_mode() -> bool:
+    return st.session_state.workflow_mode == "Load existing .xosc"
+
+
+def _ensure_reference_options_loaded() -> None:
+    if not st.session_state.reference_browser_initialized:
+        _refresh_reference_options()
+        st.session_state.reference_browser_initialized = True
+
+
+def _refresh_reference_options() -> None:
+    st.session_state.reference_options = discover_external_scenarios(Path(st.session_state.external_root))
+
+
+def _reference_options() -> list[ReferenceScenarioOption]:
+    return [
+        option
+        for option in st.session_state.reference_options
+        if isinstance(option, ReferenceScenarioOption)
+    ]
+
+
+def _filtered_reference_options(source_filter: str) -> list[ReferenceScenarioOption]:
+    options = _reference_options()
+    if source_filter == "All":
+        return options
+    return [option for option in options if option.source == source_filter]
+
+
+def _option_by_label(options: list[ReferenceScenarioOption], label: str) -> ReferenceScenarioOption | None:
+    return next((option for option in options if option.label == label), None)
+
+
+def _load_existing_xosc(
+    output_dir: Path,
+    xosc_path_value: str,
+    source: str = "",
+    relative_path: str = "",
+) -> None:
+    xosc_path = Path(xosc_path_value).expanduser()
+    if not xosc_path.exists():
+        _error(f"OpenSCENARIO file does not exist: {xosc_path}")
+        return
+    if not xosc_path.is_file():
+        _error(f"OpenSCENARIO path is not a file: {xosc_path}")
+        return
+    try:
+        xml_text = xosc_path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        _error(f"Failed to read OpenSCENARIO file: {exc}")
+        return
+    metadata = extract_xosc_metadata(xosc_path)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    st.session_state.loaded_xosc_path = str(xosc_path)
+    st.session_state.loaded_xosc_source = source
+    st.session_state.loaded_xosc_relative_path = relative_path
+    st.session_state.loaded_xosc_working_dir = str(xosc_path.parent)
+    st.session_state.loaded_xosc_metadata = metadata
+    st.session_state.xosc_text = xml_text
+    st.session_state.spec_json = ""
+    st.session_state.spec = None
+    st.session_state.build_result = BuildResult(xosc_path=xosc_path, builder="loaded_xosc")
+    st.session_state.preview_path = ""
+    st.session_state.semantic_result = None
+    st.session_state.qc_result = None
+    st.session_state.esmini_result = None
+    st.session_state.report_text = ""
+    _info("Loaded external OpenSCENARIO file.")
+
+
+def _load_reference_option(output_dir: Path, option: ReferenceScenarioOption) -> None:
+    _load_existing_xosc(
+        output_dir,
+        str(option.xosc_path),
+        source=option.source,
+        relative_path=option.relative_path,
+    )
+
+
+def _run_loaded_xosc_checks(output_dir: Path) -> None:
+    build_result = st.session_state.build_result
+    if not isinstance(build_result, BuildResult):
+        _load_existing_xosc(output_dir, st.session_state.loaded_xosc_path)
+        build_result = st.session_state.build_result
+    if not isinstance(build_result, BuildResult):
+        return
+    xosc_path = build_result.xosc_path
+    st.session_state.loaded_xosc_metadata = extract_xosc_metadata(xosc_path)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    qc_result = run_asam_qc(xosc_path, output_dir)
+    esmini_result = run_esmini(
+        xosc_path,
+        output_dir,
+        working_dir=xosc_path.parent,
+        required=st.session_state.require_esmini,
+        binary=st.session_state.esmini_bin or None,
+        timeout_s=st.session_state.esmini_timeout,
+    )
+    st.session_state.qc_result = qc_result
+    st.session_state.esmini_result = esmini_result
+    _write_loaded_xosc_report(output_dir, xosc_path, _current_metadata(), qc_result, esmini_result)
+    _info("External OpenSCENARIO checks completed.")
 
 
 def _generate_and_run(provider_name: str, demo_mode: str) -> None:
@@ -380,9 +597,47 @@ def _run_qc(output_dir: Path) -> None:
 def _run_esmini(output_dir: Path, require_esmini: bool, esmini_bin: str | None, timeout_s: float) -> None:
     build_result = _ensure_build_result(output_dir)
     _write_current_xml_if_present(build_result)
-    result = run_esmini(build_result.xosc_path, output_dir, required=require_esmini, binary=esmini_bin, timeout_s=timeout_s)
+    working_dir = build_result.xosc_path.parent if _is_load_mode() else None
+    result = run_esmini(
+        build_result.xosc_path,
+        output_dir,
+        working_dir=working_dir,
+        required=require_esmini,
+        binary=esmini_bin,
+        timeout_s=timeout_s,
+    )
     st.session_state.esmini_result = result
     _info("esmini completed." if result.executed else "esmini skipped or failed.")
+
+
+def _render_loaded_playback_panel() -> None:
+    preview_tab, esmini_tab = st.tabs(["2D Preview", "Execution Check"])
+    with preview_tab:
+        st.info("2D preview is currently available for ScenarioSpec-generated scenarios only.")
+        if st.session_state.loaded_xosc_source:
+            st.caption(f"Selected source: `{st.session_state.loaded_xosc_source}`")
+        if st.session_state.loaded_xosc_relative_path:
+            st.caption(f"Selected relative path: `{st.session_state.loaded_xosc_relative_path}`")
+        metadata = _current_metadata()
+        if metadata is not None and metadata.logic_file_paths:
+            st.caption("Detected OpenDRIVE LogicFile references: " + ", ".join(f"`{path}`" for path in metadata.logic_file_paths))
+    with esmini_tab:
+        st.caption("esmini runs from the loaded .xosc file's parent directory to preserve relative OpenDRIVE and catalog paths.")
+        if st.session_state.loaded_xosc_working_dir:
+            st.caption(f"esmini working directory: `{st.session_state.loaded_xosc_working_dir}`")
+        if st.button("Run esmini Check", width="stretch"):
+            _run_loaded_xosc_checks(Path(st.session_state.output_dir))
+        esmini_result = st.session_state.esmini_result
+        if isinstance(esmini_result, EsminiResult):
+            if esmini_result.executed:
+                st.success("Executable")
+            elif esmini_result.esmini_available:
+                st.error(f"Execution failed: {esmini_result.error_message}")
+            else:
+                st.warning("esmini was not found. Scenario playback/execution check was skipped.")
+            st.json(esmini_result.to_dict())
+        else:
+            st.info("Load an external .xosc and run checks to see execution status.")
 
 
 def _write_report(output_dir: Path) -> None:
@@ -405,6 +660,50 @@ def _write_report(output_dir: Path) -> None:
     st.session_state.semantic_result = semantic_result
     st.session_state.report_text = report_path.read_text(encoding="utf-8")
     _info("Validation report generated.")
+
+
+def _write_loaded_xosc_report(
+    output_dir: Path,
+    xosc_path: Path,
+    metadata: XoscMetadata | None,
+    qc_result: AsamQcResult,
+    esmini_result: EsminiResult,
+) -> Path:
+    report_path = output_dir / "validation_report.md"
+    report_path.write_text(
+        "\n".join([
+            "# ScenarioCraft Loaded OpenSCENARIO Report",
+            "",
+            "## Loaded OpenSCENARIO",
+            "",
+            f"- Source file: `{xosc_path}`",
+            f"- Selected source: `{st.session_state.loaded_xosc_source or 'custom path'}`",
+            f"- Selected relative path: `{st.session_state.loaded_xosc_relative_path or 'n/a'}`",
+            f"- esmini working directory: `{xosc_path.parent}`",
+            "- The file was inspected in place; ScenarioCraft did not modify it.",
+            "",
+            "## Extracted Metadata",
+            "",
+            _metadata_markdown(metadata),
+            "",
+            "## ASAM Quality Check",
+            "",
+            _qc_markdown(qc_result),
+            "",
+            "## esmini Execution / Playback",
+            "",
+            _esmini_markdown(esmini_result),
+            "",
+            "## Known Limitations",
+            "",
+            "- 2D preview is currently available for ScenarioSpec-generated scenarios only.",
+            "- External `.xosc` files are not reconstructed as ScenarioSpec.",
+            "- Natural-language editing for external `.xosc` is not implemented yet.",
+        ]),
+        encoding="utf-8",
+    )
+    st.session_state.report_text = report_path.read_text(encoding="utf-8")
+    return report_path
 
 
 def _ensure_build_result(output_dir: Path) -> BuildResult:
@@ -562,6 +861,67 @@ def _render_status_label() -> None:
         st.success("Executable")
     else:
         st.warning("Validation warning: semantic validation has not run.")
+
+
+def _current_metadata() -> XoscMetadata | None:
+    metadata = st.session_state.loaded_xosc_metadata
+    return metadata if isinstance(metadata, XoscMetadata) else None
+
+
+def _metadata_markdown(metadata: XoscMetadata | None) -> str:
+    if metadata is None:
+        return "No metadata extracted."
+    if not metadata.file_exists:
+        return "OpenSCENARIO file does not exist."
+    if not metadata.parse_success:
+        return f"OpenSCENARIO XML parsing failed: `{metadata.parse_error}`"
+    logic_note = ""
+    if metadata.logic_file_paths:
+        logic_note = (
+            "\n- Relative path handling: esmini checks run from the `.xosc` parent directory so "
+            "OpenDRIVE LogicFile references remain relative to the source scenario."
+        )
+    return "\n".join([
+        f"- Parse success: `{metadata.parse_success}`",
+        f"- OpenSCENARIO version: `{metadata.open_scenario_version}`",
+        f"- FileHeader: `{metadata.file_header}`",
+        f"- Logic files: `{metadata.logic_file_paths}`",
+        f"- Scene graph files: `{metadata.scene_graph_file_paths}`",
+        f"- Catalog locations: `{metadata.catalog_locations}`",
+        f"- Parameters: `{metadata.parameter_names}`",
+        f"- Scenario objects: `{metadata.scenario_object_names}`",
+        f"- Has storyboard: `{metadata.has_storyboard}`",
+        "- Approximate counts: "
+        f"parameters={metadata.parameter_count}, "
+        f"scenario_objects={metadata.scenario_object_count}, "
+        f"maneuvers={metadata.maneuver_count}, "
+        f"events={metadata.event_count}, "
+        f"conditions={metadata.condition_count}",
+        logic_note,
+    ]).strip()
+
+
+def _qc_markdown(result: AsamQcResult) -> str:
+    if not result.checker_available:
+        return "ASAM OpenSCENARIO XML checker was not found. Standard-compliance checking was skipped."
+    return "\n".join([
+        f"- Command: `{' '.join(result.command)}`",
+        f"- Return code: `{result.return_code}`",
+        f"- Passed: `{result.passed}`",
+        f"- Result path: `{result.result_path}`",
+    ])
+
+
+def _esmini_markdown(result: EsminiResult) -> str:
+    if not result.esmini_available:
+        return "esmini was not found. Scenario playback/execution check was skipped."
+    return "\n".join([
+        f"- Command: `{' '.join(result.command)}`",
+        f"- Working directory: `{result.working_dir}`",
+        f"- Return code: `{result.return_code}`",
+        f"- Executed: `{result.executed}`",
+        f"- Error message: `{result.error_message}`",
+    ])
 
 
 def _status_label() -> str:
