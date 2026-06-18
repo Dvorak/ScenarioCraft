@@ -15,6 +15,8 @@ def main(argv: list[str] | None = None) -> int:
         run_qc=args.run_qc,
         run_esmini_check=args.run_esmini,
         esmini_timeout_s=args.esmini_timeout,
+        esmini_mode=args.esmini_mode,
+        esmini_sim_duration_s=args.sim_duration_s,
     )
     print(f"Found .xosc files: {summary['total_found']}")
     print(f"Scanned scenarios: {summary['total_scanned']}")
@@ -30,7 +32,16 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=None, help="Maximum number of .xosc files to scan.")
     parser.add_argument("--run-qc", action="store_true", help="Run ASAM QC when available.")
     parser.add_argument("--run-esmini", action="store_true", help="Run esmini checks when available.")
-    parser.add_argument("--esmini-timeout", type=float, default=20.0, help="Maximum seconds per esmini check.")
+    parser.add_argument("--esmini-mode", choices=["smoke", "full"], default="smoke", help="esmini check mode for reference scans.")
+    parser.add_argument(
+        "--esmini-timeout",
+        "--timeout-s",
+        dest="esmini_timeout",
+        type=float,
+        default=20.0,
+        help="Maximum seconds per esmini check.",
+    )
+    parser.add_argument("--sim-duration-s", type=float, default=3.0, help="Smoke-mode subprocess duration before classifying startup behavior.")
     return parser.parse_args(argv)
 
 

@@ -1,0 +1,413 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from scenariocraft.references import XoscMetadata
+from scenariocraft.schemas import ScenarioSpec
+from scenariocraft.tools import AsamQcResult, EsminiResult, estimate_ttc_s
+from scenariocraft.tools.semantic_validator import SemanticValidationResult
+
+
+@dataclass(frozen=True)
+class StatusCardViewModel:
+    label: str
+    value: str
+    detail: str
+
+
+@dataclass(frozen=True)
+class ExternalScenarioViewModel:
+    title: str
+    source: str
+    relative_path: str
+    version: str
+    entity_count: str
+    parameter_count: str
+    event_count: str
+    condition_count: str
+    dependency_count: str
+    storyboard_complexity: str
+    entity_names: list[str] = field(default_factory=list)
+    parameter_names: list[str] = field(default_factory=list)
+    logic_file_paths: list[str] = field(default_factory=list)
+    catalog_locations: list[str] = field(default_factory=list)
+    visual_summary_cards: list[StatusCardViewModel] = field(default_factory=list)
+    status_cards: list[StatusCardViewModel] = field(default_factory=list)
+    diagnostics: list[str] = field(default_factory=list)
+    recommendation: str = "Load a scenario to start diagnosis."
+    compatibility_category: str = "needs_manual_attention"
+    parse_message: str = "No metadata extracted."
+
+
+@dataclass(frozen=True)
+class GeneratedScenarioViewModel:
+    title: str
+    scenario_type: str
+    road_summary: str
+    weather_summary: str
+    actor_summary: list[str]
+    trigger_summary: str
+    criticality_summary: str
+    ego_speed: str
+    pedestrian_speed: str
+    estimated_ttc: str
+    status_cards: list[StatusCardViewModel] = field(default_factory=list)
+    diagnostics: list[str] = field(default_factory=list)
+    recommendation: str = "Generate and validate the scenario."
+
+
+def build_external_scenario_view_model(
+    metadata: XoscMetadata | None,
+    source: str = "",
+    relative_path: str = "",
+    qc_result: AsamQcResult | None = None,
+    esmini_result: EsminiResult | None = None,
+) -> ExternalScenarioViewModel:
+    category = external_compatibility_category(metadata, qc_result, esmini_result)
+    if metadata is None:
+        return ExternalScenarioViewModel(
+            title="No scenario loaded",
+            source="n/a",
+            relative_path="Choose a curated example or custom .xosc path.",
+            version="n/a",
+            entity_count="0",
+            parameter_count="0",
+            event_count="0",
+            condition_count="0",
+            dependency_count="0",
+            storyboard_complexity="n/a",
+            status_cards=external_status_cards(metadata, qc_result, esmini_result, category),
+            diagnostics=external_diagnostics(metadata, qc_result, esmini_result, category),
+            recommendation=recommendation_for_external_category(category),
+            compatibility_category=category,
+        )
+
+    dependency_count = len(metadata.logic_file_paths) + len(metadata.catalog_locations) + len(metadata.scene_graph_file_paths)
+    title = Path(metadata.xosc_path).stem if metadata.xosc_path else "external scenario"
+    return ExternalScenarioViewModel(
+        title=title,
+        source=source or "custom path",
+        relative_path=relative_path or metadata.xosc_path,
+        version=metadata.open_scenario_version or "unknown",
+        entity_count=str(metadata.scenario_object_count),
+        parameter_count=str(metadata.parameter_count),
+        event_count=str(metadata.event_count),
+        condition_count=str(metadata.condition_count),
+        dependency_count=str(dependency_count),
+        storyboard_complexity=storyboard_complexity(metadata),
+        entity_names=list(metadata.scenario_object_names[:8]),
+        parameter_names=list(metadata.parameter_names[:8]),
+        logic_file_paths=list(metadata.logic_file_paths),
+        catalog_locations=list(metadata.catalog_locations),
+        visual_summary_cards=[
+            StatusCardViewModel("OpenDRIVE", list_summary(metadata.logic_file_paths, "No LogicFile reference detected"), "Road dependency"),
+            StatusCardViewModel("Catalogs", list_summary(metadata.catalog_locations, "No CatalogLocations detected"), "Asset dependency"),
+            StatusCardViewModel("ASAM QC", qc_status_text(qc_result), "Standard compliance"),
+            StatusCardViewModel("esmini", esmini_status_text(esmini_result), "Smoke execution"),
+        ],
+        status_cards=external_status_cards(metadata, qc_result, esmini_result, category),
+        diagnostics=external_diagnostics(metadata, qc_result, esmini_result, category)[:3],
+        recommendation=recommendation_for_external_category(category),
+        compatibility_category=category,
+        parse_message="Metadata parsed." if metadata.parse_success else f"Metadata parse failed: {metadata.parse_error or 'unknown error'}",
+    )
+
+
+def build_generated_scenario_view_model(
+    spec: ScenarioSpec | None,
+    semantic_result: SemanticValidationResult | None = None,
+    qc_result: AsamQcResult | None = None,
+    esmini_result: EsminiResult | None = None,
+    needs_repair: bool = False,
+    failure_summary: str = "",
+) -> GeneratedScenarioViewModel:
+    if spec is None:
+        return GeneratedScenarioViewModel(
+            title="No generated scenario",
+            scenario_type="n/a",
+            road_summary="Generate a ScenarioSpec to inspect the scenario brief.",
+            weather_summary="n/a",
+            actor_summary=[],
+            trigger_summary="n/a",
+            criticality_summary="n/a",
+            ego_speed="missing",
+            pedestrian_speed="missing",
+            estimated_ttc="n/a",
+            status_cards=[
+                StatusCardViewModel("ScenarioSpec", "not generated", "Run the mock generator first."),
+                StatusCardViewModel("Semantic", "not run", "Validation has not started."),
+                StatusCardViewModel("ASAM QC", "not run", "Standard check has not started."),
+                StatusCardViewModel("esmini", "not run", "Optional runtime check has not started."),
+            ],
+        )
+
+    semantic_value = "not run"
+    semantic_detail = "Semantic validation has not run."
+    if semantic_result is not None:
+        semantic_value = "passed" if semantic_result.passed else "failed"
+        semantic_detail = "Required scenario intent is present." if semantic_result.passed else "Scenario intent needs repair."
+    diagnostics: list[str] = []
+    if needs_repair:
+        diagnostics.append(failure_summary or "The generated scenario needs repair.")
+    elif semantic_result is not None and semantic_result.passed:
+        diagnostics.append("Generated scenario is ready for preview and report review.")
+    else:
+        diagnostics.append("Run Generate & Run to build artifacts and validation results.")
+
+    recommendation = "Repair Scenario" if needs_repair else "Use as generated demo" if semantic_result is not None and semantic_result.passed else "Generate and validate"
+    return GeneratedScenarioViewModel(
+        title=spec.scenario_name,
+        scenario_type=spec.scenario_type,
+        road_summary=f"{spec.road.type}, {spec.road.lanes_per_direction} lane(s) per direction, {spec.road.speed_limit_kph:g} km/h limit",
+        weather_summary="rain / wet road" if spec.weather.rain else f"dry / {spec.weather.road_condition}",
+        actor_summary=[f"{actor.id} ({actor.role})" for actor in spec.actors[:8]],
+        trigger_summary=f"{spec.trigger.type}: {spec.trigger.source} to {spec.trigger.target} at {spec.trigger.distance_m:g} m",
+        criticality_summary=f"{spec.intended_criticality.type}, target TTC {spec.intended_criticality.target_min_ttc_s:g} s",
+        ego_speed=ego_speed_label(spec),
+        pedestrian_speed=pedestrian_speed_label(spec),
+        estimated_ttc=ttc_label(spec),
+        status_cards=[
+            StatusCardViewModel("ScenarioSpec", "generated", "Structured scenario intent is available."),
+            StatusCardViewModel("Semantic", semantic_value, semantic_detail),
+            StatusCardViewModel("ASAM QC", qc_status_value(qc_result), qc_status_text(qc_result)),
+            StatusCardViewModel("esmini", esmini_status_value(esmini_result), esmini_status_text(esmini_result)),
+        ],
+        diagnostics=diagnostics[:3],
+        recommendation=recommendation,
+    )
+
+
+def external_status_cards(
+    metadata: XoscMetadata | None,
+    qc_result: AsamQcResult | None,
+    esmini_result: EsminiResult | None,
+    category: str,
+) -> list[StatusCardViewModel]:
+    parse_value = "passed" if metadata is not None and metadata.parse_success else "not loaded" if metadata is None else "failed"
+    parse_detail = "XML metadata extracted." if parse_value == "passed" else "Load or inspect the XML metadata."
+    return [
+        StatusCardViewModel("Metadata", metadata_status_label(metadata), parse_detail),
+        StatusCardViewModel("ASAM QC", qc_status_label(qc_result), qc_status_text(qc_result)),
+        StatusCardViewModel("esmini Smoke", esmini_status_label(esmini_result), esmini_status_text(esmini_result)),
+        StatusCardViewModel("Compatibility", compatibility_product_label(category), compatibility_explanation(category)),
+    ]
+
+
+def external_compatibility_category(
+    metadata: XoscMetadata | None,
+    qc_result: AsamQcResult | None,
+    esmini_result: EsminiResult | None,
+) -> str:
+    if metadata is None:
+        return "needs_manual_attention"
+    if not metadata.parse_success:
+        return "metadata_fail"
+    if qc_result is not None and qc_result.passed is False:
+        return "qc_fail"
+    if esmini_result is None:
+        return "tool_skipped"
+    if not esmini_result.esmini_available:
+        return "tool_skipped"
+    if esmini_result.executed:
+        return "full_pass"
+    if esmini_result.timed_out and esmini_result.timeout_classification in {"timeout_after_start", "timeout_possible_long_scenario"}:
+        return "smoke_pass_long_running"
+    if esmini_result.executed is False:
+        return "esmini_fail"
+    return "unknown"
+
+
+def external_diagnostics(
+    metadata: XoscMetadata | None,
+    qc_result: AsamQcResult | None,
+    esmini_result: EsminiResult | None,
+    category: str,
+) -> list[str]:
+    if metadata is None:
+        return ["Choose a curated example or load a local .xosc file to start diagnosis."]
+    diagnostics: list[str] = []
+    if not metadata.parse_success:
+        diagnostics.append(f"XML parsing failed: {metadata.parse_error or 'unknown error'}. Inspect the raw XML in Advanced details.")
+        return diagnostics
+    if metadata.logic_file_paths:
+        diagnostics.append("OpenDRIVE LogicFile references were detected; esmini is run from the .xosc directory to preserve relative paths.")
+    if metadata.catalog_locations:
+        diagnostics.append("CatalogLocations were detected; missing local catalogs can cause QC or esmini failures.")
+    if qc_result is None:
+        diagnostics.append("ASAM QC has not run yet. Run checks when the checker is installed or accept a skipped tool state.")
+    elif qc_result.passed is False:
+        diagnostics.append("ASAM QC failed. Use the QC report in Advanced details to inspect standard-compliance issues.")
+    elif not qc_result.checker_available:
+        diagnostics.append("ASAM QC is unavailable, so standard-compliance checking is classified as skipped.")
+    if esmini_result is None:
+        diagnostics.append("esmini smoke check has not run yet.")
+    elif not esmini_result.esmini_available:
+        diagnostics.append("esmini is unavailable; configure ESMINI_BIN or place esmini on PATH for runtime checks.")
+    elif esmini_result.timed_out:
+        diagnostics.append(f"esmini timed out with classification `{esmini_result.timeout_classification or 'unknown'}`.")
+    elif esmini_result.executed is False:
+        diagnostics.append(esmini_result.error_message or "esmini failed without a detailed error message.")
+    if category == "full_pass":
+        diagnostics.append("This scenario is a stable demo candidate for the current toolchain.")
+    elif category == "smoke_pass_long_running":
+        diagnostics.append("The scenario appears to load/start in smoke mode but may not terminate naturally in full playback.")
+    elif category == "needs_manual_attention":
+        diagnostics.append("More checks or manual inspection are needed before using this as a stable demo.")
+    return diagnostics or ["No additional diagnostics."]
+
+
+def recommendation_for_external_category(category: str) -> str:
+    recommendations = {
+        "full_pass": "Use as a stable demo example.",
+        "qc_fail": "Use to demonstrate ASAM QC diagnostics.",
+        "esmini_fail": "Use to demonstrate runtime/dependency diagnosis.",
+        "smoke_pass_long_running": "Use as a long-running playback example; avoid full mode for demos.",
+        "metadata_fail": "Inspect XML formatting before further checks.",
+        "tool_skipped": "Install/configure optional tools or treat this as metadata-only.",
+        "needs_manual_attention": "Load a scenario and run smoke checks before demo use.",
+        "unknown": "Inspect advanced details before using in a demo.",
+    }
+    return recommendations.get(category, recommendations["unknown"])
+
+
+def compatibility_product_label(category: str) -> str:
+    labels = {
+        "full_pass": "Stable demo",
+        "qc_fail": "QC issue",
+        "esmini_fail": "Runtime diagnostic",
+        "smoke_pass_long_running": "Runtime diagnostic",
+        "metadata_fail": "Needs attention",
+        "tool_skipped": "Needs setup",
+        "needs_manual_attention": "Needs attention",
+        "unknown": "Needs attention",
+    }
+    return labels.get(category, labels["unknown"])
+
+
+def metadata_status_label(metadata: XoscMetadata | None) -> str:
+    if metadata is None:
+        return "Not loaded"
+    return "Ready" if metadata.parse_success else "Needs attention"
+
+
+def qc_status_label(result: AsamQcResult | None) -> str:
+    value = qc_status_value(result)
+    labels = {
+        "not run": "Not run",
+        "skipped": "Needs setup",
+        "passed": "Passed",
+        "failed": "QC issue",
+    }
+    return labels.get(value, "Needs attention")
+
+
+def esmini_status_label(result: EsminiResult | None) -> str:
+    value = esmini_status_value(result)
+    labels = {
+        "not run": "Not run",
+        "skipped": "Needs setup",
+        "passed": "Smoke pass",
+        "timeout": "Runtime diagnostic",
+        "failed": "Runtime diagnostic",
+    }
+    return labels.get(value, "Needs attention")
+
+
+def storyboard_complexity(metadata: XoscMetadata) -> str:
+    if not metadata.has_storyboard:
+        return "none"
+    total = metadata.event_count + metadata.condition_count + metadata.maneuver_count
+    if total >= 30:
+        return "high"
+    if total >= 8:
+        return "medium"
+    return "low"
+
+
+def list_summary(values: list[str], empty: str) -> str:
+    if not values:
+        return empty
+    if len(values) <= 2:
+        return ", ".join(values)
+    return f"{', '.join(values[:2])} + {len(values) - 2} more"
+
+
+def qc_status_value(result: AsamQcResult | None) -> str:
+    if result is None:
+        return "not run"
+    if not result.checker_available:
+        return "skipped"
+    if result.passed:
+        return "passed"
+    return "failed"
+
+
+def qc_status_text(result: AsamQcResult | None) -> str:
+    if result is None:
+        return "ASAM QC has not run."
+    if not result.checker_available:
+        return "Checker unavailable; standard-compliance check skipped."
+    if result.passed:
+        return "ASAM QC passed."
+    return "ASAM QC failed; inspect the report."
+
+
+def esmini_status_value(result: EsminiResult | None) -> str:
+    if result is None:
+        return "not run"
+    if not result.esmini_available:
+        return "skipped"
+    if result.executed:
+        return "passed"
+    if result.timed_out:
+        return "timeout"
+    return "failed"
+
+
+def esmini_status_text(result: EsminiResult | None) -> str:
+    if result is None:
+        return "esmini smoke check has not run."
+    if not result.esmini_available:
+        return "esmini unavailable; execution check skipped."
+    mode = result.mode or "smoke"
+    if result.executed:
+        return f"esmini {mode} check passed."
+    if result.timed_out:
+        return f"esmini {mode} timed out: {result.timeout_classification or 'unknown'}."
+    return result.error_message or f"esmini {mode} check failed."
+
+
+def compatibility_explanation(category: str) -> str:
+    explanations = {
+        "full_pass": "Metadata parsed and runtime smoke check passed.",
+        "qc_fail": "Standard-compliance diagnostics are available.",
+        "esmini_fail": "Runtime execution failed or could not start.",
+        "smoke_pass_long_running": "Scenario starts, but full playback may run long.",
+        "metadata_fail": "XML metadata could not be parsed.",
+        "tool_skipped": "One or more optional tools are unavailable or not run.",
+        "needs_manual_attention": "Load/check the scenario before demo use.",
+        "unknown": "The current state is not classified yet.",
+    }
+    return explanations.get(category, explanations["unknown"])
+
+
+def ego_speed_label(spec: ScenarioSpec) -> str:
+    ego = spec.actor_by_role("ego")
+    if ego is None or ego.initial_speed_kph is None:
+        return "missing"
+    return f"{ego.initial_speed_kph:g} km/h"
+
+
+def pedestrian_speed_label(spec: ScenarioSpec) -> str:
+    pedestrian = spec.actor_by_role("crossing_actor")
+    if pedestrian is None or pedestrian.speed_mps is None:
+        return "missing"
+    return f"{pedestrian.speed_mps:g} m/s"
+
+
+def ttc_label(spec: ScenarioSpec) -> str:
+    estimate = estimate_ttc_s(spec)
+    if estimate is None:
+        return "n/a"
+    return f"{estimate:.1f} s"

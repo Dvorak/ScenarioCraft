@@ -37,14 +37,14 @@ def discover_external_scenarios(external_root: Path) -> list[ReferenceScenarioOp
 def _to_option(external_root: Path, xosc_path: Path) -> ReferenceScenarioOption:
     relative_path = _relative_label(external_root, xosc_path)
     return ReferenceScenarioOption(
-        source=_classify_source(xosc_path),
+        source=classify_reference_source(xosc_path),
         label=relative_path,
         xosc_path=xosc_path,
         relative_path=relative_path,
     )
 
 
-def _classify_source(path: Path) -> str:
+def classify_reference_source(path: Path) -> str:
     parts = set(path.parts)
     if NCAP_SOURCE in parts:
         return NCAP_SOURCE

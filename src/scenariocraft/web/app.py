@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from datetime import datetime
 from html import escape
 from pathlib import Path
 
@@ -13,27 +14,44 @@ from scenariocraft.schemas import ActorSpec, CriticalitySpec, ScenarioSpec, Trig
 from scenariocraft.tools import (
     AsamQcResult,
     BuildResult,
+    EsminiPlaybackResult,
     EsminiResult,
     build_openscenario,
-    estimate_ttc_s,
     generate_2d_preview,
     generate_validation_report,
     run_asam_qc,
     run_esmini,
+    run_esmini_playback,
     validate_semantics,
 )
 from scenariocraft.tools.semantic_validator import SemanticValidationResult
+from scenariocraft.web.view_models import (
+    ExternalScenarioViewModel,
+    GeneratedScenarioViewModel,
+    StatusCardViewModel,
+    build_external_scenario_view_model,
+    build_generated_scenario_view_model,
+)
 
 
 DEFAULT_SCENARIO_TEXT = (
     "A rainy urban pedestrian occlusion scenario where the ego vehicle approaches a parked van "
     "and a pedestrian suddenly crosses from behind it."
 )
-DEFAULT_OUTPUT_DIR = Path("outputs/web-demo")
+DEFAULT_OUTPUT_ROOT = Path("outputs/web_demo")
+DEFAULT_OUTPUT_DIR = DEFAULT_OUTPUT_ROOT / "latest"
 DEFAULT_EXTERNAL_ROOT = Path("external")
-WORKFLOW_MODES = ("Generate from prompt", "Load existing .xosc")
 DEMO_MODES = ("Normal good scenario", "Missing pedestrian", "Low criticality")
 REFERENCE_SOURCES = ("All", "OSC-NCAP-scenarios", "ALKS scenarios", "Other external scenarios")
+CURATED_REFERENCE_EXAMPLES_PATH = Path("examples/reference_examples.yaml")
+RECOMMENDED_EXAMPLE_FILES = (
+    Path("outputs/reference_scan/external_esmini_smoke_real_10/recommended_examples.json"),
+    Path("outputs/reference_scan/ncap_qc_esmini_real_20/recommended_examples.json"),
+    Path("outputs/reference_scan/alks_qc_esmini_real_20/recommended_examples.json"),
+    Path("outputs/reference_scan/ncap_esmini_real_20/recommended_examples.json"),
+    Path("outputs/reference_scan/alks_esmini_real_20/recommended_examples.json"),
+)
+REFERENCE_CATEGORIES = ("stable_demo", "qc_fail", "esmini_long_running")
 CRITICALITY_MAX_TTC_S = 3.0
 
 
@@ -43,26 +61,21 @@ def main() -> None:
     _ensure_state()
 
     st.markdown("## ScenarioCraft-Agent")
-    st.caption("LLM-assisted OpenSCENARIO generation, validation, and playback")
+    st.caption("Generated ScenarioSpec -> OpenSCENARIO -> 2D preview -> esmini playback/check -> validation report")
 
-    first_row = st.columns([0.28, 0.36, 0.36], gap="large")
+    first_row = st.columns([0.34, 0.66], gap="large")
     with first_row[0]:
         _render_request_panel()
     with first_row[1]:
-        _render_xml_panel(Path(st.session_state.output_dir))
-    with first_row[2]:
-        _render_preview_panel()
+        _render_generated_brief_panel()
 
+    _render_playback_tabs(Path(st.session_state.output_dir))
+    _render_validation_status_panel()
     _render_advanced_artifacts(Path(st.session_state.output_dir))
 
 
 def _render_request_panel() -> None:
     st.markdown("### Scenario Request")
-    workflow_mode = st.selectbox("Mode", WORKFLOW_MODES, index=WORKFLOW_MODES.index(st.session_state.workflow_mode))
-    st.session_state.workflow_mode = workflow_mode
-    if _is_load_mode():
-        _render_load_request_panel()
-        return
 
     scenario_text = st.text_area("Request", value=st.session_state.scenario_text, height=145, label_visibility="collapsed")
     st.session_state.scenario_text = scenario_text
@@ -75,8 +88,8 @@ def _render_request_panel() -> None:
 
     actions = st.columns(2)
     with actions[0]:
-        if st.button("Generate & Run", type="primary", width="stretch"):
-            _generate_and_run(provider_name, demo_mode)
+        if st.button("Generate & Play", type="primary", width="stretch"):
+            _generate_and_play(provider_name, demo_mode)
     with actions[1]:
         if _needs_repair():
             if st.button("Repair Scenario", width="stretch"):
@@ -85,20 +98,34 @@ def _render_request_panel() -> None:
             st.button("Repair Scenario", disabled=True, width="stretch")
 
     with st.expander("Advanced settings", expanded=False):
-        output_dir = Path(st.text_input("Output directory", st.session_state.output_dir))
-        st.session_state.output_dir = str(output_dir)
-        run_esmini_check = st.checkbox("Run esmini", value=st.session_state.run_esmini_check)
-        st.session_state.run_esmini_check = run_esmini_check
+        output_root = Path(st.text_input("Output root", st.session_state.output_root))
+        st.session_state.output_root = str(output_root)
+        try_video = st.checkbox("Try to generate playback video", value=st.session_state.try_playback_video)
+        st.session_state.try_playback_video = try_video
+        playback_mode = st.selectbox(
+            "esmini mode",
+            ["full/playback attempt", "smoke check"],
+            index=["full/playback attempt", "smoke check"].index(st.session_state.playback_mode),
+        )
+        st.session_state.playback_mode = playback_mode
         require_esmini = st.checkbox("Require esmini", value=st.session_state.require_esmini)
         st.session_state.require_esmini = require_esmini
         esmini_timeout = st.number_input(
             "esmini timeout",
             min_value=1.0,
             max_value=120.0,
-            value=st.session_state.esmini_timeout,
+            value=st.session_state.playback_timeout,
             step=1.0,
         )
-        st.session_state.esmini_timeout = float(esmini_timeout)
+        st.session_state.playback_timeout = float(esmini_timeout)
+        sim_duration = st.number_input(
+            "sim duration",
+            min_value=0.5,
+            max_value=30.0,
+            value=st.session_state.esmini_sim_duration,
+            step=0.5,
+        )
+        st.session_state.esmini_sim_duration = float(sim_duration)
         esmini_bin = st.text_input("esmini binary", value=st.session_state.esmini_bin)
         st.session_state.esmini_bin = esmini_bin
     st.caption(f"Artifacts: `{st.session_state.output_dir}`")
@@ -106,42 +133,44 @@ def _render_request_panel() -> None:
 
 def _render_load_request_panel() -> None:
     _ensure_reference_options_loaded()
+    _render_recommended_reference_panel()
 
-    refresh_col, count_col = st.columns([0.56, 0.44])
-    with refresh_col:
-        if st.button("Refresh scenario list", width="stretch"):
-            _refresh_reference_options()
-    with count_col:
-        st.caption(f"{len(_reference_options())} discovered .xosc files")
+    with st.expander("Advanced: full external browser", expanded=False):
+        refresh_col, count_col = st.columns([0.56, 0.44])
+        with refresh_col:
+            if st.button("Refresh scenario list", width="stretch"):
+                _refresh_reference_options()
+        with count_col:
+            st.caption(f"{len(_reference_options())} discovered .xosc files")
 
-    source_filter = st.selectbox(
-        "Source",
-        REFERENCE_SOURCES,
-        index=REFERENCE_SOURCES.index(st.session_state.reference_source_filter),
-    )
-    st.session_state.reference_source_filter = source_filter
-    options = _filtered_reference_options(source_filter)
-    if not _reference_options():
-        st.info("No external scenarios found. Place ALKS/NCAP repositories under external/ or use custom path.")
-    elif not options:
-        st.info("No scenarios found for the selected source filter.")
-    else:
-        labels = [option.label for option in options]
-        current_label = st.session_state.selected_reference_label
-        index = labels.index(current_label) if current_label in labels else 0
-        selected_label = st.selectbox("Scenario", labels, index=index)
-        st.session_state.selected_reference_label = selected_label
-        selected_option = _option_by_label(options, selected_label)
-        if selected_option is not None:
-            st.caption(f"Source: `{selected_option.source}`")
-            st.caption(f"Relative path: `{selected_option.relative_path}`")
-            actions = st.columns(2)
-            with actions[0]:
-                if st.button("Load selected scenario", type="primary", width="stretch"):
-                    _load_reference_option(Path(st.session_state.output_dir), selected_option)
-            with actions[1]:
-                if st.button("Run Checks", width="stretch"):
-                    _run_loaded_xosc_checks(Path(st.session_state.output_dir))
+        source_filter = st.selectbox(
+            "Source",
+            REFERENCE_SOURCES,
+            index=REFERENCE_SOURCES.index(st.session_state.reference_source_filter),
+        )
+        st.session_state.reference_source_filter = source_filter
+        options = _filtered_reference_options(source_filter)
+        if not _reference_options():
+            st.info("No external scenarios found. Place ALKS/NCAP repositories under external/ or use custom path.")
+        elif not options:
+            st.info("No scenarios found for the selected source filter.")
+        else:
+            labels = [option.label for option in options]
+            current_label = st.session_state.selected_reference_label
+            index = labels.index(current_label) if current_label in labels else 0
+            selected_label = st.selectbox("Scenario", labels, index=index)
+            st.session_state.selected_reference_label = selected_label
+            selected_option = _option_by_label(options, selected_label)
+            if selected_option is not None:
+                st.caption(f"Source: `{selected_option.source}`")
+                st.caption(f"Relative path: `{selected_option.relative_path}`")
+                actions = st.columns(2)
+                with actions[0]:
+                    if st.button("Load selected scenario", type="primary", width="stretch"):
+                        _load_reference_option(Path(st.session_state.output_dir), selected_option)
+                with actions[1]:
+                    if st.button("Run Checks", width="stretch"):
+                        _run_loaded_xosc_checks(Path(st.session_state.output_dir))
 
     st.markdown(_status_label(), unsafe_allow_html=True)
 
@@ -170,7 +199,238 @@ def _render_load_request_panel() -> None:
         st.session_state.esmini_timeout = float(esmini_timeout)
         esmini_bin = st.text_input("esmini binary", value=st.session_state.esmini_bin)
         st.session_state.esmini_bin = esmini_bin
+        esmini_mode = st.selectbox("esmini mode", ["smoke", "full"], index=["smoke", "full"].index(st.session_state.external_esmini_mode))
+        st.session_state.external_esmini_mode = esmini_mode
+        sim_duration = st.number_input(
+            "smoke duration",
+            min_value=0.5,
+            max_value=30.0,
+            value=st.session_state.esmini_sim_duration,
+            step=0.5,
+        )
+        st.session_state.esmini_sim_duration = float(sim_duration)
     st.caption(f"Artifacts: `{st.session_state.output_dir}`")
+
+
+def _render_generated_brief_panel() -> None:
+    st.markdown("### Scenario Brief")
+    vm = _generated_view_model()
+    if _current_spec(show_error=False) is None:
+        st.info(vm.road_summary)
+        return
+    st.markdown(f"#### {vm.title}")
+    st.caption(vm.scenario_type)
+    cols = st.columns(3)
+    cols[0].metric("Ego speed", vm.ego_speed)
+    cols[1].metric("Pedestrian", vm.pedestrian_speed)
+    cols[2].metric("Estimated TTC", vm.estimated_ttc)
+    st.markdown(f"**Road**: {vm.road_summary}")
+    st.markdown(f"**Weather**: {vm.weather_summary}")
+    st.markdown(f"**Trigger**: {vm.trigger_summary}")
+    st.markdown(f"**Criticality**: {vm.criticality_summary}")
+    if vm.actor_summary:
+        st.caption("Actors: " + ", ".join(f"`{actor}`" for actor in vm.actor_summary))
+    _render_status_cards(vm.status_cards)
+    if vm.recommendation == "Use as generated demo":
+        st.success(vm.recommendation)
+    else:
+        st.info(vm.recommendation)
+    for item in vm.diagnostics:
+        st.caption(item)
+
+
+def _render_playback_tabs(output_dir: Path) -> None:
+    st.markdown("### Preview / Playback")
+    preview_tab, playback_tab = st.tabs(["2D Preview", "esmini Playback"])
+    with preview_tab:
+        spec = _current_spec(show_error=False)
+        if spec is None:
+            st.info("Generate a mock ScenarioSpec to see the deterministic 2D preview.")
+        else:
+            preview_path = _ensure_preview(output_dir, spec)
+            if preview_path is not None and preview_path.exists():
+                st.image(str(preview_path), width="stretch")
+            else:
+                st.warning("2D preview could not be generated.")
+    with playback_tab:
+        _render_playback_panel(output_dir)
+
+
+def _render_playback_panel(output_dir: Path) -> None:
+    build_result = st.session_state.build_result
+    if not isinstance(build_result, BuildResult):
+        st.info("Generate & Play to build OpenSCENARIO and run esmini playback/check.")
+        return
+    playback_result = st.session_state.playback_result
+    if isinstance(playback_result, EsminiPlaybackResult):
+        playback_path = Path(playback_result.playback_path) if playback_result.playback_path else None
+        st.caption(_playback_media_label(playback_result.playback_kind))
+        if playback_result.playback_generated and playback_path is not None and playback_path.exists():
+            if playback_path.suffix.lower() in {".gif", ".png", ".jpg", ".jpeg"}:
+                st.image(str(playback_path), width="stretch")
+            else:
+                st.video(str(playback_path))
+        elif playback_result.playback_kind == "esmini_frame_sequence":
+            st.info("esmini frame sequence was captured. Animated GIF encoding was unavailable.")
+            if playback_result.playback_source_path:
+                st.caption(f"Frames: `{playback_result.playback_source_path}`")
+        elif playback_result.playback_kind == "esmini_single_frame":
+            st.info("esmini screenshot was captured.")
+            if playback_result.playback_source_path:
+                st.caption(f"Source: `{playback_result.playback_source_path}`")
+        elif playback_result.executed:
+            st.success("esmini playback video could not be generated. Execution check completed instead.")
+        elif playback_result.esmini_available:
+            st.warning("esmini playback video could not be generated. Execution check completed instead.")
+        else:
+            st.warning("esmini was not found. Playback/check was skipped.")
+        if playback_result.playback_fallback_reason:
+            st.caption(playback_result.playback_fallback_reason)
+    else:
+        st.info("esmini playback/check has not run for this generated scenario.")
+    controls = st.columns(2)
+    with controls[0]:
+        if st.button("Run esmini playback", width="stretch"):
+            _run_playback(output_dir)
+    with controls[1]:
+        st.caption(f"Output: `{output_dir}`")
+
+
+def _render_validation_status_panel() -> None:
+    st.markdown("### Validation Status")
+    vm = _generated_view_model()
+    _render_status_cards(vm.status_cards)
+    if _needs_repair():
+        st.warning(_failure_summary())
+    elif isinstance(st.session_state.semantic_result, SemanticValidationResult) and st.session_state.semantic_result.passed:
+        st.success("Generated scenario validation passed.")
+    else:
+        st.info("Generate & Play to run validation.")
+
+
+def _render_external_scenario_studio(output_dir: Path) -> None:
+    top_row = st.columns([0.34, 0.66], gap="large")
+    with top_row[0]:
+        st.markdown("### Scenario Library / Demo Gallery")
+        _render_load_request_panel()
+    with top_row[1]:
+        _render_external_overview_panel()
+
+    main_row = st.columns([0.58, 0.42], gap="large")
+    with main_row[0]:
+        _render_external_visual_summary_panel()
+    with main_row[1]:
+        _render_external_status_panel(output_dir)
+
+    _render_external_advanced_artifacts(output_dir)
+
+
+def _render_external_overview_panel() -> None:
+    st.markdown("### Scenario Overview")
+    vm = _external_view_model()
+    metadata = _current_metadata()
+    if metadata is None:
+        st.info("Select a reference scenario to inspect metadata, dependencies, and runtime readiness.")
+        return
+    if not metadata.parse_success:
+        st.error(vm.parse_message)
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("Source", vm.source)
+    metric_cols[1].metric("OSC Version", vm.version)
+    metric_cols[2].metric("Entities", vm.entity_count)
+    metric_cols[3].metric("Events", vm.event_count)
+    st.caption(f"Path: `{vm.relative_path}`")
+    if vm.entity_names:
+        st.markdown("**Entities**")
+        st.caption(", ".join(f"`{name}`" for name in vm.entity_names))
+    if vm.parameter_names:
+        st.markdown("**Parameters**")
+        st.caption(", ".join(f"`{name}`" for name in vm.parameter_names))
+    if vm.logic_file_paths:
+        st.markdown("**RoadNetwork / LogicFile**")
+        st.caption(", ".join(f"`{path}`" for path in vm.logic_file_paths))
+        st.info("Relative OpenDRIVE paths are preserved by running esmini from the .xosc directory.")
+    if vm.catalog_locations:
+        st.markdown("**CatalogLocations**")
+        st.caption(", ".join(f"`{path}`" for path in vm.catalog_locations))
+    st.caption(f"Conditions: `{vm.condition_count}`")
+
+
+def _render_external_visual_summary_panel() -> None:
+    st.markdown("### Visual Preview / Summary")
+    vm = _external_view_model()
+    if _current_metadata() is None:
+        st.info(vm.title)
+        return
+    st.markdown(f"#### {vm.title}")
+    st.caption(f"{vm.source} / {vm.relative_path}")
+    cols = st.columns(4)
+    cols[0].metric("Actors", vm.entity_count)
+    cols[1].metric("Parameters", vm.parameter_count)
+    cols[2].metric("Dependencies", vm.dependency_count)
+    cols[3].metric("Storyboard", vm.storyboard_complexity)
+    _render_summary_cards(vm.visual_summary_cards)
+    st.info("Deterministic summary preview. Exact external-scenario geometry sketch is future work.")
+
+
+def _render_external_status_panel(output_dir: Path) -> None:
+    st.markdown("### Validation & Execution Status")
+    vm = _external_view_model()
+    metadata = _current_metadata()
+    _render_status_cards(vm.status_cards)
+
+    actions = st.columns(2)
+    with actions[0]:
+        if st.button("Run QC + esmini smoke", type="primary", width="stretch", disabled=metadata is None):
+            _run_loaded_xosc_checks(output_dir)
+    with actions[1]:
+        if st.button("Run ASAM QC only", width="stretch", disabled=metadata is None):
+            _run_loaded_qc_only(output_dir)
+
+    st.markdown("#### Recommended Action")
+    if vm.compatibility_category in {"full_pass", "smoke_pass_long_running"}:
+        st.success(vm.recommendation)
+    elif vm.compatibility_category in {"qc_fail", "esmini_fail", "metadata_fail"}:
+        st.warning(vm.recommendation)
+    else:
+        st.info(vm.recommendation)
+
+    st.markdown("#### Key Diagnostics")
+    for item in vm.diagnostics:
+        st.markdown(f"- {item}")
+    if st.session_state.loaded_xosc_working_dir:
+        st.caption(f"esmini working directory: `{st.session_state.loaded_xosc_working_dir}`")
+
+
+def _render_external_advanced_artifacts(output_dir: Path) -> None:
+    st.markdown("### Advanced")
+    st.warning("External files are read-only. Create a workspace copy before editing.")
+    with st.expander("Advanced: OpenSCENARIO XML", expanded=False):
+        st.text_area("OpenSCENARIO XML", value=st.session_state.xosc_text, height=360, label_visibility="collapsed")
+    with st.expander("Advanced: metadata", expanded=False):
+        metadata = _current_metadata()
+        if metadata is None:
+            st.info("No external .xosc metadata loaded.")
+        else:
+            st.json(metadata.to_dict())
+    with st.expander("Advanced: ASAM QC report", expanded=False):
+        qc_result = st.session_state.qc_result
+        if isinstance(qc_result, AsamQcResult):
+            st.json(qc_result.to_dict())
+        else:
+            st.info("ASAM QC has not run.")
+    with st.expander("Advanced: esmini logs", expanded=False):
+        esmini_result = st.session_state.esmini_result
+        if isinstance(esmini_result, EsminiResult):
+            st.json(esmini_result.to_dict())
+            for name in ("esmini_log.txt", "esmini_stdout.txt", "esmini_stderr.txt"):
+                log_path = output_dir / name
+                if log_path.exists():
+                    st.text_area(name, log_path.read_text(encoding="utf-8"), height=180, label_visibility="collapsed")
+        else:
+            st.info("esmini has not run.")
+    with st.expander("Advanced: validation_report.md", expanded=False):
+        st.text_area("validation_report.md", st.session_state.report_text, height=300, label_visibility="collapsed")
 
 
 def _render_xml_panel(output_dir: Path) -> None:
@@ -216,11 +476,12 @@ def _render_preview_panel() -> None:
             st.image(str(preview_path), width="stretch")
         else:
             st.warning("2D preview could not be generated.")
+        vm = _generated_view_model()
         metric_cols = st.columns(4)
-        metric_cols[0].metric("Ego Speed", _ego_speed_label(spec))
+        metric_cols[0].metric("Ego Speed", vm.ego_speed)
         metric_cols[1].metric("Trigger Dist", f"{spec.trigger.distance_m:g} m")
-        metric_cols[2].metric("Ped Speed", _pedestrian_speed_label(spec))
-        metric_cols[3].metric("Estimated TTC", _ttc_label(spec))
+        metric_cols[2].metric("Ped Speed", vm.pedestrian_speed)
+        metric_cols[3].metric("Estimated TTC", vm.estimated_ttc)
         _render_status_label()
     with esmini_tab:
         st.caption("Optional esmini execution/load check. MP4/GIF rendering is not implemented yet.")
@@ -240,25 +501,11 @@ def _render_preview_panel() -> None:
 
 def _render_advanced_artifacts(output_dir: Path) -> None:
     st.markdown("### Advanced")
-    if not _is_load_mode():
-        with st.expander("ScenarioSpec JSON", expanded=False):
-            spec_json = st.text_area("ScenarioSpec JSON", value=st.session_state.spec_json, height=320, label_visibility="collapsed")
-            st.session_state.spec_json = spec_json
-    with st.expander("Loaded XOSC metadata", expanded=_is_load_mode()):
-        metadata = _current_metadata()
-        if metadata is None:
-            st.info("No external .xosc metadata loaded.")
-        else:
-            if st.session_state.loaded_xosc_source:
-                st.caption(f"Selected source: `{st.session_state.loaded_xosc_source}`")
-            if st.session_state.loaded_xosc_relative_path:
-                st.caption(f"Selected relative path: `{st.session_state.loaded_xosc_relative_path}`")
-            st.json(metadata.to_dict())
-            if metadata.logic_file_paths:
-                st.info(
-                    "OpenDRIVE LogicFile references were detected. esmini checks preserve these relative paths by "
-                    "running from the .xosc file's parent directory."
-                )
+    with st.expander("ScenarioSpec JSON", expanded=False):
+        spec_json = st.text_area("ScenarioSpec JSON", value=st.session_state.spec_json, height=320, label_visibility="collapsed")
+        st.session_state.spec_json = spec_json
+    with st.expander("OpenSCENARIO XML", expanded=False):
+        _render_xml_panel(output_dir)
     with st.expander("Semantic validation", expanded=False):
         semantic_result = st.session_state.semantic_result
         if isinstance(semantic_result, SemanticValidationResult):
@@ -272,14 +519,35 @@ def _render_advanced_artifacts(output_dir: Path) -> None:
         else:
             st.info("ASAM QC has not run.")
     with st.expander("esmini log", expanded=False):
+        playback_result = st.session_state.playback_result
+        if isinstance(playback_result, EsminiPlaybackResult):
+            st.json(playback_result.to_dict())
+            playback_json = output_dir / "esmini_playback_result.json"
+            if playback_json.exists():
+                st.text_area("esmini_playback_result.json", playback_json.read_text(encoding="utf-8"), height=180, label_visibility="collapsed")
         esmini_result = st.session_state.esmini_result
         if isinstance(esmini_result, EsminiResult):
             st.json(esmini_result.to_dict())
-            log_path = output_dir / "esmini_log.txt"
-            if log_path.exists():
-                st.text_area("esmini_log.txt", log_path.read_text(encoding="utf-8"), height=220, label_visibility="collapsed")
+            for name in ("esmini_log.txt", "esmini_stdout.txt", "esmini_stderr.txt", "esmini_help.txt"):
+                log_path = output_dir / name
+                if log_path.exists():
+                    st.text_area(name, log_path.read_text(encoding="utf-8"), height=180, label_visibility="collapsed")
         else:
             st.info("esmini has not run.")
+    with st.expander("Generated artifact paths", expanded=False):
+        for artifact in [
+            "input.txt",
+            "scenario_spec.json",
+            "scenario.xosc",
+            "preview_2d.png",
+            "playback.mp4",
+            "playback.gif",
+            "esmini_result.json",
+            "esmini_playback_result.json",
+            "validation_report.md",
+        ]:
+            path = output_dir / artifact
+            st.caption(f"{artifact}: `{path}`" + (" exists" if path.exists() else ""))
     with st.expander("repair history", expanded=False):
         if st.session_state.repair_history:
             st.json(st.session_state.repair_history)
@@ -301,7 +569,9 @@ def _ensure_state() -> None:
         "semantic_result": None,
         "qc_result": None,
         "esmini_result": None,
+        "playback_result": None,
         "repair_history": [],
+        "output_root": str(DEFAULT_OUTPUT_ROOT),
         "output_dir": str(DEFAULT_OUTPUT_DIR),
         "external_root": str(DEFAULT_EXTERNAL_ROOT),
         "reference_options": [],
@@ -311,14 +581,19 @@ def _ensure_state() -> None:
         "loaded_xosc_source": "",
         "loaded_xosc_relative_path": "",
         "loaded_xosc_working_dir": "",
-        "workflow_mode": WORKFLOW_MODES[0],
+        "workflow_mode": "Generate from prompt",
         "loaded_xosc_path": "",
         "loaded_xosc_metadata": None,
         "demo_mode": DEMO_MODES[0],
         "run_esmini_check": False,
+        "try_playback_video": True,
+        "playback_mode": "full/playback attempt",
         "require_esmini": False,
         "esmini_bin": "",
         "esmini_timeout": 20.0,
+        "playback_timeout": 30.0,
+        "external_esmini_mode": "smoke",
+        "esmini_sim_duration": 3.0,
         "last_error": "",
         "last_info": "",
     }
@@ -366,6 +641,252 @@ def _option_by_label(options: list[ReferenceScenarioOption], label: str) -> Refe
     return next((option for option in options if option.label == label), None)
 
 
+def _render_recommended_reference_panel() -> None:
+    categories = _recommended_reference_examples()
+    if not any(categories.values()):
+        st.info("No recommended reference examples found yet. Run a real reference scan or use the full scenario browser below.")
+        return
+
+    st.markdown("#### Demo Gallery")
+    columns = st.columns(3, gap="medium")
+    gallery_specs = [
+        (
+            columns[0],
+            "stable_demo",
+            categories["stable_demo"],
+            "Stable demo",
+            "Best first choice for a clean live demo.",
+            "Load stable demo",
+        ),
+        (
+            columns[1],
+            "qc_fail",
+            categories["qc_fail"],
+            "QC issue",
+            "Useful for showing standard-compliance diagnosis.",
+            "Load QC example",
+        ),
+        (
+            columns[2],
+            "esmini_long_running",
+            categories["esmini_long_running"],
+            "Runtime diagnostic",
+            "Useful for missing dependency, timeout, or playback diagnosis.",
+            "Load runtime example",
+        ),
+    ]
+    for column, category, examples, title, caption, action_label in gallery_specs:
+        with column:
+            with st.container(border=True):
+                _render_recommended_category(category, examples, title, caption, action_label)
+
+
+def _render_recommended_category(
+    category: str,
+    examples: list[dict[str, str]],
+    title: str,
+    caption: str,
+    action_label: str,
+) -> None:
+    st.markdown(f"##### {title}")
+    st.caption(caption)
+    if not examples:
+        st.info("No examples found for this category.")
+        return
+    labels = [_recommended_label(example) for example in examples]
+    selected_label = st.selectbox("Scenario", labels, key=f"recommended_{category}_select")
+    selected = examples[labels.index(selected_label)]
+    st.markdown(f"**{_recommended_short_name(selected)}**")
+    st.caption(selected["source"])
+    st.caption(selected["relative_path"])
+    status = f"{_recommended_status_label(category)} | QC {selected.get('qc_status', 'unknown')} | esmini {selected.get('esmini_status', 'unknown')}"
+    failure_class = selected.get("esmini_failure_class")
+    if failure_class:
+        status += f" | {failure_class}"
+    st.caption(status)
+    failure_message = selected.get("failure_message")
+    if failure_message:
+        st.caption(f"Observed issue: {failure_message}")
+    if st.button(action_label, key=f"recommended_{category}_load", width="stretch"):
+        _load_recommended_example(Path(st.session_state.output_dir), selected)
+
+
+def _recommended_reference_examples(
+    curated_path: Path = CURATED_REFERENCE_EXAMPLES_PATH,
+    recommended_files: tuple[Path, ...] = RECOMMENDED_EXAMPLE_FILES,
+) -> dict[str, list[dict[str, str]]]:
+    curated = _curated_reference_examples(curated_path)
+    if any(curated.values()):
+        return curated
+
+    categories = {
+        "stable_demo": [],
+        "qc_fail": [],
+        "esmini_long_running": [],
+    }
+    seen: set[tuple[str, str, str]] = set()
+    payloads: list[dict[str, object]] = []
+    for path in recommended_files:
+        if not path.exists():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if isinstance(payload, dict):
+            payloads.append(payload)
+
+    known_failure_paths: set[str] = set()
+    for payload in payloads:
+        for category_name in ("qc_fail", "esmini_fail"):
+            for raw_example in payload.get(category_name, []):
+                example = _normalize_recommended_example(raw_example)
+                if example is not None:
+                    known_failure_paths.add(example["xosc_path"])
+
+    for payload in payloads:
+        for category_name, target in [
+            ("full_pass", "stable_demo"),
+            ("qc_fail", "qc_fail"),
+            ("esmini_fail", "esmini_long_running"),
+        ]:
+            for raw_example in payload.get(category_name, []):
+                example = _normalize_recommended_example(raw_example)
+                if example is None:
+                    continue
+                if target == "stable_demo" and example["xosc_path"] in known_failure_paths:
+                    continue
+                key = (target, example["source"], example["relative_path"])
+                if key in seen:
+                    continue
+                categories[target].append(example)
+                seen.add(key)
+    return {name: examples[:8] for name, examples in categories.items()}
+
+
+def _curated_reference_examples(path: Path) -> dict[str, list[dict[str, str]]]:
+    categories = {name: [] for name in REFERENCE_CATEGORIES}
+    if not path.exists():
+        return categories
+    for raw_example in _parse_reference_examples_yaml(path):
+        example = _normalize_curated_example(raw_example)
+        if example is None:
+            continue
+        category = _ui_category_for_reference(example.get("compatibility_category", ""))
+        categories[category].append(example)
+    return {name: examples[:8] for name, examples in categories.items()}
+
+
+def _parse_reference_examples_yaml(path: Path) -> list[dict[str, str]]:
+    examples: list[dict[str, str]] = []
+    current: dict[str, str] | None = None
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("- "):
+            if current:
+                examples.append(current)
+            current = {}
+            line = line[2:].strip()
+        if ":" not in line or current is None:
+            continue
+        key, value = line.split(":", 1)
+        current[key.strip()] = _unquote_yaml_scalar(value.strip())
+    if current:
+        examples.append(current)
+    return examples
+
+
+def _unquote_yaml_scalar(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
+
+
+def _normalize_curated_example(raw_example: dict[str, str]) -> dict[str, str] | None:
+    xosc_path_value = raw_example.get("xosc_path") or raw_example.get("path")
+    relative_path = raw_example.get("relative_path")
+    source = raw_example.get("source")
+    if not xosc_path_value or not relative_path or not source:
+        return None
+    xosc_path = Path(xosc_path_value)
+    if not xosc_path.exists():
+        return None
+    return {
+        "source": source,
+        "relative_path": relative_path,
+        "xosc_path": str(xosc_path),
+        "qc_status": raw_example.get("qc_status", "unknown"),
+        "esmini_status": raw_example.get("esmini_status", "unknown"),
+        "esmini_failure_class": raw_example.get("esmini_failure_class", ""),
+        "failure_message": raw_example.get("failure_message", ""),
+        "compatibility_category": raw_example.get("compatibility_category", "unknown"),
+    }
+
+
+def _ui_category_for_reference(category: str) -> str:
+    if category == "full_pass":
+        return "stable_demo"
+    if category == "qc_fail":
+        return "qc_fail"
+    if category in {"esmini_fail", "smoke_pass_long_running"}:
+        return "esmini_long_running"
+    return "esmini_long_running"
+
+
+def _normalize_recommended_example(raw_example: object) -> dict[str, str] | None:
+    if not isinstance(raw_example, dict):
+        return None
+    xosc_path_value = raw_example.get("xosc_path")
+    relative_path = raw_example.get("relative_path")
+    source = raw_example.get("source")
+    if not isinstance(xosc_path_value, str) or not isinstance(relative_path, str) or not isinstance(source, str):
+        return None
+    xosc_path = Path(xosc_path_value)
+    if not xosc_path.exists():
+        return None
+    return {
+        "source": source,
+        "relative_path": relative_path,
+        "xosc_path": str(xosc_path),
+        "qc_status": str(raw_example.get("qc_status") or "unknown"),
+        "esmini_status": str(raw_example.get("esmini_status") or "unknown"),
+        "esmini_failure_class": str(raw_example.get("esmini_failure_class") or ""),
+        "failure_message": str(raw_example.get("failure_message") or ""),
+    }
+
+
+def _recommended_label(example: dict[str, str]) -> str:
+    return f"{example['source']} / {example['relative_path']}"
+
+
+def _recommended_short_name(example: dict[str, str]) -> str:
+    return Path(example["relative_path"]).stem or "reference scenario"
+
+
+def _recommended_status_label(category: str) -> str:
+    labels = {
+        "stable_demo": "Stable demo",
+        "qc_fail": "QC issue",
+        "esmini_long_running": "Runtime diagnostic",
+    }
+    return labels.get(category, "Needs attention")
+
+
+def _load_recommended_example(output_dir: Path, example: dict[str, str]) -> None:
+    _load_existing_xosc(
+        output_dir,
+        example["xosc_path"],
+        source=example["source"],
+        relative_path=example["relative_path"],
+    )
+
+
 def _load_existing_xosc(
     output_dir: Path,
     xosc_path_value: str,
@@ -399,6 +920,7 @@ def _load_existing_xosc(
     st.session_state.semantic_result = None
     st.session_state.qc_result = None
     st.session_state.esmini_result = None
+    st.session_state.playback_result = None
     st.session_state.report_text = ""
     _info("Loaded external OpenSCENARIO file.")
 
@@ -430,11 +952,33 @@ def _run_loaded_xosc_checks(output_dir: Path) -> None:
         required=st.session_state.require_esmini,
         binary=st.session_state.esmini_bin or None,
         timeout_s=st.session_state.esmini_timeout,
+        mode=st.session_state.external_esmini_mode,
+        sim_duration_s=st.session_state.esmini_sim_duration,
     )
     st.session_state.qc_result = qc_result
     st.session_state.esmini_result = esmini_result
     _write_loaded_xosc_report(output_dir, xosc_path, _current_metadata(), qc_result, esmini_result)
     _info("External OpenSCENARIO checks completed.")
+
+
+def _run_loaded_qc_only(output_dir: Path) -> None:
+    build_result = st.session_state.build_result
+    if not isinstance(build_result, BuildResult):
+        _load_existing_xosc(output_dir, st.session_state.loaded_xosc_path)
+        build_result = st.session_state.build_result
+    if not isinstance(build_result, BuildResult):
+        return
+    xosc_path = build_result.xosc_path
+    st.session_state.loaded_xosc_metadata = extract_xosc_metadata(xosc_path)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    qc_result = run_asam_qc(xosc_path, output_dir)
+    esmini_result = st.session_state.esmini_result
+    if not isinstance(esmini_result, EsminiResult):
+        esmini_result = _missing_esmini_result(xosc_path)
+    st.session_state.qc_result = qc_result
+    st.session_state.esmini_result = esmini_result
+    _write_loaded_xosc_report(output_dir, xosc_path, _current_metadata(), qc_result, esmini_result)
+    _info("ASAM QC completed." if qc_result.checker_available else "ASAM QC skipped.")
 
 
 def _generate_and_run(provider_name: str, demo_mode: str) -> None:
@@ -446,6 +990,52 @@ def _generate_and_run(provider_name: str, demo_mode: str) -> None:
         st.session_state.esmini_bin or None,
         st.session_state.esmini_timeout,
     )
+
+
+def _generate_and_play(provider_name: str, demo_mode: str) -> None:
+    output_dir = _new_web_output_dir()
+    _generate_spec(provider_name, st.session_state.scenario_text, demo_mode)
+    _run_pipeline(
+        output_dir,
+        run_esmini_check=False,
+        require_esmini=st.session_state.require_esmini,
+        esmini_bin=st.session_state.esmini_bin or None,
+        esmini_timeout=st.session_state.playback_timeout,
+    )
+    _run_playback(output_dir)
+    _write_report(output_dir)
+    _info("Generated scenario, preview, playback/check, and validation report completed.")
+
+
+def _new_web_output_dir() -> Path:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = Path(st.session_state.output_root) / timestamp
+    st.session_state.output_dir = str(output_dir)
+    return output_dir
+
+
+def _run_playback(output_dir: Path) -> None:
+    build_result = _ensure_build_result(output_dir)
+    _write_current_xml_if_present(build_result)
+    mode = "smoke" if st.session_state.playback_mode == "smoke check" else "playback"
+    playback_result = run_esmini_playback(
+        build_result.xosc_path,
+        output_dir,
+        working_dir=build_result.xosc_path.parent,
+        binary=st.session_state.esmini_bin or None,
+        timeout_s=st.session_state.playback_timeout,
+        sim_duration_s=st.session_state.esmini_sim_duration,
+        try_video=st.session_state.try_playback_video,
+        mode=mode,
+    )
+    st.session_state.playback_result = playback_result
+    esmini_json = output_dir / "esmini_result.json"
+    if esmini_json.exists():
+        try:
+            st.session_state.esmini_result = EsminiResult(**json.loads(esmini_json.read_text(encoding="utf-8")))
+        except (TypeError, json.JSONDecodeError):
+            st.session_state.esmini_result = None
+    _info("esmini playback/check completed." if playback_result.esmini_available else "esmini playback/check skipped.")
 
 
 def _generate_spec(provider_name: str, scenario_text: str, demo_mode: str) -> None:
@@ -656,6 +1246,9 @@ def _write_report(output_dir: Path) -> None:
         esmini_result,
         semantic_result,
         output_dir,
+        playback_result=st.session_state.playback_result
+        if isinstance(st.session_state.playback_result, EsminiPlaybackResult)
+        else None,
     )
     st.session_state.semantic_result = semantic_result
     st.session_state.report_text = report_path.read_text(encoding="utf-8")
@@ -868,6 +1461,50 @@ def _current_metadata() -> XoscMetadata | None:
     return metadata if isinstance(metadata, XoscMetadata) else None
 
 
+def _external_view_model() -> ExternalScenarioViewModel:
+    return build_external_scenario_view_model(
+        _current_metadata(),
+        source=st.session_state.loaded_xosc_source,
+        relative_path=st.session_state.loaded_xosc_relative_path,
+        qc_result=st.session_state.qc_result if isinstance(st.session_state.qc_result, AsamQcResult) else None,
+        esmini_result=st.session_state.esmini_result if isinstance(st.session_state.esmini_result, EsminiResult) else None,
+    )
+
+
+def _generated_view_model() -> GeneratedScenarioViewModel:
+    semantic_result = st.session_state.semantic_result if isinstance(st.session_state.semantic_result, SemanticValidationResult) else None
+    return build_generated_scenario_view_model(
+        _current_spec(show_error=False),
+        semantic_result=semantic_result,
+        qc_result=st.session_state.qc_result if isinstance(st.session_state.qc_result, AsamQcResult) else None,
+        esmini_result=st.session_state.esmini_result if isinstance(st.session_state.esmini_result, EsminiResult) else None,
+        needs_repair=_needs_repair(),
+        failure_summary=_failure_summary() if _current_spec(show_error=False) is not None else "",
+    )
+
+
+def _render_status_cards(status_cards: list[StatusCardViewModel]) -> None:
+    if not status_cards:
+        return
+    cards = st.columns(min(len(status_cards), 4))
+    for column, card in zip(cards, status_cards):
+        column.metric(card.label, card.value)
+        column.caption(card.detail)
+
+
+def _render_summary_cards(cards: list[StatusCardViewModel]) -> None:
+    if not cards:
+        return
+    rows = [cards[index:index + 2] for index in range(0, len(cards), 2)]
+    for row in rows:
+        cols = st.columns(len(row))
+        for column, card in zip(cols, row):
+            with column:
+                st.markdown(f"**{card.label}**")
+                st.caption(card.value)
+                st.caption(card.detail)
+
+
 def _metadata_markdown(metadata: XoscMetadata | None) -> str:
     if metadata is None:
         return "No metadata extracted."
@@ -932,25 +1569,16 @@ def _status_label() -> str:
     return '<div class="status-muted">Ready</div>'
 
 
-def _ego_speed_label(spec: ScenarioSpec) -> str:
-    ego = spec.actor_by_role("ego")
-    if ego is None or ego.initial_speed_kph is None:
-        return "missing"
-    return f"{ego.initial_speed_kph:g} km/h"
-
-
-def _pedestrian_speed_label(spec: ScenarioSpec) -> str:
-    pedestrian = spec.actor_by_role("crossing_actor")
-    if pedestrian is None or pedestrian.speed_mps is None:
-        return "missing"
-    return f"{pedestrian.speed_mps:g} m/s"
-
-
-def _ttc_label(spec: ScenarioSpec) -> str:
-    estimate = estimate_ttc_s(spec)
-    if estimate is None:
-        return "n/a"
-    return f"{estimate:.1f} s"
+def _playback_media_label(playback_kind: str) -> str:
+    labels = {
+        "esmini_gif": "esmini Rendered GIF",
+        "esmini_frame_sequence": "esmini Frame Sequence",
+        "esmini_single_frame": "esmini Screenshot",
+        "preview_fallback_gif": "2D Preview Fallback",
+        "preview_static_image": "2D Preview",
+        "unavailable": "Playback Unavailable",
+    }
+    return labels.get(playback_kind, "Playback Unavailable")
 
 
 def _inject_css() -> None:
