@@ -5,9 +5,8 @@ __pycache__/
 .venv/
 build/
 dist/
-outputs/require-esmini-demo/
 AGENTS.md
 docs/
 external/
 third_party/
-outputs/
+outputs/*
