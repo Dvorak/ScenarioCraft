@@ -1,0 +1,53 @@
+<?xml version="1.0" ?>
+<OpenDRIVE>
+  <header revMajor="1" revMinor="6" name="urban_two_way_parking" version="1.00" date="2026-06-18T00:00:00" north="0" south="0" east="0" west="0" vendor="ScenarioCraft"/>
+  <road name="urban_two_way_parking_main" length="120" id="1" junction="-1">
+    <type s="0" type="town"/>
+    <planView>
+      <geometry s="0" x="0" y="1.75" hdg="0" length="120">
+        <line/>
+      </geometry>
+    </planView>
+    <lanes>
+      <laneSection s="0">
+        <left>
+          <lane id="2" type="sidewalk" level="false">
+            <width sOffset="0" a="2.25" b="0" c="0" d="0"/>
+            <userData code="scenariocraft_layout_band" value="ego_side_sidewalk"/>
+          </lane>
+          <lane id="1" type="parking" level="false">
+            <width sOffset="0" a="2.5" b="0" c="0" d="0"/>
+            <roadMark sOffset="0" type="solid" weight="standard" color="white" width="0.12"/>
+            <userData code="scenariocraft_layout_band" value="ego_side_parking_strip"/>
+          </lane>
+        </left>
+        <center>
+          <lane id="0" type="none" level="false">
+            <roadMark sOffset="0" type="solid" weight="standard" color="white" width="0.12"/>
+          </lane>
+        </center>
+        <right>
+          <lane id="-1" type="driving" level="false">
+            <width sOffset="0" a="3.5" b="0" c="0" d="0"/>
+            <roadMark sOffset="0" type="broken" weight="standard" color="white" width="0.12"/>
+            <userData code="scenariocraft_layout_band" value="ego_driving_lane"/>
+          </lane>
+          <lane id="-2" type="median" level="false">
+            <width sOffset="0" a="0.25" b="0" c="0" d="0"/>
+            <roadMark sOffset="0" type="solid" weight="standard" color="white" width="0.12"/>
+            <userData code="scenariocraft_layout_band" value="center_divider"/>
+          </lane>
+          <lane id="-3" type="driving" level="false">
+            <width sOffset="0" a="3.5" b="0" c="0" d="0"/>
+            <roadMark sOffset="0" type="broken" weight="standard" color="white" width="0.12"/>
+            <userData code="scenariocraft_layout_band" value="opposing_driving_lane"/>
+          </lane>
+          <lane id="-4" type="sidewalk" level="false">
+            <width sOffset="0" a="2" b="0" c="0" d="0"/>
+            <userData code="scenariocraft_layout_band" value="opposing_side_sidewalk"/>
+          </lane>
+        </right>
+      </laneSection>
+    </lanes>
+  </road>
+</OpenDRIVE>
