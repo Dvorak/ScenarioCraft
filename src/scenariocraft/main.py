@@ -4,7 +4,9 @@ import argparse
 from pathlib import Path
 
 from scenariocraft.generators import MockScenarioGenerator, ScenarioGenerator
+from scenariocraft.probes import run_pedestrian_occlusion_probes
 from scenariocraft.references import XoscMetadata, extract_xosc_metadata
+from scenariocraft.schemas import ProbeResult, ScenarioSpec
 from scenariocraft.tools import (
     EsminiResult,
     build_openscenario,
@@ -42,6 +44,7 @@ def main(argv: list[str] | None = None) -> int:
         timeout_s=args.esmini_timeout,
     )
     semantic_result = validate_semantics(spec)
+    probe_results = _run_template_probes(spec)
     report_path = generate_validation_report(
         scenario_text,
         spec,
@@ -50,6 +53,7 @@ def main(argv: list[str] | None = None) -> int:
         esmini_result,
         semantic_result,
         output_dir,
+        probe_results=probe_results,
     )
     print(f"Wrote ScenarioSpec: {output_dir / 'scenario_spec.json'}")
     print(f"Wrote 2D preview: {preview_path}")
@@ -240,6 +244,12 @@ def _get_generator(provider: str) -> ScenarioGenerator:
     if provider == "mock":
         return MockScenarioGenerator()
     raise ValueError(f"Unsupported provider: {provider}")
+
+
+def _run_template_probes(spec: ScenarioSpec) -> tuple[ProbeResult, ...]:
+    if spec.scenario_type == "pedestrian_occlusion" and spec.layout is not None:
+        return run_pedestrian_occlusion_probes(spec)
+    return ()
 
 
 if __name__ == "__main__":

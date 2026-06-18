@@ -1,0 +1,171 @@
+from scenariocraft.generators import MockScenarioGenerator
+from scenariocraft.roads import URBAN_TWO_WAY_PARKING_FILENAME
+from scenariocraft.schemas import Point2D
+from scenariocraft.schemas import ScenarioSpec
+from scenariocraft.templates import PedestrianOcclusionTemplate, get_template, registered_templates
+from scenariocraft.templates.pedestrian_occlusion import (
+    PedestrianOcclusionParameters,
+    _actor_rectangle,
+    _segment_intersects_rect,
+    _vertical_segment_intersects_rect,
+    _vertical_segment_rect_clearance,
+)
+
+
+def test_registry_contains_pedestrian_occlusion_template() -> None:
+    templates = registered_templates()
+
+    assert "pedestrian_occlusion" in templates
+    assert isinstance(get_template("pedestrian_occlusion"), PedestrianOcclusionTemplate)
+
+
+def test_pedestrian_occlusion_template_exposes_minimal_metadata() -> None:
+    template = get_template("pedestrian_occlusion")
+
+    assert template.template_id == "pedestrian_occlusion"
+    assert template.description
+    assert template.required_actors == ("ego", "occluder", "crossing_actor")
+    assert "scenario_name" in template.default_parameters
+    assert isinstance(template.supported_operations, tuple)
+
+
+def test_pedestrian_occlusion_template_instantiates_schema_valid_spec() -> None:
+    spec = get_template("pedestrian_occlusion").instantiate(source_text="rainy pedestrian occlusion")
+
+    assert isinstance(spec, ScenarioSpec)
+    assert ScenarioSpec.from_json(spec.to_json()) == spec
+
+
+def test_pedestrian_occlusion_template_emits_layout() -> None:
+    spec = get_template("pedestrian_occlusion").instantiate(source_text="rainy pedestrian occlusion")
+
+    assert spec.layout is not None
+    assert spec.layout.coordinate_frame == "ego_local"
+    assert spec.layout.actor_poses["ego"].x_m == 0.0
+    assert spec.layout.actor_poses["ego"].y_m == 0.0
+    assert spec.layout.actor_poses["parked_van"].x_m == 20.0
+    assert spec.layout.actor_poses["parked_van"].y_m == 3.25
+    assert spec.layout.actor_poses["pedestrian"].x_m == 25.0
+    assert spec.layout.actor_poses["pedestrian"].y_m == 4.60
+    assert spec.layout.actor_footprints["ego"].length_m == 4.6
+    assert spec.layout.actor_footprints["parked_van"].length_m == 5.3
+    assert spec.layout.actor_footprints["pedestrian"].width_m == 0.6
+    assert spec.layout.paths["pedestrian_crossing_path"].points == (Point2D(25.0, 4.60), Point2D(25.0, -1.00))
+    assert spec.layout.points["conflict_point"] == Point2D(25.0, 0.0)
+    assert spec.layout.points["trigger_point"] == Point2D(7.0, 0.0)
+    assert spec.spatial_relations
+
+
+def test_pedestrian_occlusion_template_emits_canonical_road_bands() -> None:
+    spec = get_template("pedestrian_occlusion").instantiate(source_text="rainy pedestrian occlusion")
+    assert spec.layout is not None
+
+    bands = {band.id: band for band in spec.layout.road_bands}
+
+    assert bands["ego_side_sidewalk"].kind == "sidewalk"
+    assert (bands["ego_side_sidewalk"].y_min_m, bands["ego_side_sidewalk"].y_max_m) == (4.25, 6.50)
+    assert bands["ego_side_parking_strip"].kind == "parking_strip"
+    assert (bands["ego_side_parking_strip"].y_min_m, bands["ego_side_parking_strip"].y_max_m) == (1.75, 4.25)
+    assert bands["ego_driving_lane"].kind == "driving_lane"
+    assert (bands["ego_driving_lane"].y_min_m, bands["ego_driving_lane"].y_max_m, bands["ego_driving_lane"].travel_direction) == (-1.75, 1.75, "+x")
+    assert bands["center_divider"].kind == "center_divider"
+    assert (bands["center_divider"].y_min_m, bands["center_divider"].y_max_m) == (-2.00, -1.75)
+    assert bands["opposing_driving_lane"].kind == "driving_lane"
+    assert (bands["opposing_driving_lane"].y_min_m, bands["opposing_driving_lane"].y_max_m, bands["opposing_driving_lane"].travel_direction) == (-5.50, -2.00, "-x")
+    assert bands["opposing_side_sidewalk"].kind == "sidewalk"
+    assert (bands["opposing_side_sidewalk"].y_min_m, bands["opposing_side_sidewalk"].y_max_m) == (-7.50, -5.50)
+
+
+def test_pedestrian_occlusion_template_uses_canonical_opendrive_candidate_road_metadata() -> None:
+    spec = get_template("pedestrian_occlusion").instantiate(source_text="rainy pedestrian occlusion")
+
+    assert spec.road.type == "urban_straight"
+    assert spec.road.lanes_per_direction == 1
+    assert spec.layout is not None
+    assert spec.layout.coordinate_frame == "ego_local"
+    assert spec.layout.road_bands
+    assert URBAN_TWO_WAY_PARKING_FILENAME == "urban_two_way_parking.xodr"
+
+
+def test_pedestrian_occlusion_template_emits_spatial_semantics() -> None:
+    spec = get_template("pedestrian_occlusion").instantiate(source_text="rainy pedestrian occlusion")
+    assert spec.layout is not None
+    relations = {(relation.relation_type, relation.subject, relation.object) for relation in spec.spatial_relations}
+
+    assert ("occludes", "parked_van", "pedestrian") in relations
+    assert ("emerges_from_behind", "pedestrian", "parked_van") in relations
+    assert ("path_intersects", "pedestrian_crossing_path", "ego_path") in relations
+    assert ("ahead_of", "conflict_point", "ego") in relations
+    assert ("trigger_before_conflict", "trigger_point", "conflict_point") in relations
+    crossing_path = spec.layout.paths["pedestrian_crossing_path"]
+    assert crossing_path.points[0] == Point2D(25.0, 4.60)
+    assert crossing_path.points[-1] == Point2D(25.0, -1.00)
+    assert spec.layout.actor_poses["pedestrian"].x_m == crossing_path.points[0].x_m
+    assert spec.layout.actor_poses["pedestrian"].y_m == crossing_path.points[0].y_m
+    assert spec.layout.points["trigger_point"].x_m < spec.layout.points["conflict_point"].x_m
+    assert spec.layout.points["conflict_point"].x_m > spec.layout.actor_poses["ego"].x_m
+
+
+def test_pedestrian_occlusion_geometry_satisfies_non_overlap_and_occlusion() -> None:
+    parameters = PedestrianOcclusionParameters()
+    spec = get_template("pedestrian_occlusion").instantiate(source_text="rainy pedestrian occlusion")
+    assert spec.layout is not None
+    van_rect = _actor_rectangle(spec.layout, "parked_van")
+    crossing_path = spec.layout.paths["pedestrian_crossing_path"]
+    ego_pose = spec.layout.actor_poses["ego"]
+    pedestrian_start = crossing_path.points[0]
+    conflict_point = spec.layout.points["conflict_point"]
+    trigger_point = spec.layout.points["trigger_point"]
+    ego_lane = _band(spec, "ego_driving_lane")
+    parking_strip = _band(spec, "ego_side_parking_strip")
+    sidewalk = _band(spec, "ego_side_sidewalk")
+
+    assert _rect_inside_band(_actor_rectangle(spec.layout, "ego"), ego_lane)
+    assert _rect_inside_band(van_rect, parking_strip)
+    assert _rect_inside_band(_actor_rectangle(spec.layout, "pedestrian"), sidewalk)
+    assert _point_inside_band(conflict_point, ego_lane)
+    assert _point_inside_band(trigger_point, ego_lane)
+    assert _point_inside_band(pedestrian_start, sidewalk)
+    assert _vertical_segment_intersects_band(crossing_path.points[0], crossing_path.points[-1], ego_lane)
+    assert not _vertical_segment_intersects_rect(crossing_path.points[0], crossing_path.points[-1], van_rect)
+    assert _vertical_segment_rect_clearance(crossing_path.points[0], crossing_path.points[-1], van_rect) >= parameters.minimum_path_clearance_m
+    assert _segment_intersects_rect(Point2D(ego_pose.x_m, ego_pose.y_m), pedestrian_start, van_rect)
+
+
+def _band(spec: ScenarioSpec, band_id: str):
+    assert spec.layout is not None
+    return next(band for band in spec.layout.road_bands if band.id == band_id)
+
+
+def _rect_inside_band(rect: tuple[float, float, float, float], band: object) -> bool:
+    _, _, min_y, max_y = rect
+    return band.y_min_m <= min_y <= max_y <= band.y_max_m
+
+
+def _point_inside_band(point: Point2D, band: object) -> bool:
+    return band.y_min_m <= point.y_m <= band.y_max_m
+
+
+def _vertical_segment_intersects_band(start: Point2D, end: Point2D, band: object) -> bool:
+    y0, y1 = sorted((start.y_m, end.y_m))
+    return max(y0, band.y_min_m) <= min(y1, band.y_max_m)
+
+
+def test_mock_generation_preserves_normal_pedestrian_occlusion_spec() -> None:
+    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+
+    assert spec.scenario_name == "rainy_pedestrian_occlusion"
+    assert spec.scenario_type == "pedestrian_occlusion"
+    assert [(actor.id, actor.type, actor.role) for actor in spec.actors] == [
+        ("ego", "car", "ego"),
+        ("parked_van", "van", "occluder"),
+        ("pedestrian", "pedestrian", "crossing_actor"),
+    ]
+    assert spec.actor_by_role("ego").initial_speed_kph == 35
+    assert spec.actor_by_role("crossing_actor").speed_mps == 1.5
+    assert spec.trigger.type == "relative_distance"
+    assert spec.trigger.source == "ego"
+    assert spec.trigger.target == "parked_van"
+    assert spec.trigger.distance_m == 18
+    assert spec.intended_criticality.type == "near_miss"
+    assert spec.intended_criticality.target_min_ttc_s == 1.5

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
+from collections.abc import Sequence
 
-from scenariocraft.schemas import ScenarioSpec
+from scenariocraft.schemas import ProbeResult, ScenarioSpec
 from scenariocraft.tools.asam_qc_tool import AsamQcResult
-from scenariocraft.tools.esmini_tool import EsminiResult
+from scenariocraft.tools.esmini_tool import EsminiPlaybackResult, EsminiResult
 from scenariocraft.tools.scenario_builder import BuildResult
 from scenariocraft.tools.semantic_validator import SemanticValidationResult
 
@@ -17,11 +19,22 @@ def generate_validation_report(
     esmini_result: EsminiResult,
     semantic_result: SemanticValidationResult,
     output_dir: Path,
+    probe_results: Sequence[ProbeResult] | None = None,
+    playback_result: EsminiPlaybackResult | None = None,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     report_path = output_dir / "validation_report.md"
     report_path.write_text(
-        _render_report(scenario_text, spec, build_result, qc_result, esmini_result, semantic_result),
+        _render_report(
+            scenario_text,
+            spec,
+            build_result,
+            qc_result,
+            esmini_result,
+            semantic_result,
+            probe_results,
+            playback_result,
+        ),
         encoding="utf-8",
     )
     return report_path
@@ -34,6 +47,8 @@ def _render_report(
     qc_result: AsamQcResult,
     esmini_result: EsminiResult,
     semantic_result: SemanticValidationResult,
+    probe_results: Sequence[ProbeResult] | None = None,
+    playback_result: EsminiPlaybackResult | None = None,
 ) -> str:
     semantic_lines = "\n".join(
         f"- [{'x' if check.passed else ' '}] `{check.name}`: {check.message}" for check in semantic_result.checks
@@ -41,6 +56,8 @@ def _render_report(
     artifact_lines = "\n".join(f"- `{path.name}`" for path in build_result.artifact_paths())
     qc_summary = _qc_summary(qc_result)
     esmini_summary = _esmini_summary(esmini_result)
+    esmini_media_summary = _esmini_media_summary(playback_result)
+    probe_section = _probe_section(probe_results)
     return f"""# scenarioCraft Validation Report
 
 ## Input Scenario Intent
@@ -72,15 +89,20 @@ def _render_report(
 
 {qc_summary}
 
-## esmini Execution / Playback
+## esmini Execution
 
 {esmini_summary}
+
+## esmini Media
+
+{esmini_media_summary}
 
 ## Semantic Validation
 
 Overall result: `{'passed' if semantic_result.passed else 'failed'}`
 
 {semantic_lines}
+{probe_section}
 
 ## Known Limitations
 
@@ -93,6 +115,22 @@ Overall result: `{'passed' if semantic_result.passed else 'failed'}`
 
 - No automated repair loop is implemented in this version.
 """
+
+
+def _probe_section(probe_results: Sequence[ProbeResult] | None) -> str:
+    if not probe_results:
+        return ""
+    lines = ["", "## Template-Aware Probes", ""]
+    for result in probe_results:
+        state = "PASS" if result.passed else "FAIL"
+        lines.append(f"- [{state}] `{result.name}` ({result.severity}): {result.message}")
+        if result.measured:
+            lines.append(f"  - measured: `{json.dumps(result.measured, sort_keys=True)}`")
+        if result.suggested_operations:
+            lines.append(
+                f"  - suggested_operations: `{json.dumps(list(result.suggested_operations), sort_keys=True)}`"
+            )
+    return "\n".join(lines)
 
 
 def _qc_summary(result: AsamQcResult) -> str:
@@ -140,3 +178,40 @@ def _esmini_summary(result: EsminiResult) -> str:
         f"- Executed: `{result.executed}`",
         f"- Error message: `{result.error_message}`",
     ])
+
+
+def _esmini_media_summary(result: EsminiPlaybackResult | None) -> str:
+    if result is None:
+        return "No playback media generation result was recorded."
+    label = _playback_label(result.playback_kind)
+    lines = [
+        f"- Label: `{label}`",
+        f"- Playback kind: `{result.playback_kind}`",
+        f"- Frame count: `{result.playback_frame_count}`",
+        f"- Animated: `{result.playback_is_animated}`",
+        f"- Frame duration seconds: `{result.playback_frame_duration_s}`",
+        f"- Media path: `{result.playback_path}`",
+        f"- Source path: `{result.playback_source_path}`",
+    ]
+    if result.playback_frames:
+        first = result.playback_frames[0]
+        lines.append(
+            "- First frame source: "
+            f"`{first.get('original_source_path')}` -> `{first.get('normalized_frame_path')}` "
+            f"(index `{first.get('frame_index')}`, ext `{first.get('source_extension')}`)"
+        )
+    if result.playback_fallback_reason:
+        lines.append(f"- Fallback reason: {result.playback_fallback_reason}")
+    return "\n".join(lines)
+
+
+def _playback_label(playback_kind: str) -> str:
+    labels = {
+        "esmini_gif": "esmini Rendered GIF",
+        "esmini_frame_sequence": "esmini Frame Sequence",
+        "esmini_single_frame": "esmini Screenshot",
+        "preview_fallback_gif": "2D Preview Fallback",
+        "preview_static_image": "2D Preview",
+        "unavailable": "Playback Unavailable",
+    }
+    return labels.get(playback_kind, "Playback Unavailable")

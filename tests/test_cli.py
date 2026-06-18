@@ -1,6 +1,8 @@
 from pathlib import Path
 import subprocess
+from dataclasses import replace
 
+from scenariocraft.generators import MockScenarioGenerator
 from scenariocraft.main import main
 
 
@@ -23,6 +25,33 @@ def test_cli_happy_path_with_mock_provider(monkeypatch, tmp_path: Path) -> None:
     assert "Scenario playback/execution check was skipped" in (output_dir / "validation_report.md").read_text(
         encoding="utf-8"
     )
+    report = (output_dir / "validation_report.md").read_text(encoding="utf-8")
+    assert "## Template-Aware Probes" in report
+    assert "`ego_footprint_in_ego_lane`" in report
+    assert "`trigger_point_before_conflict_and_in_ego_lane`" in report
+
+
+def test_cli_layout_free_spec_succeeds_without_template_aware_probes(monkeypatch, tmp_path: Path) -> None:
+    input_path = tmp_path / "input.txt"
+    output_dir = tmp_path / "out"
+    input_path.write_text("rainy pedestrian occlusion", encoding="utf-8")
+    monkeypatch.setenv("ESMINI_BIN", str(tmp_path / "missing-esmini"))
+    monkeypatch.setattr("shutil.which", lambda _binary: None)
+
+    class LayoutFreeGenerator:
+        def generate_spec(self, scenario_text: str):
+            spec = MockScenarioGenerator().generate_spec(scenario_text)
+            return replace(spec, layout=None, spatial_relations=())
+
+    monkeypatch.setattr("scenariocraft.main.MockScenarioGenerator", LayoutFreeGenerator)
+
+    exit_code = main(["--input", str(input_path), "--out", str(output_dir), "--provider", "mock"])
+
+    assert exit_code == 0
+    assert (output_dir / "scenario_spec.json").exists()
+    assert (output_dir / "scenario.xosc").exists()
+    report = (output_dir / "validation_report.md").read_text(encoding="utf-8")
+    assert "## Template-Aware Probes" not in report
 
 
 def test_cli_require_esmini_returns_nonzero_when_missing(monkeypatch, tmp_path: Path) -> None:

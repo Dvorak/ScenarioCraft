@@ -1,5 +1,5 @@
 from scenariocraft.tools.asam_qc_tool import AsamQcResult, run_asam_qc
-from scenariocraft.tools.esmini_tool import EsminiResult, run_esmini
+from scenariocraft.tools.esmini_tool import EsminiPlaybackResult, EsminiResult, run_esmini, run_esmini_playback
 from scenariocraft.tools.preview_2d import estimate_ttc_s, generate_2d_preview
 from scenariocraft.tools.report_tool import generate_validation_report
 from scenariocraft.tools.scenario_builder import (
@@ -15,6 +15,7 @@ __all__ = [
     "AsamQcResult",
     "BuildResult",
     "EsminiResult",
+    "EsminiPlaybackResult",
     "FallbackXmlScenarioBuilder",
     "ScenarioBuilder",
     "ScenariogenerationBuilder",
@@ -26,5 +27,6 @@ __all__ = [
     "generate_2d_preview",
     "run_asam_qc",
     "run_esmini",
+    "run_esmini_playback",
     "validate_semantics",
 ]
