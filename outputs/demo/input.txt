@@ -1,1 +1,0 @@
-A rainy urban pedestrian occlusion scenario where the ego vehicle approaches a parked van and a pedestrian suddenly crosses from behind it.
