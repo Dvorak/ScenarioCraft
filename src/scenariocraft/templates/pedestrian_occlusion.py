@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from math import hypot
 from typing import Mapping
 
 from scenariocraft.schemas import (
@@ -14,6 +15,7 @@ from scenariocraft.schemas import (
     RoadBandSpec,
     RoadSpec,
     ScenarioSpec,
+    ScenarioTimingSpec,
     SpatialRelationSpec,
     TriggerSpec,
     WeatherSpec,
@@ -24,9 +26,9 @@ from scenariocraft.schemas import (
 class PedestrianOcclusionParameters:
     ego_speed_kph: float = 35.0
     pedestrian_speed_mps: float = 1.5
-    target_conflict_distance_m: float = 25.0
     trigger_offset_m: float = 18.0
-    van_center_x_m: float = 20.0
+    van_to_conflict_offset_m: float = 5.0
+    ego_start_x_m: float = 0.0
     van_center_y_m: float = 3.25
     pedestrian_start_y_m: float = 4.60
     pedestrian_end_y_m: float = -1.00
@@ -37,6 +39,12 @@ class PedestrianOcclusionParameters:
     pedestrian_length_m: float = 0.6
     pedestrian_width_m: float = 0.6
     minimum_path_clearance_m: float = 0.5
+    total_duration_s: float = 8.0
+    preferred_trigger_earliest_s: float = 1.5
+    preferred_trigger_latest_s: float = 3.0
+    minimum_pre_trigger_context_s: float = 0.5
+    minimum_post_trigger_buffer_s: float = 0.5
+    canonical_nominal_trigger_time_s: float | None = None
     weather: str = "rainy_wet"
 
 
@@ -55,6 +63,7 @@ class PedestrianOcclusionTemplate:
         scenario_name = str(parameters.get("scenario_name", self.default_parameters["scenario_name"]))
         source_text = str(parameters.get("source_text", self.default_parameters["source_text"]))
         template_parameters = _parameters_from_mapping(parameters)
+        timing = _derive_timing(template_parameters)
         layout = _derive_layout(template_parameters)
         metadata = {"generator": "mock", "source_text": source_text}
         return ScenarioSpec(
@@ -77,6 +86,7 @@ class PedestrianOcclusionTemplate:
             metadata=metadata,
             layout=layout,
             spatial_relations=_spatial_relations(template_parameters),
+            timing=timing,
         )
 
 
@@ -96,18 +106,31 @@ def _parameters_from_mapping(values: Mapping[str, object]) -> PedestrianOcclusio
     return replace(base, **overrides) if overrides else base
 
 
+def _derive_timing(parameters: PedestrianOcclusionParameters) -> ScenarioTimingSpec:
+    return ScenarioTimingSpec(
+        total_duration_s=parameters.total_duration_s,
+        preferred_trigger_earliest_s=parameters.preferred_trigger_earliest_s,
+        preferred_trigger_latest_s=parameters.preferred_trigger_latest_s,
+        minimum_pre_trigger_context_s=parameters.minimum_pre_trigger_context_s,
+        minimum_post_trigger_buffer_s=parameters.minimum_post_trigger_buffer_s,
+    )
+
+
 def _derive_layout(parameters: PedestrianOcclusionParameters) -> LayoutSpec:
     """Derive ego-local layout from semantic template parameters.
 
     Convention: +x is ego forward, y=0 is ego lane center, positive y is curb/parked-van side,
     and actor poses reference the center of their footprint.
     """
-    conflict_point = Point2D(parameters.target_conflict_distance_m, 0.0)
-    trigger_point = Point2D(conflict_point.x_m - parameters.trigger_offset_m, 0.0)
+    ego_speed_mps = parameters.ego_speed_kph / 3.6
+    nominal_trigger_time_s = _nominal_trigger_time_s(parameters)
+    van_center_x_m = parameters.ego_start_x_m + ego_speed_mps * nominal_trigger_time_s + parameters.trigger_offset_m
+    conflict_point = Point2D(van_center_x_m + parameters.van_to_conflict_offset_m, 0.0)
+    trigger_point = Point2D(van_center_x_m - parameters.trigger_offset_m, 0.0)
     pedestrian_start = Point2D(conflict_point.x_m, parameters.pedestrian_start_y_m)
     pedestrian_end = Point2D(conflict_point.x_m, parameters.pedestrian_end_y_m)
-    ego_pose = Pose2D(x_m=0.0, y_m=0.0, heading_rad=0.0)
-    van_pose = Pose2D(x_m=parameters.van_center_x_m, y_m=parameters.van_center_y_m, heading_rad=0.0)
+    ego_pose = Pose2D(x_m=parameters.ego_start_x_m, y_m=0.0, heading_rad=0.0)
+    van_pose = Pose2D(x_m=van_center_x_m, y_m=parameters.van_center_y_m, heading_rad=0.0)
     pedestrian_pose = Pose2D(x_m=pedestrian_start.x_m, y_m=pedestrian_start.y_m, heading_rad=0.0)
     layout = LayoutSpec(
         coordinate_frame="ego_local",
@@ -122,7 +145,7 @@ def _derive_layout(parameters: PedestrianOcclusionParameters) -> LayoutSpec:
             "pedestrian": FootprintSpec(length_m=parameters.pedestrian_length_m, width_m=parameters.pedestrian_width_m),
         },
         paths={
-            "ego_path": PathSpec(name="ego_path", points=(Point2D(0.0, 0.0), Point2D(60.0, 0.0))),
+            "ego_path": PathSpec(name="ego_path", points=(Point2D(parameters.ego_start_x_m, 0.0), Point2D(conflict_point.x_m + 35.0, 0.0))),
             "pedestrian_crossing_path": PathSpec(
                 name="pedestrian_crossing_path",
                 points=(pedestrian_start, pedestrian_end),
@@ -136,6 +159,89 @@ def _derive_layout(parameters: PedestrianOcclusionParameters) -> LayoutSpec:
     )
     _validate_derived_geometry(layout, parameters)
     return layout
+
+
+@dataclass(frozen=True)
+class TimingAssessment:
+    predicted_trigger_time_s: float
+    pedestrian_crossing_duration_s: float
+    hard_latest_trigger_s: float
+    classification: str
+
+    def to_dict(self) -> dict[str, float | str]:
+        return {
+            "predicted_trigger_time_s": self.predicted_trigger_time_s,
+            "pedestrian_crossing_duration_s": self.pedestrian_crossing_duration_s,
+            "hard_latest_trigger_s": self.hard_latest_trigger_s,
+            "classification": self.classification,
+        }
+
+
+def assess_pedestrian_occlusion_timing(spec: ScenarioSpec) -> TimingAssessment | None:
+    if spec.timing is None or spec.layout is None:
+        return None
+    predicted_trigger_time_s = estimate_trigger_time_s(spec)
+    pedestrian_duration_s = _pedestrian_crossing_duration_s(spec)
+    if predicted_trigger_time_s is None or pedestrian_duration_s is None:
+        return None
+    hard_latest_trigger_s = (
+        spec.timing.total_duration_s
+        - pedestrian_duration_s
+        - spec.timing.minimum_post_trigger_buffer_s
+    )
+    if predicted_trigger_time_s < spec.timing.minimum_pre_trigger_context_s:
+        classification = "too_early"
+    elif predicted_trigger_time_s > hard_latest_trigger_s:
+        classification = "too_late"
+    elif spec.timing.preferred_trigger_earliest_s <= predicted_trigger_time_s <= spec.timing.preferred_trigger_latest_s:
+        classification = "preferred"
+    else:
+        classification = "acceptable"
+    return TimingAssessment(
+        predicted_trigger_time_s=predicted_trigger_time_s,
+        pedestrian_crossing_duration_s=pedestrian_duration_s,
+        hard_latest_trigger_s=hard_latest_trigger_s,
+        classification=classification,
+    )
+
+
+def estimate_trigger_time_s(spec: ScenarioSpec) -> float | None:
+    if spec.layout is None:
+        return None
+    source_pose = spec.layout.actor_poses.get(spec.trigger.source)
+    target_pose = spec.layout.actor_poses.get(spec.trigger.target)
+    source_actor = spec.actor_by_id(spec.trigger.source)
+    if source_pose is None or target_pose is None or source_actor is None or source_actor.initial_speed_kph is None:
+        return None
+    speed_mps = source_actor.initial_speed_kph / 3.6
+    if speed_mps <= 0:
+        return None
+    return (target_pose.x_m - source_pose.x_m - spec.trigger.distance_m) / speed_mps
+
+
+def _pedestrian_crossing_duration_s(spec: ScenarioSpec) -> float | None:
+    if spec.layout is None:
+        return None
+    pedestrian = spec.actor_by_role("crossing_actor")
+    path = spec.layout.paths.get("pedestrian_crossing_path")
+    if pedestrian is None or pedestrian.speed_mps is None or pedestrian.speed_mps <= 0 or path is None:
+        return None
+    distance_m = 0.0
+    for start, end in zip(path.points, path.points[1:]):
+        distance_m += hypot(end.x_m - start.x_m, end.y_m - start.y_m)
+    return distance_m / pedestrian.speed_mps
+
+
+def _nominal_trigger_time_s(parameters: PedestrianOcclusionParameters) -> float:
+    timing = _derive_timing(parameters)
+    nominal = (
+        parameters.canonical_nominal_trigger_time_s
+        if parameters.canonical_nominal_trigger_time_s is not None
+        else timing.preferred_trigger_latest_s
+    )
+    if not timing.preferred_trigger_earliest_s <= nominal <= timing.preferred_trigger_latest_s:
+        raise ValueError("canonical_nominal_trigger_time_s must be inside the preferred trigger window.")
+    return nominal
 
 
 def _road_bands() -> tuple[RoadBandSpec, ...]:

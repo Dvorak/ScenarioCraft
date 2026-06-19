@@ -159,6 +159,78 @@ class CriticalitySpec:
 
 
 @dataclass(frozen=True)
+class ScenarioTimingSpec:
+    total_duration_s: float = 8.0
+    preferred_trigger_earliest_s: float = 1.5
+    preferred_trigger_latest_s: float = 3.0
+    minimum_pre_trigger_context_s: float = 0.5
+    minimum_post_trigger_buffer_s: float = 0.5
+
+    def __post_init__(self) -> None:
+        total = _require_positive_number(self.total_duration_s, "timing.total_duration_s")
+        earliest = _require_non_negative_number(
+            self.preferred_trigger_earliest_s,
+            "timing.preferred_trigger_earliest_s",
+        )
+        latest = _require_non_negative_number(
+            self.preferred_trigger_latest_s,
+            "timing.preferred_trigger_latest_s",
+        )
+        pre_context = _require_non_negative_number(
+            self.minimum_pre_trigger_context_s,
+            "timing.minimum_pre_trigger_context_s",
+        )
+        buffer = _require_non_negative_number(
+            self.minimum_post_trigger_buffer_s,
+            "timing.minimum_post_trigger_buffer_s",
+        )
+        if earliest > latest:
+            raise ScenarioSpecError(
+                "timing.preferred_trigger_earliest_s must be less than or equal to preferred_trigger_latest_s."
+            )
+        if latest >= total:
+            raise ScenarioSpecError("timing.preferred_trigger_latest_s must be less than total_duration_s.")
+        object.__setattr__(self, "total_duration_s", total)
+        object.__setattr__(self, "preferred_trigger_earliest_s", earliest)
+        object.__setattr__(self, "preferred_trigger_latest_s", latest)
+        object.__setattr__(self, "minimum_pre_trigger_context_s", pre_context)
+        object.__setattr__(self, "minimum_post_trigger_buffer_s", buffer)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "total_duration_s": self.total_duration_s,
+            "preferred_trigger_earliest_s": self.preferred_trigger_earliest_s,
+            "preferred_trigger_latest_s": self.preferred_trigger_latest_s,
+            "minimum_pre_trigger_context_s": self.minimum_pre_trigger_context_s,
+            "minimum_post_trigger_buffer_s": self.minimum_post_trigger_buffer_s,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ScenarioTimingSpec":
+        return cls(
+            total_duration_s=float(data.get("total_duration_s", 8.0)),
+            preferred_trigger_earliest_s=float(data.get("preferred_trigger_earliest_s", 1.5)),
+            preferred_trigger_latest_s=float(data.get("preferred_trigger_latest_s", 3.0)),
+            minimum_pre_trigger_context_s=float(data.get("minimum_pre_trigger_context_s", 0.5)),
+            minimum_post_trigger_buffer_s=float(data.get("minimum_post_trigger_buffer_s", 0.5)),
+        )
+
+
+def _require_positive_number(value: float, field_name: str) -> float:
+    number = _require_finite_number(value, field_name)
+    if number <= 0:
+        raise ScenarioSpecError(f"{field_name} must be positive.")
+    return number
+
+
+def _require_non_negative_number(value: float, field_name: str) -> float:
+    number = _require_finite_number(value, field_name)
+    if number < 0:
+        raise ScenarioSpecError(f"{field_name} must be non-negative.")
+    return number
+
+
+@dataclass(frozen=True)
 class Point2D:
     x_m: float
     y_m: float
@@ -413,6 +485,7 @@ class ScenarioSpec:
     metadata: dict[str, Any] = field(default_factory=dict)
     layout: LayoutSpec | None = None
     spatial_relations: tuple[SpatialRelationSpec, ...] = ()
+    timing: ScenarioTimingSpec | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty(self.scenario_name, "scenario_name")
@@ -424,6 +497,8 @@ class ScenarioSpec:
             raise ScenarioSpecError("actor ids must be unique.")
         if self.layout is not None and not isinstance(self.layout, LayoutSpec):
             raise ScenarioSpecError("layout must be a LayoutSpec or None.")
+        if self.timing is not None and not isinstance(self.timing, ScenarioTimingSpec):
+            raise ScenarioSpecError("timing must be a ScenarioTimingSpec or None.")
         for index, relation in enumerate(self.spatial_relations):
             if not isinstance(relation, SpatialRelationSpec):
                 raise ScenarioSpecError(f"spatial_relations[{index}] must be a SpatialRelationSpec.")
@@ -450,6 +525,8 @@ class ScenarioSpec:
             data["layout"] = self.layout.to_dict()
         if self.spatial_relations:
             data["spatial_relations"] = [relation.to_dict() for relation in self.spatial_relations]
+        if self.timing is not None:
+            data["timing"] = self.timing.to_dict()
         return data
 
     def to_json(self) -> str:
@@ -471,6 +548,7 @@ class ScenarioSpec:
                 SpatialRelationSpec.from_dict(relation)
                 for relation in data.get("spatial_relations", ())
             ),
+            timing=ScenarioTimingSpec.from_dict(data["timing"]) if data.get("timing") is not None else None,
         )
 
     @classmethod
