@@ -5,6 +5,9 @@ from pathlib import Path
 import scenariocraft.tools.esmini_tool as esmini_tool
 from scenariocraft.tools.esmini_tool import (
     _build_playback_media,
+    _build_capture_command,
+    _capture_mode_for_platform,
+    _classify_media_quality,
     _discover_native_capture_frames,
     classify_esmini_timeout,
     resolve_esmini_binary,
@@ -229,9 +232,33 @@ def test_esmini_playback_falls_back_when_capture_produces_no_frames(monkeypatch,
     assert result.playback_path is None
     assert result.playback_kind == "unavailable"
     assert result.playback_frame_count == 0
+    assert result.media_quality_status == "corrupt"
+    assert "no native screen_shot" in (result.media_quality_reason or "")
     assert "--capture_screen" in result.command
-    assert "did not produce native screen_shot_* frame images" in (result.fallback_reason or "")
+    assert "no native screen_shot" in (result.fallback_reason or "")
     assert "fallback execution ok" in result.stdout
+
+
+def test_macos_capture_command_uses_windowed_strategy() -> None:
+    command = _build_capture_command("/fake/esmini", "scenario.xosc", Path("/tmp/work"), platform_name="Darwin")
+
+    assert "--capture_screen" in command
+    assert "--camera_mode" in command
+    assert "top" in command
+    assert "--headless" not in command
+    window_index = command.index("--window")
+    assert command[window_index + 1: window_index + 5] == ["2500", "1200", "960", "540"]
+    assert _capture_mode_for_platform("Darwin") == "windowed"
+
+
+def test_non_macos_capture_command_preserves_headless_strategy() -> None:
+    command = _build_capture_command("/fake/esmini", "scenario.xosc", Path("/tmp/work"), platform_name="Linux")
+
+    assert "--headless" in command
+    assert "--capture_screen" in command
+    window_index = command.index("--window")
+    assert command[window_index + 1: window_index + 5] == ["0", "0", "960", "540"]
+    assert _capture_mode_for_platform("Linux") == "headless"
 
 
 def test_discovers_and_numerically_sorts_screen_shot_tga_frames(tmp_path) -> None:
@@ -261,12 +288,18 @@ def test_build_playback_media_ignores_preview_and_preserves_provenance(tmp_path)
     assert media["playback_frame_count"] == 2
     assert media["playback_is_animated"] is True
     assert media["playback_frame_duration_s"] == 0.05
-    assert media["playback_path"] == str(tmp_path / "playback_esmini.gif")
-    assert (tmp_path / "playback_esmini.gif").exists()
+    assert media["playback_path"] == str(tmp_path / "playback_esmini_aligned.gif")
+    assert (tmp_path / "playback_esmini_aligned.gif").exists()
+    assert (tmp_path / "playback_esmini_raw.gif").exists()
     assert (tmp_path / "frames" / "frame_000001.png").exists()
+    assert (tmp_path / "frames_aligned" / "frame_000001.png").exists()
     assert media["playback_frames"][0]["original_source_path"].endswith("screen_shot_00000.tga")
     assert media["playback_frames"][0]["normalized_frame_path"].endswith("frames/frame_000001.png")
+    assert media["playback_frames"][0]["presentation_frame_path"].endswith("frames_aligned/frame_000001.png")
     assert media["playback_frames"][0]["source_extension"] == ".tga"
+    assert media["raw_visual_orientation"] == "world_x_screen_left"
+    assert media["ui_visual_orientation"] == "world_x_screen_right"
+    assert media["presentation_transform"] == "horizontal_mirror"
     assert "preview_2d.png" not in {
         Path(frame["original_source_path"]).name for frame in media["playback_frames"]
     }
@@ -274,7 +307,7 @@ def test_build_playback_media_ignores_preview_and_preserves_provenance(tmp_path)
 
 def test_classifies_multiple_esmini_frames_as_sequence_when_gif_encoder_unavailable(monkeypatch, tmp_path) -> None:
     _write_image(tmp_path / "screen_shot_00000.tga")
-    _write_image(tmp_path / "screen_shot_00001.tga")
+    _write_image(tmp_path / "screen_shot_00001.tga", color=(0, 255, 0))
     monkeypatch.setattr(esmini_tool, "_encode_esmini_gif", lambda frames, gif_path, frame_duration_s: "encoder unavailable")
 
     media = _build_playback_media(tmp_path, frame_duration_s=0.05)
@@ -285,6 +318,34 @@ def test_classifies_multiple_esmini_frames_as_sequence_when_gif_encoder_unavaila
     assert media["playback_is_animated"] is False
     assert media["playback_path"] is None
     assert media["playback_fallback_reason"] == "encoder unavailable"
+    assert media["media_quality_status"] == "valid"
+
+
+def test_classifies_all_black_representative_frames_as_corrupt(monkeypatch, tmp_path) -> None:
+    _write_image(tmp_path / "screen_shot_00000.tga", color=(0, 0, 0))
+    _write_image(tmp_path / "screen_shot_00001.tga", color=(0, 0, 0))
+    monkeypatch.setattr(esmini_tool, "_encode_esmini_gif", lambda frames, gif_path, frame_duration_s: "encoder unavailable")
+
+    media = _build_playback_media(tmp_path, frame_duration_s=0.05)
+
+    assert media["playback_kind"] == "unavailable"
+    assert media["playback_generated"] is False
+    assert media["media_quality_status"] == "corrupt"
+    assert "near-black" in (media["media_quality_reason"] or "")
+
+
+def test_quality_gate_accepts_valid_representative_frames(tmp_path) -> None:
+    first = tmp_path / "frame_000001.png"
+    middle = tmp_path / "frame_000002.png"
+    final = tmp_path / "frame_000003.png"
+    _write_image(first, color=(255, 0, 0))
+    _write_image(middle, color=(0, 255, 0))
+    _write_image(final, color=(0, 0, 255))
+
+    status, reason = _classify_media_quality([first, middle, final])
+
+    assert status == "valid"
+    assert reason is None
 
 
 def test_classifies_one_esmini_frame_as_single_frame(tmp_path) -> None:
@@ -296,7 +357,10 @@ def test_classifies_one_esmini_frame_as_single_frame(tmp_path) -> None:
     assert media["playback_generated"] is True
     assert media["playback_frame_count"] == 1
     assert media["playback_is_animated"] is False
-    assert media["playback_path"] == str(tmp_path / "frames" / "frame_000001.png")
+    assert media["playback_path"] == str(tmp_path / "frames_aligned" / "frame_000001.png")
+    assert media["playback_frames"][0]["normalized_frame_path"].endswith("frames/frame_000001.png")
+    assert media["playback_frames"][0]["presentation_frame_path"].endswith("frames_aligned/frame_000001.png")
+    assert media["presentation_transform"] == "horizontal_mirror"
 
 
 def test_preview_fallback_is_explicit_and_never_esmini_gif(monkeypatch, tmp_path) -> None:
@@ -317,12 +381,13 @@ def test_preview_fallback_is_explicit_and_never_esmini_gif(monkeypatch, tmp_path
 
     result = run_esmini_playback(xosc_path, tmp_path, timeout_s=30, sim_duration_s=3, try_video=True)
 
-    assert result.playback_generated is True
-    assert result.playback_kind == "preview_static_image"
-    assert result.playback_path == str(tmp_path / "preview_2d.png")
-    assert result.playback_frame_count == 1
+    assert result.playback_generated is False
+    assert result.playback_kind == "unavailable"
+    assert result.playback_path is None
+    assert result.playback_frame_count == 0
     assert result.playback_is_animated is False
     assert result.playback_fallback_reason
+    assert result.media_quality_status == "corrupt"
     assert result.playback_kind != "esmini_gif"
 
 
