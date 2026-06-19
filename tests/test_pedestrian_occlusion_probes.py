@@ -66,8 +66,11 @@ def test_pedestrian_shifted_outside_sidewalk_fails_sidewalk_probe() -> None:
 
 
 def test_path_moved_through_van_footprint_fails_clearance_probe() -> None:
-    spec = _with_pose("pedestrian", Pose2D(20.0, 4.6, 0.0))
-    spec = _with_crossing_path(spec, (Point2D(20.0, 4.6), Point2D(20.0, -1.0)))
+    canonical = _canonical_spec()
+    assert canonical.layout is not None
+    van_x = canonical.layout.actor_poses["parked_van"].x_m
+    spec = _with_pose("pedestrian", Pose2D(van_x, 4.6, 0.0))
+    spec = _with_crossing_path(spec, (Point2D(van_x, 4.6), Point2D(van_x, -1.0)))
 
     result = _probe_result(spec, "pedestrian_path_clear_of_occluder")
 
@@ -119,14 +122,17 @@ def test_conflict_point_off_path_fails_conflict_probe() -> None:
 
 
 def test_trigger_after_conflict_fails_trigger_probe() -> None:
-    spec = _with_point("trigger_point", Point2D(30.0, 0.0))
+    canonical = _canonical_spec()
+    assert canonical.layout is not None
+    conflict_x = canonical.layout.points["conflict_point"].x_m
+    spec = _with_point("trigger_point", Point2D(conflict_x + 5.0, 0.0))
 
     result = _probe_result(spec, "trigger_point_before_conflict_and_in_ego_lane")
 
     assert result.passed is False
     assert result.severity == "failure"
-    assert result.measured["trigger_x_m"] == 30.0
-    assert result.measured["conflict_x_m"] == 25.0
+    assert result.measured["trigger_x_m"] == conflict_x + 5.0
+    assert result.measured["conflict_x_m"] == conflict_x
     assert result.measured["longitudinal_gap_m"] == -5.0
     assert result.measured["trigger_inside_ego_lane"] is True
     assert result.suggested_operations[0]["point_id"] == "trigger_point"

@@ -137,11 +137,11 @@ def test_preview_uses_layout_backed_geometry_helpers() -> None:
     spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
     assert spec.layout is not None
 
-    assert _layout_pose(spec.layout, "parked_van").x_m == 20.0
+    assert _layout_pose(spec.layout, "parked_van").x_m == spec.layout.actor_poses["parked_van"].x_m
     assert _layout_pose(spec.layout, "parked_van").y_m == 3.25
     assert _layout_footprint(spec.layout, "parked_van").length_m == 5.3
     assert _layout_path(spec.layout, "pedestrian_crossing_path").points[0].y_m == 4.60
-    assert _layout_point(spec.layout, "trigger_point").x_m == 7.0
+    assert _layout_point(spec.layout, "trigger_point").x_m < _layout_point(spec.layout, "conflict_point").x_m
     xlim, ylim = _layout_plot_limits(spec.layout)
     assert xlim[0] < 0.0 < xlim[1]
     assert ylim[0] < -7.50 < 6.50 < ylim[1]

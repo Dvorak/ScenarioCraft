@@ -28,6 +28,10 @@ def test_report_includes_missing_tool_warnings(tmp_path: Path) -> None:
     assert "ASAM OpenSCENARIO XML checker was not found" in report
     assert "esmini was not found" in report
     assert "rainy_pedestrian_occlusion" in report
+    assert "## Timing Harness" in report
+    assert "Preferred trigger window: `1.5` s to `3` s" in report
+    assert "Predicted trigger time: `3` s" in report
+    assert "Timing classification: `preferred`" in report
     assert "Template-Aware Probes" not in report
 
 

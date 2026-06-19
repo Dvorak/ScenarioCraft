@@ -13,6 +13,7 @@ from scenariocraft.schemas import (
     RoadBandSpec,
     RoadSpec,
     ScenarioSpec,
+    ScenarioTimingSpec,
     SpatialRelationSpec,
     TriggerSpec,
     WeatherSpec,
@@ -37,6 +38,7 @@ def test_scenario_spec_round_trip_json() -> None:
     assert json.loads(spec.to_json())["scenario_name"] == "rainy_pedestrian_occlusion"
     assert loaded.layout is None
     assert loaded.spatial_relations == ()
+    assert loaded.timing is None
 
 
 def test_scenario_spec_loads_legacy_json_without_layout_or_spatial_relations() -> None:
@@ -54,6 +56,7 @@ def test_scenario_spec_loads_legacy_json_without_layout_or_spatial_relations() -
 
     assert spec.layout is None
     assert spec.spatial_relations == ()
+    assert spec.timing is None
 
 
 def test_scenario_spec_round_trips_layout_and_spatial_relations() -> None:
@@ -120,6 +123,49 @@ def test_scenario_spec_round_trips_layout_and_spatial_relations() -> None:
         RoadBandSpec("ego_side_parking_strip", "parking_strip", 1.75, 4.25),
     )
     assert loaded.spatial_relations[0].metadata == {"phase": "before_emergence"}
+
+
+def test_scenario_spec_round_trips_timing_policy() -> None:
+    spec = ScenarioSpec(
+        scenario_name="timing_demo",
+        scenario_type="pedestrian_occlusion",
+        road=RoadSpec("urban_straight", 1, 50),
+        weather=WeatherSpec(True, "wet"),
+        actors=[ActorSpec("ego", "car", "ego", initial_speed_kph=35)],
+        trigger=TriggerSpec("relative_distance", "ego", "ego", 18),
+        intended_criticality=CriticalitySpec("near_miss", 1.5),
+        timing=ScenarioTimingSpec(
+            total_duration_s=10.0,
+            preferred_trigger_earliest_s=2.0,
+            preferred_trigger_latest_s=4.0,
+            minimum_pre_trigger_context_s=0.75,
+            minimum_post_trigger_buffer_s=1.0,
+        ),
+    )
+
+    loaded = ScenarioSpec.from_json(spec.to_json())
+
+    assert loaded.timing == spec.timing
+    assert loaded.to_dict()["timing"] == {
+        "total_duration_s": 10.0,
+        "preferred_trigger_earliest_s": 2.0,
+        "preferred_trigger_latest_s": 4.0,
+        "minimum_pre_trigger_context_s": 0.75,
+        "minimum_post_trigger_buffer_s": 1.0,
+    }
+
+
+def test_scenario_timing_rejects_invalid_values() -> None:
+    with pytest.raises(ScenarioSpecError):
+        ScenarioTimingSpec(total_duration_s=0.0)
+    with pytest.raises(ScenarioSpecError):
+        ScenarioTimingSpec(preferred_trigger_earliest_s=-0.1)
+    with pytest.raises(ScenarioSpecError):
+        ScenarioTimingSpec(preferred_trigger_earliest_s=3.0, preferred_trigger_latest_s=2.0)
+    with pytest.raises(ScenarioSpecError):
+        ScenarioTimingSpec(total_duration_s=3.0, preferred_trigger_latest_s=3.0)
+    with pytest.raises(ScenarioSpecError):
+        ScenarioTimingSpec(total_duration_s=float("nan"))
 
 
 def test_layout_without_actor_footprints_remains_valid() -> None:

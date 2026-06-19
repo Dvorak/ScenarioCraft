@@ -1,6 +1,8 @@
 from pathlib import Path
 import subprocess
 from dataclasses import replace
+import json
+from xml.etree import ElementTree as ET
 
 from scenariocraft.generators import MockScenarioGenerator
 from scenariocraft.main import main
@@ -52,6 +54,76 @@ def test_cli_layout_free_spec_succeeds_without_template_aware_probes(monkeypatch
     assert (output_dir / "scenario.xosc").exists()
     report = (output_dir / "validation_report.md").read_text(encoding="utf-8")
     assert "## Template-Aware Probes" not in report
+
+
+def test_cli_duration_and_trigger_window_overrides_propagate(monkeypatch, tmp_path: Path) -> None:
+    input_path = tmp_path / "input.txt"
+    output_dir = tmp_path / "out"
+    input_path.write_text("rainy pedestrian occlusion", encoding="utf-8")
+    monkeypatch.setenv("ESMINI_BIN", str(tmp_path / "missing-esmini"))
+    monkeypatch.setattr("shutil.which", lambda _binary: None)
+
+    exit_code = main([
+        "--input",
+        str(input_path),
+        "--out",
+        str(output_dir),
+        "--provider",
+        "mock",
+        "--duration-s",
+        "10",
+        "--trigger-window-earliest-s",
+        "2",
+        "--trigger-window-latest-s",
+        "4",
+    ])
+
+    spec = json.loads((output_dir / "scenario_spec.json").read_text(encoding="utf-8"))
+    root = ET.parse(output_dir / "scenario.xosc").getroot()
+    stop_condition = root.find(".//Storyboard/StopTrigger//SimulationTimeCondition")
+    time_condition = root.find(
+        ".//Event[@name='pedestrian_starts_crossing']/StartTrigger"
+        "//Condition[@name='relative_distance_time_alignment']/ByValueCondition/SimulationTimeCondition"
+    )
+
+    assert exit_code == 0
+    assert spec["timing"]["total_duration_s"] == 10.0
+    assert spec["timing"]["preferred_trigger_earliest_s"] == 2.0
+    assert spec["timing"]["preferred_trigger_latest_s"] == 4.0
+    assert stop_condition is not None
+    assert float(stop_condition.attrib["value"]) == 10.0
+    assert time_condition is not None
+    assert float(time_condition.attrib["value"]) == 4.0
+    report = (output_dir / "validation_report.md").read_text(encoding="utf-8")
+    assert "## Timing Harness" in report
+    assert "Preferred trigger window: `2` s to `4` s" in report
+
+
+def test_cli_rejects_invalid_trigger_window(monkeypatch, tmp_path: Path) -> None:
+    input_path = tmp_path / "input.txt"
+    output_dir = tmp_path / "out"
+    input_path.write_text("rainy pedestrian occlusion", encoding="utf-8")
+    monkeypatch.setenv("ESMINI_BIN", str(tmp_path / "missing-esmini"))
+    monkeypatch.setattr("shutil.which", lambda _binary: None)
+
+    exit_code = main([
+        "--input",
+        str(input_path),
+        "--out",
+        str(output_dir),
+        "--provider",
+        "mock",
+        "--duration-s",
+        "3",
+        "--trigger-window-earliest-s",
+        "2",
+        "--trigger-window-latest-s",
+        "3",
+    ])
+
+    assert exit_code == 2
+    assert (output_dir / "generation_error.txt").exists()
+    assert not (output_dir / "scenario_spec.json").exists()
 
 
 def test_cli_require_esmini_returns_nonzero_when_missing(monkeypatch, tmp_path: Path) -> None:

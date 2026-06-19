@@ -1,3 +1,7 @@
+from dataclasses import replace
+
+import pytest
+
 from scenariocraft.generators import MockScenarioGenerator
 from scenariocraft.roads import URBAN_TWO_WAY_PARKING_FILENAME
 from scenariocraft.schemas import Point2D
@@ -9,7 +13,17 @@ from scenariocraft.templates.pedestrian_occlusion import (
     _segment_intersects_rect,
     _vertical_segment_intersects_rect,
     _vertical_segment_rect_clearance,
+    assess_pedestrian_occlusion_timing,
+    estimate_trigger_time_s,
 )
+
+
+DEFAULT_EGO_SPEED_MPS = 35.0 / 3.6
+DEFAULT_TRIGGER_DISTANCE_M = 18.0
+DEFAULT_NOMINAL_TRIGGER_TIME_S = 3.0
+DEFAULT_VAN_X_M = DEFAULT_EGO_SPEED_MPS * DEFAULT_NOMINAL_TRIGGER_TIME_S + DEFAULT_TRIGGER_DISTANCE_M
+DEFAULT_CONFLICT_X_M = DEFAULT_VAN_X_M + 5.0
+DEFAULT_TRIGGER_X_M = DEFAULT_VAN_X_M - DEFAULT_TRIGGER_DISTANCE_M
 
 
 def test_registry_contains_pedestrian_occlusion_template() -> None:
@@ -43,17 +57,116 @@ def test_pedestrian_occlusion_template_emits_layout() -> None:
     assert spec.layout.coordinate_frame == "ego_local"
     assert spec.layout.actor_poses["ego"].x_m == 0.0
     assert spec.layout.actor_poses["ego"].y_m == 0.0
-    assert spec.layout.actor_poses["parked_van"].x_m == 20.0
+    assert spec.layout.actor_poses["parked_van"].x_m == pytest.approx(DEFAULT_VAN_X_M)
     assert spec.layout.actor_poses["parked_van"].y_m == 3.25
-    assert spec.layout.actor_poses["pedestrian"].x_m == 25.0
+    assert spec.layout.actor_poses["pedestrian"].x_m == pytest.approx(DEFAULT_CONFLICT_X_M)
     assert spec.layout.actor_poses["pedestrian"].y_m == 4.60
     assert spec.layout.actor_footprints["ego"].length_m == 4.6
     assert spec.layout.actor_footprints["parked_van"].length_m == 5.3
     assert spec.layout.actor_footprints["pedestrian"].width_m == 0.6
-    assert spec.layout.paths["pedestrian_crossing_path"].points == (Point2D(25.0, 4.60), Point2D(25.0, -1.00))
-    assert spec.layout.points["conflict_point"] == Point2D(25.0, 0.0)
-    assert spec.layout.points["trigger_point"] == Point2D(7.0, 0.0)
+    crossing_path = spec.layout.paths["pedestrian_crossing_path"]
+    assert crossing_path.points[0].x_m == pytest.approx(DEFAULT_CONFLICT_X_M)
+    assert crossing_path.points[0].y_m == 4.60
+    assert crossing_path.points[-1].x_m == pytest.approx(DEFAULT_CONFLICT_X_M)
+    assert crossing_path.points[-1].y_m == -1.00
+    assert spec.layout.points["conflict_point"].x_m == pytest.approx(DEFAULT_CONFLICT_X_M)
+    assert spec.layout.points["conflict_point"].y_m == 0.0
+    assert spec.layout.points["trigger_point"].x_m == pytest.approx(DEFAULT_TRIGGER_X_M)
+    assert spec.layout.points["trigger_point"].y_m == 0.0
     assert spec.spatial_relations
+
+
+def test_pedestrian_occlusion_template_emits_default_timing_policy() -> None:
+    spec = get_template("pedestrian_occlusion").instantiate(source_text="rainy pedestrian occlusion")
+
+    assert spec.timing is not None
+    assert spec.timing.total_duration_s == 8.0
+    assert spec.timing.preferred_trigger_earliest_s == 1.5
+    assert spec.timing.preferred_trigger_latest_s == 3.0
+    assert spec.timing.minimum_pre_trigger_context_s == 0.5
+    assert spec.timing.minimum_post_trigger_buffer_s == 0.5
+
+
+def test_pedestrian_occlusion_template_window_changes_nominal_longitudinal_geometry_only() -> None:
+    default_spec = get_template("pedestrian_occlusion").instantiate(source_text="rainy pedestrian occlusion")
+    changed_spec = get_template("pedestrian_occlusion").instantiate(
+        source_text="rainy pedestrian occlusion",
+        total_duration_s=10.0,
+        preferred_trigger_earliest_s=2.0,
+        preferred_trigger_latest_s=4.0,
+    )
+    assert default_spec.layout is not None
+    assert changed_spec.layout is not None
+
+    expected_van_x = DEFAULT_EGO_SPEED_MPS * 4.0 + DEFAULT_TRIGGER_DISTANCE_M
+    expected_conflict_x = expected_van_x + 5.0
+    assert changed_spec.layout.actor_poses["parked_van"].x_m == pytest.approx(expected_van_x)
+    assert changed_spec.layout.actor_poses["pedestrian"].x_m == pytest.approx(expected_conflict_x)
+    assert changed_spec.layout.points["conflict_point"].x_m == pytest.approx(expected_conflict_x)
+    assert changed_spec.layout.actor_poses["parked_van"].y_m == default_spec.layout.actor_poses["parked_van"].y_m
+    assert changed_spec.layout.actor_poses["pedestrian"].y_m == default_spec.layout.actor_poses["pedestrian"].y_m
+    assert changed_spec.layout.road_bands == default_spec.layout.road_bands
+
+
+def test_pedestrian_occlusion_timing_assessment_classifies_default_as_preferred() -> None:
+    spec = get_template("pedestrian_occlusion").instantiate(source_text="rainy pedestrian occlusion")
+
+    assessment = assess_pedestrian_occlusion_timing(spec)
+
+    assert assessment is not None
+    assert estimate_trigger_time_s(spec) == pytest.approx(DEFAULT_NOMINAL_TRIGGER_TIME_S)
+    assert assessment.predicted_trigger_time_s == pytest.approx(DEFAULT_NOMINAL_TRIGGER_TIME_S)
+    assert assessment.pedestrian_crossing_duration_s == pytest.approx(5.6 / 1.5)
+    assert assessment.hard_latest_trigger_s == pytest.approx(8.0 - (5.6 / 1.5) - 0.5)
+    assert assessment.classification == "preferred"
+
+
+def test_pedestrian_occlusion_timing_assessment_classifies_mutations() -> None:
+    preferred_spec = get_template("pedestrian_occlusion").instantiate(source_text="rainy pedestrian occlusion")
+    assert preferred_spec.layout is not None
+
+    too_early_layout = replace(
+        preferred_spec.layout,
+        actor_poses={
+            **preferred_spec.layout.actor_poses,
+            "parked_van": replace(preferred_spec.layout.actor_poses["parked_van"], x_m=20.0),
+        },
+    )
+    too_early = assess_pedestrian_occlusion_timing(replace(preferred_spec, layout=too_early_layout))
+    assert too_early is not None
+    assert too_early.classification == "too_early"
+
+    acceptable_base = get_template("pedestrian_occlusion").instantiate(
+        source_text="rainy pedestrian occlusion",
+        preferred_trigger_earliest_s=1.5,
+        preferred_trigger_latest_s=2.0,
+    )
+    assert acceptable_base.layout is not None
+    acceptable_layout = replace(
+        acceptable_base.layout,
+        actor_poses={
+            **acceptable_base.layout.actor_poses,
+            "parked_van": replace(
+                acceptable_base.layout.actor_poses["parked_van"],
+                x_m=DEFAULT_EGO_SPEED_MPS * 2.5 + DEFAULT_TRIGGER_DISTANCE_M,
+            ),
+        },
+    )
+    acceptable = assess_pedestrian_occlusion_timing(replace(acceptable_base, layout=acceptable_layout))
+    assert acceptable is not None
+    assert acceptable.predicted_trigger_time_s == pytest.approx(2.5)
+    assert acceptable.classification == "acceptable"
+
+    too_late_layout = replace(
+        preferred_spec.layout,
+        actor_poses={
+            **preferred_spec.layout.actor_poses,
+            "parked_van": replace(preferred_spec.layout.actor_poses["parked_van"], x_m=70.0),
+        },
+    )
+    too_late = assess_pedestrian_occlusion_timing(replace(preferred_spec, layout=too_late_layout))
+    assert too_late is not None
+    assert too_late.classification == "too_late"
 
 
 def test_pedestrian_occlusion_template_emits_canonical_road_bands() -> None:
@@ -98,8 +211,10 @@ def test_pedestrian_occlusion_template_emits_spatial_semantics() -> None:
     assert ("ahead_of", "conflict_point", "ego") in relations
     assert ("trigger_before_conflict", "trigger_point", "conflict_point") in relations
     crossing_path = spec.layout.paths["pedestrian_crossing_path"]
-    assert crossing_path.points[0] == Point2D(25.0, 4.60)
-    assert crossing_path.points[-1] == Point2D(25.0, -1.00)
+    assert crossing_path.points[0].x_m == pytest.approx(DEFAULT_CONFLICT_X_M)
+    assert crossing_path.points[0].y_m == 4.60
+    assert crossing_path.points[-1].x_m == pytest.approx(DEFAULT_CONFLICT_X_M)
+    assert crossing_path.points[-1].y_m == -1.00
     assert spec.layout.actor_poses["pedestrian"].x_m == crossing_path.points[0].x_m
     assert spec.layout.actor_poses["pedestrian"].y_m == crossing_path.points[0].y_m
     assert spec.layout.points["trigger_point"].x_m < spec.layout.points["conflict_point"].x_m
