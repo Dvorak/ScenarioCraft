@@ -187,6 +187,18 @@ def _esmini_media_summary(result: EsminiPlaybackResult | None) -> str:
     lines = [
         f"- Label: `{label}`",
         f"- Playback kind: `{result.playback_kind}`",
+        f"- Capture mode: `{result.capture_mode}`",
+        f"- Platform strategy: `{result.capture_platform_strategy}`",
+        f"- Capture window policy: `{result.capture_window_policy}`",
+        f"- Capture window: `{result.capture_window_x}, {result.capture_window_y}, {result.capture_window_width}, {result.capture_window_height}`",
+        f"- Capture attempts: `{len(result.capture_attempts)}`",
+        f"- Media quality status: `{result.media_quality_status}`",
+        f"- Media quality reason: `{result.media_quality_reason}`",
+        f"- Raw visual orientation: `{result.raw_visual_orientation}`",
+        f"- UI visual orientation: `{result.ui_visual_orientation}`",
+        f"- Presentation transform: `{result.presentation_transform}`",
+        f"- Presentation transform reason: `{result.presentation_transform_reason}`",
+        f"- Visual media safe to display: `{_visual_media_safe_to_display(result)}`",
         f"- Frame count: `{result.playback_frame_count}`",
         f"- Animated: `{result.playback_is_animated}`",
         f"- Frame duration seconds: `{result.playback_frame_duration_s}`",
@@ -200,9 +212,25 @@ def _esmini_media_summary(result: EsminiPlaybackResult | None) -> str:
             f"`{first.get('original_source_path')}` -> `{first.get('normalized_frame_path')}` "
             f"(index `{first.get('frame_index')}`, ext `{first.get('source_extension')}`)"
         )
+        if first.get("presentation_frame_path"):
+            lines.append(f"- First presentation frame: `{first.get('presentation_frame_path')}`")
+    for index, attempt in enumerate(result.capture_attempts, start=1):
+        lines.append(
+            f"- Capture attempt {index}: "
+            f"policy `{attempt.get('capture_window_policy')}`, "
+            f"quality `{attempt.get('media_quality_status')}`, "
+            f"frames `{attempt.get('playback_frame_count')}`"
+        )
     if result.playback_fallback_reason:
         lines.append(f"- Fallback reason: {result.playback_fallback_reason}")
     return "\n".join(lines)
+
+
+def _visual_media_safe_to_display(result: EsminiPlaybackResult) -> bool:
+    return (
+        result.media_quality_status in {"valid", "suspicious"}
+        and result.playback_kind in {"esmini_gif", "esmini_frame_sequence", "esmini_single_frame"}
+    )
 
 
 def _playback_label(playback_kind: str) -> str:

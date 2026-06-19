@@ -113,6 +113,10 @@ def test_report_includes_playback_provenance_labels(tmp_path: Path) -> None:
         ],
         timeout_s=30,
         sim_duration_s=3,
+        capture_mode="windowed",
+        capture_platform_strategy="macos_windowed_capture",
+        media_quality_status="valid",
+        media_quality_reason=None,
     )
 
     report_path = generate_validation_report(
@@ -131,5 +135,9 @@ def test_report_includes_playback_provenance_labels(tmp_path: Path) -> None:
     assert "## esmini Media" in report
     assert "esmini Rendered GIF" in report
     assert "Playback kind: `esmini_gif`" in report
+    assert "Capture mode: `windowed`" in report
+    assert "Platform strategy: `macos_windowed_capture`" in report
+    assert "Media quality status: `valid`" in report
+    assert "Visual media safe to display: `True`" in report
     assert "Frame count: `3`" in report
     assert "screen_shot_00000.tga" in report
