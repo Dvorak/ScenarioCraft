@@ -5,7 +5,7 @@ from xml.etree import ElementTree as ET
 from scenariocraft.generators import MockScenarioGenerator
 from scenariocraft.roads import URBAN_TWO_WAY_PARKING_FILENAME
 from scenariocraft.schemas import PathSpec, Point2D, Pose2D, TriggerSpec
-from scenariocraft.tools import FallbackXmlScenarioBuilder, build_openscenario
+from scenariocraft.tools import FallbackXmlScenarioBuilder, ScenariogenerationBuilder, build_openscenario
 
 
 DEFAULT_EGO_SPEED_MPS = 35.0 / 3.6
@@ -206,6 +206,56 @@ def test_canonical_pedestrian_event_start_trigger_references_expected_actors_and
     )
     assert time_condition is not None
     assert float(time_condition.attrib["value"]) == DEFAULT_TRIGGER_TIME_S
+
+
+def test_canonical_pedestrian_start_trigger_uses_separate_or_condition_groups(tmp_path) -> None:
+    spec = MockScenarioGenerator().generate_spec("scenario")
+
+    result = build_openscenario(spec, tmp_path)
+    root = ET.parse(result.xosc_path).getroot()
+    start_trigger = root.find(".//Event[@name='pedestrian_starts_crossing']/StartTrigger")
+    assert start_trigger is not None
+    condition_groups = start_trigger.findall("./ConditionGroup")
+
+    assert len(condition_groups) == 2
+    assert condition_groups[0].find(".//RelativeDistanceCondition") is not None
+    assert condition_groups[0].find(".//SimulationTimeCondition") is None
+    assert condition_groups[1].find(".//RelativeDistanceCondition") is None
+    assert condition_groups[1].find(".//SimulationTimeCondition") is not None
+
+
+def test_physical_trigger_diagnostic_variant_omits_timing_alignment_condition(tmp_path) -> None:
+    spec = MockScenarioGenerator().generate_spec("scenario")
+
+    result = build_openscenario(
+        spec,
+        tmp_path,
+        builder=ScenariogenerationBuilder(include_timing_alignment_trigger=False),
+    )
+    root = ET.parse(result.xosc_path).getroot()
+    start_trigger = root.find(".//Event[@name='pedestrian_starts_crossing']/StartTrigger")
+    assert start_trigger is not None
+    condition_groups = start_trigger.findall("./ConditionGroup")
+
+    assert len(condition_groups) == 1
+    assert condition_groups[0].find(".//RelativeDistanceCondition") is not None
+    assert start_trigger.find(".//Condition[@name='relative_distance_time_alignment']") is None
+
+
+def test_expected_physical_relative_distance_crossing_time_uses_actual_geometry(tmp_path) -> None:
+    spec = MockScenarioGenerator().generate_spec("scenario")
+    assert spec.layout is not None
+    ego = spec.actor_by_id(spec.trigger.source)
+    assert ego is not None and ego.initial_speed_kph is not None
+
+    result = build_openscenario(spec, tmp_path)
+    poses = _world_positions_by_entity(result.xosc_path)
+    initial_longitudinal_distance_m = poses[spec.trigger.target][0] - poses[spec.trigger.source][0]
+    ego_speed_mps = ego.initial_speed_kph / 3.6
+    predicted_crossing_time_s = (initial_longitudinal_distance_m - spec.trigger.distance_m) / ego_speed_mps
+
+    assert initial_longitudinal_distance_m == DEFAULT_VAN_X_M
+    assert predicted_crossing_time_s == DEFAULT_TRIGGER_TIME_S
 
 
 def test_canonical_pedestrian_event_start_condition_is_reachable_before_stop(tmp_path) -> None:

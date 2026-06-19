@@ -36,8 +36,16 @@ class ScenarioBuilder(ABC):
 class ScenariogenerationBuilder(ScenarioBuilder):
     """Default builder backed by pyoscx/scenariogeneration."""
 
-    def __init__(self, fallback_builder: ScenarioBuilder | None = None) -> None:
-        self._fallback_builder = fallback_builder or FallbackXmlScenarioBuilder()
+    def __init__(
+        self,
+        fallback_builder: ScenarioBuilder | None = None,
+        *,
+        include_timing_alignment_trigger: bool = True,
+    ) -> None:
+        self._include_timing_alignment_trigger = include_timing_alignment_trigger
+        self._fallback_builder = fallback_builder or FallbackXmlScenarioBuilder(
+            include_timing_alignment_trigger=include_timing_alignment_trigger
+        )
 
     def build(self, spec: ScenarioSpec, output_dir: Path) -> BuildResult:
         try:
@@ -92,7 +100,13 @@ class ScenariogenerationBuilder(ScenarioBuilder):
                 "pedestrian_speed_action",
                 _xosc_speed_action(_pedestrian_traversal_speed_mps(pedestrian), xosc),
             )
-        event.add_trigger(_xosc_pedestrian_start_trigger(spec, xosc))
+        event.add_trigger(
+            _xosc_pedestrian_start_trigger(
+                spec,
+                xosc,
+                include_timing_alignment_trigger=self._include_timing_alignment_trigger,
+            )
+        )
         maneuver = xosc.Maneuver("crossing_maneuver")
         maneuver.add_event(event)
         maneuver_group = xosc.ManeuverGroup("pedestrian_crossing", maxexecution=1, selecttriggeringentities=False)
@@ -130,11 +144,18 @@ class ScenariogenerationBuilder(ScenarioBuilder):
 class FallbackXmlScenarioBuilder(ScenarioBuilder):
     """Small deterministic XML fallback kept for inspectability and testability."""
 
+    def __init__(self, *, include_timing_alignment_trigger: bool = True) -> None:
+        self._include_timing_alignment_trigger = include_timing_alignment_trigger
+
     def build(self, spec: ScenarioSpec, output_dir: Path) -> BuildResult:
         output_dir.mkdir(parents=True, exist_ok=True)
         xosc_path = output_dir / "scenario.xosc"
         xodr_path = _materialize_canonical_road_if_needed(spec, output_dir)
-        root = _build_xml_tree(spec, road_logic_file=URBAN_TWO_WAY_PARKING_FILENAME if xodr_path is not None else None)
+        root = _build_xml_tree(
+            spec,
+            road_logic_file=URBAN_TWO_WAY_PARKING_FILENAME if xodr_path is not None else None,
+            include_timing_alignment_trigger=self._include_timing_alignment_trigger,
+        )
         rough = ET.tostring(root, encoding="utf-8")
         pretty = minidom.parseString(rough).toprettyxml(indent="  ")
         xosc_path.write_text(pretty, encoding="utf-8")
@@ -200,7 +221,12 @@ def _xosc_simulation_time_trigger(name: str, value_s: float, xosc: object) -> ob
     )
 
 
-def _xosc_pedestrian_start_trigger(spec: ScenarioSpec, xosc: object) -> object:
+def _xosc_pedestrian_start_trigger(
+    spec: ScenarioSpec,
+    xosc: object,
+    *,
+    include_timing_alignment_trigger: bool = True,
+) -> object:
     trigger = xosc.Trigger("start")
     relative_group = xosc.ConditionGroup("start")
     relative_group.add_condition(
@@ -221,7 +247,7 @@ def _xosc_pedestrian_start_trigger(spec: ScenarioSpec, xosc: object) -> object:
     )
     trigger.add_conditiongroup(relative_group)
     trigger_time_s = _derived_trigger_time_s(spec)
-    if trigger_time_s is not None:
+    if include_timing_alignment_trigger and trigger_time_s is not None:
         time_group = xosc.ConditionGroup("start")
         time_group.add_condition(_xosc_simulation_time_trigger("relative_distance_time_alignment", trigger_time_s, xosc))
         trigger.add_conditiongroup(time_group)
@@ -328,7 +354,12 @@ def _uses_canonical_urban_two_way_parking_road(spec: ScenarioSpec) -> bool:
     )
 
 
-def _build_xml_tree(spec: ScenarioSpec, road_logic_file: str | None = None) -> ET.Element:
+def _build_xml_tree(
+    spec: ScenarioSpec,
+    road_logic_file: str | None = None,
+    *,
+    include_timing_alignment_trigger: bool = True,
+) -> ET.Element:
     root = ET.Element("OpenSCENARIO")
     ET.SubElement(root, "FileHeader", {
         "description": spec.scenario_name,
@@ -365,7 +396,7 @@ def _build_xml_tree(spec: ScenarioSpec, road_logic_file: str | None = None) -> E
         _append_follow_trajectory_action(event, trajectory)
     else:
         _append_speed_action(event, _pedestrian_traversal_speed_mps(pedestrian))
-    _append_trigger(event, spec)
+    _append_trigger(event, spec, include_timing_alignment_trigger=include_timing_alignment_trigger)
     ET.SubElement(act, "StopTrigger")
     _append_stop_trigger(storyboard, spec)
     return root
@@ -474,7 +505,12 @@ def _append_follow_trajectory_action(
     ET.SubElement(follow_action, "TrajectoryFollowingMode", {"followingMode": "position"})
 
 
-def _append_trigger(parent: ET.Element, spec: ScenarioSpec) -> None:
+def _append_trigger(
+    parent: ET.Element,
+    spec: ScenarioSpec,
+    *,
+    include_timing_alignment_trigger: bool = True,
+) -> None:
     start_trigger = ET.SubElement(parent, "StartTrigger")
     relative_group = ET.SubElement(start_trigger, "ConditionGroup")
     condition = ET.SubElement(relative_group, "Condition", {
@@ -495,7 +531,7 @@ def _append_trigger(parent: ET.Element, spec: ScenarioSpec) -> None:
     })
     relative.text = ""
     trigger_time_s = _derived_trigger_time_s(spec)
-    if trigger_time_s is not None:
+    if include_timing_alignment_trigger and trigger_time_s is not None:
         time_group = ET.SubElement(start_trigger, "ConditionGroup")
         time_condition = ET.SubElement(time_group, "Condition", {
             "name": "relative_distance_time_alignment",
