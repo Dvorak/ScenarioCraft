@@ -8,6 +8,7 @@ from scenariocraft.tools import AsamQcResult, EsminiPlaybackResult, EsminiResult
 from scenariocraft.web.app import (
     PREVIEW_VISUAL_CAPTION,
     RUNTIME_VISUAL_CAPTION,
+    WEB_PREVIEW_DISPLAY_ORIENTATION,
     _frame_sequence_state,
     _playback_media_label,
     _recommended_reference_examples,
@@ -69,8 +70,9 @@ def test_playback_media_labels_are_provenance_aware() -> None:
 
 
 def test_visual_comparison_captions_state_orientation_contract() -> None:
-    assert PREVIEW_VISUAL_CAPTION == "ScenarioSpec layout · +x → right · +y → up"
-    assert RUNTIME_VISUAL_CAPTION == "OpenSCENARIO + OpenDRIVE runtime · +x → right · +y → up"
+    assert WEB_PREVIEW_DISPLAY_ORIENTATION == "esmini_top_camera_raw"
+    assert PREVIEW_VISUAL_CAPTION == "Renderer-aligned ScenarioSpec layout · world +x → left · world +y → down"
+    assert RUNTIME_VISUAL_CAPTION == "Raw OpenSCENARIO + OpenDRIVE runtime view · world +x → left · world +y → down"
 
 
 def test_frame_sequence_state_uses_normalized_esmini_frames_not_preview(tmp_path: Path) -> None:
@@ -123,7 +125,7 @@ def test_frame_sequence_state_uses_normalized_esmini_frames_not_preview(tmp_path
     assert _frame_sequence_state(result, tmp_path, selected_index=1)["estimated_fps"] == 20.0
 
 
-def test_frame_sequence_state_prefers_aligned_presentation_frames(tmp_path: Path) -> None:
+def test_frame_sequence_state_uses_raw_frames_even_when_stale_aligned_paths_exist(tmp_path: Path) -> None:
     raw_dir = tmp_path / "frames"
     aligned_dir = tmp_path / "frames_aligned"
     raw_dir.mkdir()
@@ -148,8 +150,8 @@ def test_frame_sequence_state_prefers_aligned_presentation_frames(tmp_path: Path
         ],
     )
 
-    assert _verified_esmini_frame_paths(result, tmp_path) == [aligned]
-    assert _frame_sequence_state(result, tmp_path, selected_index=0)["selected_frame_path"] == str(aligned)
+    assert _verified_esmini_frame_paths(result, tmp_path) == [raw]
+    assert _frame_sequence_state(result, tmp_path, selected_index=0)["selected_frame_path"] == str(raw)
 
 
 def test_corrupt_capture_is_not_displayed_as_normal_esmini_playback(tmp_path: Path) -> None:

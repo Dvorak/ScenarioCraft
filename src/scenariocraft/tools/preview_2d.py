@@ -16,9 +16,18 @@ from matplotlib.patches import FancyArrow, FancyArrowPatch, Rectangle
 
 from scenariocraft.schemas import FootprintSpec, LayoutSpec, PathSpec, Point2D, Pose2D, RoadBandSpec, ScenarioSpec
 
+PREVIEW_DISPLAY_ORIENTATIONS = {"semantic_canonical", "esmini_top_camera_raw"}
 
-def generate_2d_preview(spec: ScenarioSpec, out_path: Path) -> Path:
+
+def generate_2d_preview(
+    spec: ScenarioSpec,
+    out_path: Path,
+    *,
+    display_orientation: str = "semantic_canonical",
+) -> Path:
     """Generate a deterministic top-down preview image for the scenario."""
+    if display_orientation not in PREVIEW_DISPLAY_ORIENTATIONS:
+        raise ValueError(f"Unsupported preview display orientation: {display_orientation}")
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     fig, ax = plt.subplots(figsize=(8.8, 5.4), dpi=140)
@@ -33,18 +42,28 @@ def generate_2d_preview(spec: ScenarioSpec, out_path: Path) -> Path:
 
     if spec.layout is not None and spec.layout.road_bands:
         _draw_layout_background(ax)
-        _draw_layout_road_bands(ax, spec.layout)
+        show_band_labels = display_orientation == "semantic_canonical"
+        _draw_layout_road_bands(ax, spec.layout, show_labels=show_band_labels)
     else:
         _draw_background(ax)
         _draw_road(ax)
     _draw_actors(ax, spec)
     _draw_scenario_marks(ax, spec)
+    if spec.layout is not None and spec.layout.road_bands and display_orientation == "esmini_top_camera_raw":
+        _draw_road_context_legend(ax, spec.layout, display_orientation)
     _draw_legend(ax)
     _draw_title(ax, spec)
+    _apply_display_orientation(ax, display_orientation)
 
     fig.savefig(out_path, bbox_inches="tight", pad_inches=0.08)
     plt.close(fig)
     return out_path
+
+
+def _apply_display_orientation(ax: object, display_orientation: str) -> None:
+    if display_orientation == "esmini_top_camera_raw":
+        ax.invert_xaxis()
+        ax.invert_yaxis()
 
 
 def estimate_ttc_s(spec: ScenarioSpec) -> float | None:
@@ -79,7 +98,7 @@ def _draw_layout_background(ax: object) -> None:
     ax.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, facecolor="#e8f1e6", edgecolor="none"))
 
 
-def _draw_layout_road_bands(ax: object, layout: LayoutSpec) -> None:
+def _draw_layout_road_bands(ax: object, layout: LayoutSpec, *, show_labels: bool = True) -> None:
     x0, x1 = ax.get_xlim()
     sorted_bands = sorted(layout.road_bands, key=lambda band: band.y_min_m)
     for band in sorted_bands:
@@ -94,7 +113,16 @@ def _draw_layout_road_bands(ax: object, layout: LayoutSpec) -> None:
             )
         )
         ax.plot([x0, x1], [band.y_min_m, band.y_min_m], color="#eef2f7", linewidth=1.1, alpha=0.88, zorder=2)
-        ax.text(x0 + 1.3, (band.y_min_m + band.y_max_m) / 2, band.id.replace("_", " "), fontsize=7.4, color="#334155", va="center", zorder=3)
+        if show_labels:
+            ax.text(
+                x0 + 1.3,
+                (band.y_min_m + band.y_max_m) / 2,
+                band.id.replace("_", " "),
+                fontsize=7.4,
+                color="#334155",
+                va="center",
+                zorder=3,
+            )
         if band.kind == "driving_lane" and band.travel_direction is not None:
             _road_band_direction_arrow(ax, band)
     ax.plot([x0, x1], [sorted_bands[-1].y_max_m, sorted_bands[-1].y_max_m], color="#eef2f7", linewidth=1.1, alpha=0.88, zorder=2)
@@ -134,6 +162,46 @@ def _road_band_direction_arrow(ax: object, band: RoadBandSpec) -> None:
             zorder=3,
         )
     )
+
+
+def _road_context_items(layout: LayoutSpec, display_orientation: str) -> tuple[tuple[str, str], ...]:
+    return tuple(
+        (band.id.replace("_", " "), _road_band_color(band))
+        for band in _displayed_road_band_order(layout, display_orientation)
+    )
+
+
+def _displayed_road_band_order(layout: LayoutSpec, display_orientation: str) -> tuple[RoadBandSpec, ...]:
+    bands = tuple(sorted(layout.road_bands, key=lambda band: band.y_min_m))
+    if display_orientation == "semantic_canonical":
+        return tuple(reversed(bands))
+    return bands
+
+
+def _draw_road_context_legend(ax: object, layout: LayoutSpec, display_orientation: str) -> None:
+    items = _road_context_items(layout, display_orientation)
+    if not items:
+        return
+    ax.text(0.04, 0.145, "Road context", fontsize=7.8, color="#334155", weight="bold", va="center", transform=ax.transAxes)
+    for index, (label, color) in enumerate(items):
+        row = index // 3
+        col = index % 3
+        x = 0.18 + col * 0.26
+        y = 0.145 - row * 0.045
+        ax.add_patch(
+            Rectangle(
+                (x, y - 0.015),
+                0.014,
+                0.03,
+                facecolor=color,
+                edgecolor="#334155",
+                linewidth=0.35,
+                transform=ax.transAxes,
+                clip_on=False,
+                zorder=20,
+            )
+        )
+        ax.text(x + 0.019, y, label, fontsize=7.2, color="#334155", va="center", transform=ax.transAxes, zorder=20)
 
 
 def _draw_actors(ax: object, spec: ScenarioSpec) -> None:
@@ -290,35 +358,43 @@ def _layout_plot_limits(layout: LayoutSpec) -> tuple[tuple[float, float], tuple[
 
 
 def _draw_legend(ax: object) -> None:
-    x0, _ = ax.get_xlim()
-    y0, _ = ax.get_ylim()
-    legend_y = y0 + 1.3
     items = [
         ("#151515", "Ego vehicle"),
         ("#2563eb", "Parked van"),
         ("#f97316", "Pedestrian"),
         ("#7c3aed", "Trigger/conflict point"),
     ]
-    x = x0 + 3.0
+    x = 0.04
+    y = 0.06
     for color, label in items:
-        ax.add_patch(Rectangle((x, legend_y - 0.45), 1.1, 0.9, facecolor=color, edgecolor="#0f172a", linewidth=0.4))
-        ax.text(x + 1.55, legend_y, label, fontsize=8.8, color="#0f172a", va="center")
-        x += 15.2 if label != "Trigger/conflict point" else 18
+        ax.add_patch(
+            Rectangle(
+                (x, y - 0.018),
+                0.016,
+                0.04,
+                facecolor=color,
+                edgecolor="#0f172a",
+                linewidth=0.4,
+                transform=ax.transAxes,
+                clip_on=False,
+            )
+        )
+        ax.text(x + 0.022, y, label, fontsize=8.8, color="#0f172a", va="center", transform=ax.transAxes)
+        x += 0.19 if label != "Trigger/conflict point" else 0.23
 
 
 def _draw_title(ax: object, spec: ScenarioSpec) -> None:
     ttc = estimate_ttc_s(spec)
     ttc_label = "n/a" if ttc is None else f"{ttc:.1f} s"
-    x0, _ = ax.get_xlim()
-    _, y1 = ax.get_ylim()
     ax.text(
-        x0 + 3.0,
-        y1 - 1.0,
+        0.04,
+        0.96,
         f"{spec.scenario_name} | rain: {spec.weather.rain} | est. TTC: {ttc_label}",
         fontsize=10.5,
         color="#0f172a",
         weight="bold",
         va="center",
+        transform=ax.transAxes,
     )
 
 

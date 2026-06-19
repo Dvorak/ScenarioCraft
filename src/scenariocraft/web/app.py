@@ -53,8 +53,9 @@ RECOMMENDED_EXAMPLE_FILES = (
 )
 REFERENCE_CATEGORIES = ("stable_demo", "qc_fail", "esmini_long_running")
 CRITICALITY_MAX_TTC_S = 3.0
-PREVIEW_VISUAL_CAPTION = "ScenarioSpec layout · +x → right · +y → up"
-RUNTIME_VISUAL_CAPTION = "OpenSCENARIO + OpenDRIVE runtime · +x → right · +y → up"
+WEB_PREVIEW_DISPLAY_ORIENTATION = "esmini_top_camera_raw"
+PREVIEW_VISUAL_CAPTION = "Renderer-aligned ScenarioSpec layout · world +x → left · world +y → down"
+RUNTIME_VISUAL_CAPTION = "Raw OpenSCENARIO + OpenDRIVE runtime view · world +x → left · world +y → down"
 
 
 def main() -> None:
@@ -392,6 +393,7 @@ def _render_playback_details(playback_result: EsminiPlaybackResult) -> None:
         st.caption(f"Raw orientation: `{playback_result.raw_visual_orientation}`")
         st.caption(f"UI orientation: `{playback_result.ui_visual_orientation}`")
         st.caption(f"Presentation transform: `{playback_result.presentation_transform}`")
+        st.caption("2D preview orientation is aligned to the raw esmini top-camera view; simulation coordinates and runtime media are not transformed.")
         st.json(playback_result.to_dict())
 
 
@@ -438,7 +440,7 @@ def _frame_sequence_state(
 def _verified_esmini_frame_paths(playback_result: EsminiPlaybackResult, output_dir: Path) -> list[Path]:
     paths: list[Path] = []
     for frame in _verified_esmini_frame_entries(playback_result):
-        path = _resolve_media_path(frame.get("presentation_frame_path") or frame.get("normalized_frame_path"), output_dir)
+        path = _resolve_media_path(frame.get("normalized_frame_path"), output_dir)
         if path is not None and path.exists():
             paths.append(path)
     return paths
@@ -1321,7 +1323,11 @@ def _generate_preview(output_dir: Path) -> Path | None:
     if spec is None:
         return None
     try:
-        preview_path = generate_2d_preview(spec, output_dir / "preview_2d.png")
+        preview_path = generate_2d_preview(
+            spec,
+            output_dir / "preview_2d.png",
+            display_orientation=WEB_PREVIEW_DISPLAY_ORIENTATION,
+        )
     except Exception as exc:
         _error(f"2D preview generation failed: {exc}")
         return None
@@ -1335,7 +1341,7 @@ def _ensure_preview(output_dir: Path, spec: ScenarioSpec) -> Path | None:
     if preview_path.exists():
         return preview_path
     try:
-        preview_path = generate_2d_preview(spec, preview_path)
+        preview_path = generate_2d_preview(spec, preview_path, display_orientation=WEB_PREVIEW_DISPLAY_ORIENTATION)
     except Exception as exc:
         st.warning(f"2D preview generation failed: {exc}")
         return None
