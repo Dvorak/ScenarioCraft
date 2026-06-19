@@ -27,6 +27,18 @@ def test_canonical_pedestrian_occlusion_probes_all_pass() -> None:
     assert {result.severity for result in results} == {"note"}
 
 
+def test_layout_free_spec_returns_no_template_aware_probes() -> None:
+    spec = replace(_canonical_spec(), layout=None, spatial_relations=())
+
+    assert run_pedestrian_occlusion_probes(spec) == ()
+
+
+def test_unsupported_scenario_type_returns_no_template_aware_probes() -> None:
+    spec = replace(_canonical_spec(), scenario_type="cut_in")
+
+    assert run_pedestrian_occlusion_probes(spec) == ()
+
+
 def test_van_shifted_outside_parking_strip_fails_parking_probe() -> None:
     spec = _with_pose("parked_van", Pose2D(20.0, 0.0, 0.0))
 
@@ -36,6 +48,8 @@ def test_van_shifted_outside_parking_strip_fails_parking_probe() -> None:
     assert result.severity == "failure"
     assert result.measured["actor_id"] == "parked_van"
     assert result.measured["band_id"] == "ego_side_parking_strip"
+    assert "actor_y_min_m" in result.measured
+    assert "band_y_max_m" in result.measured
     assert result.suggested_operations[0]["op"] == "reposition_actor"
 
 
@@ -48,6 +62,7 @@ def test_pedestrian_shifted_outside_sidewalk_fails_sidewalk_probe() -> None:
     assert result.severity == "failure"
     assert result.measured["actor_id"] == "pedestrian"
     assert result.measured["band_id"] == "ego_side_sidewalk"
+    assert result.suggested_operations[0]["target_band_id"] == "ego_side_sidewalk"
 
 
 def test_path_moved_through_van_footprint_fails_clearance_probe() -> None:
@@ -60,6 +75,8 @@ def test_path_moved_through_van_footprint_fails_clearance_probe() -> None:
     assert result.severity == "failure"
     assert result.measured["path_intersects_van_footprint"] is True
     assert result.measured["minimum_clearance_m"] == 0.0
+    assert result.measured["required_clearance_m"] == 0.5
+    assert result.suggested_operations[0]["op"] == "reposition_path_or_actor"
 
 
 def test_path_that_misses_ego_lane_fails_crosses_ego_lane_probe() -> None:
@@ -71,6 +88,7 @@ def test_path_that_misses_ego_lane_fails_crosses_ego_lane_probe() -> None:
     assert result.severity == "failure"
     assert result.measured["path_y_min_m"] == 3.0
     assert result.measured["ego_lane_y_max_m"] == 1.75
+    assert result.suggested_operations[0]["target_band_id"] == "ego_driving_lane"
 
 
 def test_pedestrian_start_without_van_occlusion_fails_line_of_sight_probe() -> None:
@@ -83,6 +101,9 @@ def test_pedestrian_start_without_van_occlusion_fails_line_of_sight_probe() -> N
     assert result.severity == "failure"
     assert result.measured["line_of_sight_intersects_footprint"] is False
     assert result.measured["occluder_id"] == "parked_van"
+    assert "ego_position" in result.measured
+    assert "pedestrian_initial_position" in result.measured
+    assert result.suggested_operations[0]["op"] == "reposition_occluder_or_pedestrian"
 
 
 def test_conflict_point_off_path_fails_conflict_probe() -> None:
@@ -94,6 +115,7 @@ def test_conflict_point_off_path_fails_conflict_probe() -> None:
     assert result.severity == "failure"
     assert result.measured["point_on_path"] is False
     assert result.measured["point_to_path_distance_m"] > result.measured["path_tolerance_m"]
+    assert result.suggested_operations[0]["point_id"] == "conflict_point"
 
 
 def test_trigger_after_conflict_fails_trigger_probe() -> None:
@@ -106,6 +128,8 @@ def test_trigger_after_conflict_fails_trigger_probe() -> None:
     assert result.measured["trigger_x_m"] == 30.0
     assert result.measured["conflict_x_m"] == 25.0
     assert result.measured["longitudinal_gap_m"] == -5.0
+    assert result.measured["trigger_inside_ego_lane"] is True
+    assert result.suggested_operations[0]["point_id"] == "trigger_point"
 
 
 def test_path_start_mismatch_fails_start_probe() -> None:
@@ -116,6 +140,7 @@ def test_path_start_mismatch_fails_start_probe() -> None:
     assert result.passed is False
     assert result.severity == "failure"
     assert result.measured["position_error_m"] > result.measured["tolerance_m"]
+    assert result.suggested_operations[0]["op"] == "align_path_start_to_actor"
 
 
 def _canonical_spec():

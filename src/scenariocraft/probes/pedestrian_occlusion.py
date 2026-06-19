@@ -13,11 +13,11 @@ from scenariocraft.schemas import (
     RoadBandSpec,
     ScenarioSpec,
 )
-from scenariocraft.templates.pedestrian_occlusion import PedestrianOcclusionParameters
 
+# Tight tolerances for canonical template geometry expressed directly in ScenarioSpec.layout.
 POSITION_TOLERANCE_M = 1e-6
 PATH_TOLERANCE_M = 1e-6
-REQUIRED_PATH_CLEARANCE_M = PedestrianOcclusionParameters().minimum_path_clearance_m
+REQUIRED_PATH_CLEARANCE_M = 0.5
 
 
 class _PedestrianOcclusionProbe:
@@ -30,6 +30,8 @@ class _PedestrianOcclusionProbe:
 
 
 def run_pedestrian_occlusion_probes(spec: ScenarioSpec) -> tuple[ProbeResult, ...]:
+    if spec.scenario_type != "pedestrian_occlusion" or spec.layout is None:
+        return ()
     probes = (
         _PedestrianOcclusionProbe("ego_footprint_in_ego_lane", _ego_footprint_in_ego_lane),
         _PedestrianOcclusionProbe("parked_van_footprint_in_parking_strip", _parked_van_footprint_in_parking_strip),
@@ -100,6 +102,7 @@ def _pedestrian_path_starts_at_pedestrian_pose(spec: ScenarioSpec) -> ProbeResul
             "position_error_m": position_error_m,
             "tolerance_m": POSITION_TOLERANCE_M,
         },
+        suggested_operations=({"op": "align_path_start_to_actor", "path_id": "pedestrian_crossing_path", "actor_id": "pedestrian"},),
     )
 
 
@@ -121,6 +124,7 @@ def _pedestrian_path_crosses_ego_lane(spec: ScenarioSpec) -> ProbeResult:
             "ego_lane_y_min_m": lane.y_min_m,
             "ego_lane_y_max_m": lane.y_max_m,
         },
+        suggested_operations=({"op": "adjust_path_endpoint", "path_id": "pedestrian_crossing_path", "target_band_id": "ego_driving_lane"},),
     )
 
 
@@ -189,6 +193,7 @@ def _conflict_point_on_path_and_in_ego_lane(spec: ScenarioSpec) -> ProbeResult:
             "ego_lane_y_min_m": lane.y_min_m,
             "ego_lane_y_max_m": lane.y_max_m,
         },
+        suggested_operations=({"op": "move_point_to_path", "point_id": "conflict_point", "path_id": "pedestrian_crossing_path"},),
     )
 
 
@@ -211,6 +216,7 @@ def _trigger_point_before_conflict_and_in_ego_lane(spec: ScenarioSpec) -> ProbeR
             "longitudinal_gap_m": gap,
             "trigger_inside_ego_lane": inside_lane,
         },
+        suggested_operations=({"op": "move_point_before", "point_id": "trigger_point", "reference_point_id": "conflict_point", "target_band_id": "ego_driving_lane"},),
     )
 
 

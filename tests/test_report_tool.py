@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from scenariocraft.generators import MockScenarioGenerator
+from scenariocraft.probes import run_pedestrian_occlusion_probes
 from scenariocraft.schemas import ProbeResult
 from scenariocraft.tools import build_openscenario, generate_validation_report, validate_semantics
 from scenariocraft.tools.asam_qc_tool import AsamQcResult
@@ -65,6 +66,30 @@ def test_report_includes_optional_probe_results(tmp_path: Path) -> None:
     assert "Geometry probe placeholder result." in report
     assert '"clearance_m": 0.25' in report
     assert "future_patch_placeholder" in report
+
+
+def test_report_includes_canonical_pedestrian_occlusion_probe_results(tmp_path: Path) -> None:
+    spec = MockScenarioGenerator().generate_spec("scenario text")
+    build_result = build_openscenario(spec, tmp_path)
+    qc_result = AsamQcResult(False, ["asam-qc-openscenarioxml", "scenario.xosc"], None, "", "", None)
+    esmini_result = EsminiResult(False, ["esmini", "--osc", "scenario.xosc"], None, None, "", "", None, None, None)
+
+    report_path = generate_validation_report(
+        "scenario text",
+        spec,
+        build_result,
+        qc_result,
+        esmini_result,
+        validate_semantics(spec),
+        tmp_path,
+        probe_results=run_pedestrian_occlusion_probes(spec),
+    )
+
+    report = report_path.read_text(encoding="utf-8")
+    assert "## Template-Aware Probes" in report
+    assert "`ego_footprint_in_ego_lane`" in report
+    assert "`pedestrian_line_of_sight_occluded_by_van`" in report
+    assert '"actor_id": "ego"' in report
 
 
 def test_report_includes_playback_provenance_labels(tmp_path: Path) -> None:
