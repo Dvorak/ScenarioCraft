@@ -5,6 +5,7 @@ import json
 from collections.abc import Sequence
 
 from scenariocraft.schemas import ProbeResult, ScenarioSpec
+from scenariocraft.templates.pedestrian_occlusion import assess_pedestrian_occlusion_timing
 from scenariocraft.tools.asam_qc_tool import AsamQcResult
 from scenariocraft.tools.esmini_tool import EsminiPlaybackResult, EsminiResult
 from scenariocraft.tools.scenario_builder import BuildResult
@@ -57,6 +58,7 @@ def _render_report(
     qc_summary = _qc_summary(qc_result)
     esmini_summary = _esmini_summary(esmini_result)
     esmini_media_summary = _esmini_media_summary(playback_result)
+    timing_section = _timing_section(spec)
     probe_section = _probe_section(probe_results)
     return f"""# scenarioCraft Validation Report
 
@@ -73,6 +75,7 @@ def _render_report(
 - Actors: {", ".join(f"`{actor.id}`/{actor.role}" for actor in spec.actors)}
 - Trigger: `{spec.trigger.type}` from `{spec.trigger.source}` to `{spec.trigger.target}` at {spec.trigger.distance_m:g} m
 - Intended criticality: `{spec.intended_criticality.type}`, target min TTC {spec.intended_criticality.target_min_ttc_s:g} s
+{timing_section}
 
 ## Generated Artifacts
 
@@ -115,6 +118,54 @@ Overall result: `{'passed' if semantic_result.passed else 'failed'}`
 
 - No automated repair loop is implemented in this version.
 """
+
+
+def _timing_section(spec: ScenarioSpec) -> str:
+    if spec.timing is None:
+        return ""
+    assessment = assess_pedestrian_occlusion_timing(spec)
+    lines = [
+        "",
+        "## Timing Harness",
+        "",
+        f"- Total duration: `{spec.timing.total_duration_s:g}` s",
+        "- Preferred trigger window: "
+        f"`{spec.timing.preferred_trigger_earliest_s:g}` s to `{spec.timing.preferred_trigger_latest_s:g}` s",
+        f"- Minimum pre-trigger context: `{spec.timing.minimum_pre_trigger_context_s:g}` s",
+        f"- Minimum post-trigger buffer: `{spec.timing.minimum_post_trigger_buffer_s:g}` s",
+    ]
+    if assessment is None:
+        lines.append("- Timing classification: `unavailable`")
+        return "\n".join(lines)
+    lines.extend([
+        f"- Predicted trigger time: `{assessment.predicted_trigger_time_s:g}` s",
+        f"- Pedestrian crossing duration: `{assessment.pedestrian_crossing_duration_s:g}` s",
+        f"- Hard latest feasible trigger time: `{assessment.hard_latest_trigger_s:g}` s",
+        f"- Timing classification: `{assessment.classification}`",
+    ])
+    derivation = _timing_derivation(spec)
+    if derivation:
+        lines.append(f"- Trigger-time estimate formula: `{derivation}`")
+    return "\n".join(lines)
+
+
+def _timing_derivation(spec: ScenarioSpec) -> str | None:
+    if spec.layout is None:
+        return None
+    source_pose = spec.layout.actor_poses.get(spec.trigger.source)
+    target_pose = spec.layout.actor_poses.get(spec.trigger.target)
+    source_actor = spec.actor_by_id(spec.trigger.source)
+    if source_pose is None or target_pose is None or source_actor is None or source_actor.initial_speed_kph is None:
+        return None
+    speed_mps = source_actor.initial_speed_kph / 3.6
+    if speed_mps <= 0:
+        return None
+    trigger_x = target_pose.x_m - spec.trigger.distance_m
+    trigger_time_s = (trigger_x - source_pose.x_m) / speed_mps
+    return (
+        f"(({target_pose.x_m:g} m - {spec.trigger.distance_m:g} m) - {source_pose.x_m:g} m) "
+        f"/ {speed_mps:g} m/s = {trigger_time_s:g} s"
+    )
 
 
 def _probe_section(probe_results: Sequence[ProbeResult] | None) -> str:

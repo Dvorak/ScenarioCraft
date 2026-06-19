@@ -102,11 +102,12 @@ class ScenariogenerationBuilder(ScenarioBuilder):
         act.add_maneuver_group(maneuver_group)
         story = xosc.Story(spec.scenario_name)
         story.add_act(act)
+        stop_time_s = _scenario_stop_time_s(spec)
         stop_trigger = xosc.ValueTrigger(
-            "stop_after_8s",
+            _stop_trigger_name(stop_time_s),
             0,
             xosc.ConditionEdge.rising,
-            xosc.SimulationTimeCondition(8, xosc.Rule.greaterThan),
+            xosc.SimulationTimeCondition(stop_time_s, xosc.Rule.greaterThan),
             triggeringpoint="stop",
         )
         storyboard = xosc.StoryBoard(init, stop_trigger)
@@ -244,6 +245,14 @@ def _derived_trigger_time_s(spec: ScenarioSpec) -> float | None:
     return trigger_distance_along_x / speed_mps
 
 
+def _scenario_stop_time_s(spec: ScenarioSpec) -> float:
+    return spec.timing.total_duration_s if spec.timing is not None else 8.0
+
+
+def _stop_trigger_name(stop_time_s: float) -> str:
+    return f"stop_after_{stop_time_s:g}s"
+
+
 def _ego_driving_trajectory(spec: ScenarioSpec, ego: ActorSpec | None) -> BuilderTrajectory | None:
     if ego is None or spec.layout is None:
         return None
@@ -358,7 +367,7 @@ def _build_xml_tree(spec: ScenarioSpec, road_logic_file: str | None = None) -> E
         _append_speed_action(event, _pedestrian_traversal_speed_mps(pedestrian))
     _append_trigger(event, spec)
     ET.SubElement(act, "StopTrigger")
-    _append_stop_trigger(storyboard)
+    _append_stop_trigger(storyboard, spec)
     return root
 
 
@@ -512,13 +521,14 @@ def _append_simulation_time_start_trigger(parent: ET.Element, name: str, value_s
     ET.SubElement(by_value, "SimulationTimeCondition", {"value": str(value_s), "rule": "greaterThan"})
 
 
-def _append_stop_trigger(parent: ET.Element) -> None:
+def _append_stop_trigger(parent: ET.Element, spec: ScenarioSpec) -> None:
+    stop_time_s = _scenario_stop_time_s(spec)
     stop_trigger = ET.SubElement(parent, "StopTrigger")
     condition_group = ET.SubElement(stop_trigger, "ConditionGroup")
     condition = ET.SubElement(condition_group, "Condition", {
-        "name": "stop_after_8s",
+        "name": _stop_trigger_name(stop_time_s),
         "delay": "0",
         "conditionEdge": "rising",
     })
     by_value = ET.SubElement(condition, "ByValueCondition")
-    ET.SubElement(by_value, "SimulationTimeCondition", {"value": "8", "rule": "greaterThan"})
+    ET.SubElement(by_value, "SimulationTimeCondition", {"value": str(stop_time_s), "rule": "greaterThan"})

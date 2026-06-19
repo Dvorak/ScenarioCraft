@@ -7,6 +7,7 @@ from scenariocraft.generators import MockScenarioGenerator, ScenarioGenerator
 from scenariocraft.probes import run_pedestrian_occlusion_probes
 from scenariocraft.references import XoscMetadata, extract_xosc_metadata
 from scenariocraft.schemas import ProbeResult, ScenarioSpec
+from scenariocraft.schemas.scenario_spec import ScenarioSpecError
 from scenariocraft.tools import (
     EsminiResult,
     build_openscenario,
@@ -30,7 +31,12 @@ def main(argv: list[str] | None = None) -> int:
     (output_dir / "input.txt").write_text(scenario_text, encoding="utf-8")
 
     generator = _get_generator(args.provider)
-    spec = generator.generate_spec(scenario_text)
+    try:
+        spec = _generate_spec(generator, scenario_text, args)
+    except (ScenarioSpecError, TypeError, ValueError) as exc:
+        (output_dir / "generation_error.txt").write_text(f"{exc}\n", encoding="utf-8")
+        print(f"Scenario generation failed: {exc}")
+        return 2
     (output_dir / "scenario_spec.json").write_text(spec.to_json() + "\n", encoding="utf-8")
 
     preview_path = generate_2d_preview(spec, output_dir / "preview_2d.png")
@@ -100,6 +106,24 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         type=float,
         default=20.0,
         help="Maximum seconds to wait for the esmini load/run check.",
+    )
+    parser.add_argument(
+        "--duration-s",
+        type=float,
+        default=None,
+        help="Override mock pedestrian-occlusion ScenarioTimingSpec total duration.",
+    )
+    parser.add_argument(
+        "--trigger-window-earliest-s",
+        type=float,
+        default=None,
+        help="Override mock pedestrian-occlusion preferred trigger window start.",
+    )
+    parser.add_argument(
+        "--trigger-window-latest-s",
+        type=float,
+        default=None,
+        help="Override mock pedestrian-occlusion preferred trigger window end.",
     )
     return parser.parse_args(argv)
 
@@ -244,6 +268,19 @@ def _get_generator(provider: str) -> ScenarioGenerator:
     if provider == "mock":
         return MockScenarioGenerator()
     raise ValueError(f"Unsupported provider: {provider}")
+
+
+def _generate_spec(generator: ScenarioGenerator, scenario_text: str, args: argparse.Namespace) -> ScenarioSpec:
+    template_parameters: dict[str, object] = {}
+    if args.duration_s is not None:
+        template_parameters["total_duration_s"] = args.duration_s
+    if args.trigger_window_earliest_s is not None:
+        template_parameters["preferred_trigger_earliest_s"] = args.trigger_window_earliest_s
+    if args.trigger_window_latest_s is not None:
+        template_parameters["preferred_trigger_latest_s"] = args.trigger_window_latest_s
+    if template_parameters and isinstance(generator, MockScenarioGenerator):
+        return generator.generate_spec(scenario_text, **template_parameters)
+    return generator.generate_spec(scenario_text)
 
 
 def _run_template_probes(spec: ScenarioSpec) -> tuple[ProbeResult, ...]:
