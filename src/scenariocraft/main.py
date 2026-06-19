@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 
 from scenariocraft.generators import MockScenarioGenerator, ScenarioGenerator
-from scenariocraft.probes import run_pedestrian_occlusion_probes
+from scenariocraft.probes import run_artifact_consistency_probes, run_pedestrian_occlusion_probes
 from scenariocraft.references import XoscMetadata, extract_xosc_metadata
 from scenariocraft.schemas import ProbeResult, ScenarioSpec
 from scenariocraft.schemas.scenario_spec import ScenarioSpecError
@@ -41,6 +41,11 @@ def main(argv: list[str] | None = None) -> int:
 
     preview_path = generate_2d_preview(spec, output_dir / "preview_2d.png")
     build_result = build_openscenario(spec, output_dir)
+    artifact_probe_results = run_artifact_consistency_probes(
+        spec,
+        xosc_path=build_result.xosc_path,
+        xodr_path=build_result.xodr_path,
+    )
     qc_result = run_asam_qc(build_result.xosc_path, output_dir)
     esmini_result = run_esmini(
         build_result.xosc_path,
@@ -60,6 +65,7 @@ def main(argv: list[str] | None = None) -> int:
         semantic_result,
         output_dir,
         probe_results=probe_results,
+        artifact_probe_results=artifact_probe_results,
     )
     print(f"Wrote ScenarioSpec: {output_dir / 'scenario_spec.json'}")
     print(f"Wrote 2D preview: {preview_path}")

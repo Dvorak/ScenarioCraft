@@ -22,6 +22,7 @@ def generate_validation_report(
     output_dir: Path,
     probe_results: Sequence[ProbeResult] | None = None,
     playback_result: EsminiPlaybackResult | None = None,
+    artifact_probe_results: Sequence[ProbeResult] | None = None,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     report_path = output_dir / "validation_report.md"
@@ -35,6 +36,7 @@ def generate_validation_report(
             semantic_result,
             probe_results,
             playback_result,
+            artifact_probe_results,
         ),
         encoding="utf-8",
     )
@@ -50,6 +52,7 @@ def _render_report(
     semantic_result: SemanticValidationResult,
     probe_results: Sequence[ProbeResult] | None = None,
     playback_result: EsminiPlaybackResult | None = None,
+    artifact_probe_results: Sequence[ProbeResult] | None = None,
 ) -> str:
     semantic_lines = "\n".join(
         f"- [{'x' if check.passed else ' '}] `{check.name}`: {check.message}" for check in semantic_result.checks
@@ -60,6 +63,7 @@ def _render_report(
     esmini_media_summary = _esmini_media_summary(playback_result)
     timing_section = _timing_section(spec)
     probe_section = _probe_section(probe_results)
+    artifact_probe_section = _artifact_probe_section(artifact_probe_results)
     return f"""# scenarioCraft Validation Report
 
 ## Input Scenario Intent
@@ -106,6 +110,7 @@ Overall result: `{'passed' if semantic_result.passed else 'failed'}`
 
 {semantic_lines}
 {probe_section}
+{artifact_probe_section}
 
 ## Known Limitations
 
@@ -172,6 +177,22 @@ def _probe_section(probe_results: Sequence[ProbeResult] | None) -> str:
     if not probe_results:
         return ""
     lines = ["", "## Template-Aware Probes", ""]
+    for result in probe_results:
+        state = "PASS" if result.passed else "FAIL"
+        lines.append(f"- [{state}] `{result.name}` ({result.severity}): {result.message}")
+        if result.measured:
+            lines.append(f"  - measured: `{json.dumps(result.measured, sort_keys=True)}`")
+        if result.suggested_operations:
+            lines.append(
+                f"  - suggested_operations: `{json.dumps(list(result.suggested_operations), sort_keys=True)}`"
+            )
+    return "\n".join(lines)
+
+
+def _artifact_probe_section(probe_results: Sequence[ProbeResult] | None) -> str:
+    if not probe_results:
+        return ""
+    lines = ["", "## Artifact Consistency Probes", ""]
     for result in probe_results:
         state = "PASS" if result.passed else "FAIL"
         lines.append(f"- [{state}] `{result.name}` ({result.severity}): {result.message}")

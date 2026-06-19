@@ -29,8 +29,10 @@ def test_cli_happy_path_with_mock_provider(monkeypatch, tmp_path: Path) -> None:
     )
     report = (output_dir / "validation_report.md").read_text(encoding="utf-8")
     assert "## Template-Aware Probes" in report
+    assert "## Artifact Consistency Probes" in report
     assert "`ego_footprint_in_ego_lane`" in report
     assert "`trigger_point_before_conflict_and_in_ego_lane`" in report
+    assert "`xosc_actor_poses_match_layout`" in report
 
 
 def test_cli_layout_free_spec_succeeds_without_template_aware_probes(monkeypatch, tmp_path: Path) -> None:
@@ -54,6 +56,7 @@ def test_cli_layout_free_spec_succeeds_without_template_aware_probes(monkeypatch
     assert (output_dir / "scenario.xosc").exists()
     report = (output_dir / "validation_report.md").read_text(encoding="utf-8")
     assert "## Template-Aware Probes" not in report
+    assert "## Artifact Consistency Probes" not in report
 
 
 def test_cli_duration_and_trigger_window_overrides_propagate(monkeypatch, tmp_path: Path) -> None:
