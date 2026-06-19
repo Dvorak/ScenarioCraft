@@ -117,6 +117,11 @@ def test_report_includes_playback_provenance_labels(tmp_path: Path) -> None:
         capture_platform_strategy="macos_windowed_capture",
         media_quality_status="valid",
         media_quality_reason=None,
+        semantic_visual_orientation="world_x_screen_right_world_y_screen_up",
+        raw_visual_orientation="world_x_screen_left_world_y_screen_down",
+        ui_visual_orientation="world_x_screen_right_world_y_screen_up",
+        presentation_transform="rotate_180",
+        presentation_transform_reason="presentation-only rotate_180 aligns esmini top-camera media",
     )
 
     report_path = generate_validation_report(
@@ -138,6 +143,10 @@ def test_report_includes_playback_provenance_labels(tmp_path: Path) -> None:
     assert "Capture mode: `windowed`" in report
     assert "Platform strategy: `macos_windowed_capture`" in report
     assert "Media quality status: `valid`" in report
+    assert "Semantic visual orientation: `world_x_screen_right_world_y_screen_up`" in report
+    assert "Raw visual orientation: `world_x_screen_left_world_y_screen_down`" in report
+    assert "UI visual orientation: `world_x_screen_right_world_y_screen_up`" in report
+    assert "Presentation transform: `rotate_180`" in report
     assert "Visual media safe to display: `True`" in report
     assert "Frame count: `3`" in report
     assert "screen_shot_00000.tga" in report

@@ -194,6 +194,7 @@ def _esmini_media_summary(result: EsminiPlaybackResult | None) -> str:
         f"- Capture attempts: `{len(result.capture_attempts)}`",
         f"- Media quality status: `{result.media_quality_status}`",
         f"- Media quality reason: `{result.media_quality_reason}`",
+        f"- Semantic visual orientation: `{result.semantic_visual_orientation}`",
         f"- Raw visual orientation: `{result.raw_visual_orientation}`",
         f"- UI visual orientation: `{result.ui_visual_orientation}`",
         f"- Presentation transform: `{result.presentation_transform}`",

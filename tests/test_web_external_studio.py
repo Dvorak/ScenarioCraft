@@ -6,6 +6,8 @@ from pathlib import Path
 from scenariocraft.references.metadata_extractor import XoscMetadata
 from scenariocraft.tools import AsamQcResult, EsminiPlaybackResult, EsminiResult
 from scenariocraft.web.app import (
+    PREVIEW_VISUAL_CAPTION,
+    RUNTIME_VISUAL_CAPTION,
     _frame_sequence_state,
     _playback_media_label,
     _recommended_reference_examples,
@@ -64,6 +66,11 @@ def test_playback_media_labels_are_provenance_aware() -> None:
     assert _playback_media_label("preview_static_image") == "2D Preview"
     assert _playback_media_label("preview_fallback_gif") == "2D Preview Fallback"
     assert _playback_media_label("unavailable") == "Playback Unavailable"
+
+
+def test_visual_comparison_captions_state_orientation_contract() -> None:
+    assert PREVIEW_VISUAL_CAPTION == "ScenarioSpec layout · +x → right · +y → up"
+    assert RUNTIME_VISUAL_CAPTION == "OpenSCENARIO + OpenDRIVE runtime · +x → right · +y → up"
 
 
 def test_frame_sequence_state_uses_normalized_esmini_frames_not_preview(tmp_path: Path) -> None:

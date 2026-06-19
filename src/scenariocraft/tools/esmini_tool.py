@@ -17,10 +17,13 @@ SCREENSHOT_RE = re.compile(r"^screen_shot_(\d+)\.(jpg|jpeg|png|tga)$", re.IGNORE
 DEFAULT_FRAME_DURATION_S = 0.05
 MEDIA_QUALITY_NEAR_BLACK_FRACTION_THRESHOLD = 0.98
 MEDIA_QUALITY_MIN_DIMENSION_PX = 2
-RAW_VISUAL_ORIENTATION = "world_x_screen_left"
-UI_VISUAL_ORIENTATION = "world_x_screen_right"
-PRESENTATION_TRANSFORM = "horizontal_mirror"
-PRESENTATION_TRANSFORM_REASON = "align canonical preview and runtime display"
+SEMANTIC_VISUAL_ORIENTATION = "world_x_screen_right_world_y_screen_up"
+RAW_VISUAL_ORIENTATION = "world_x_screen_left_world_y_screen_down"
+PRESENTATION_TRANSFORM = "rotate_180"
+PRESENTATION_TRANSFORM_REASON = (
+    "presentation-only rotate_180 aligns esmini top-camera media with the canonical "
+    "semantic preview: +x right and +y up"
+)
 MACOS_PREFERRED_CAPTURE_WINDOW = ("2500", "1200", "960", "540")
 MACOS_FALLBACK_CAPTURE_WINDOW = ("100", "100", "960", "540")
 DEFAULT_PLATFORM_CAPTURE_WINDOW = ("0", "0", "960", "540")
@@ -93,6 +96,7 @@ class EsminiPlaybackResult:
     capture_window_height: int | None = None
     capture_window_policy: str = "unavailable"
     capture_attempts: list[dict[str, object]] = field(default_factory=list)
+    semantic_visual_orientation: str = SEMANTIC_VISUAL_ORIENTATION
     raw_visual_orientation: str = "unknown"
     ui_visual_orientation: str = "unknown"
     presentation_transform: str = "none"
@@ -286,6 +290,7 @@ def run_esmini_playback(
     capture_window_height: int | None = None
     capture_window_policy = "unavailable"
     capture_attempts: list[dict[str, object]] = []
+    semantic_visual_orientation = SEMANTIC_VISUAL_ORIENTATION
     raw_visual_orientation = "unknown"
     ui_visual_orientation = "unknown"
     presentation_transform = "none"
@@ -375,6 +380,7 @@ def run_esmini_playback(
             media_quality_reason = media["media_quality_reason"]
             raw_visual_orientation = str(media["raw_visual_orientation"])
             ui_visual_orientation = str(media["ui_visual_orientation"])
+            semantic_visual_orientation = str(media["semantic_visual_orientation"])
             presentation_transform = str(media["presentation_transform"])
             presentation_transform_reason = media["presentation_transform_reason"]
             fallback_reason = fallback_note or media["playback_fallback_reason"]
@@ -469,6 +475,7 @@ def run_esmini_playback(
         capture_window_height=capture_window_height,
         capture_window_policy=capture_window_policy,
         capture_attempts=capture_attempts,
+        semantic_visual_orientation=semantic_visual_orientation,
         raw_visual_orientation=raw_visual_orientation,
         ui_visual_orientation=ui_visual_orientation,
         presentation_transform=presentation_transform,
@@ -810,7 +817,9 @@ def _build_playback_media(
                 media_quality_status=quality_status,
                 media_quality_reason=quality_reason,
                 raw_visual_orientation=RAW_VISUAL_ORIENTATION,
-                ui_visual_orientation=UI_VISUAL_ORIENTATION if presentation_reason is None else RAW_VISUAL_ORIENTATION,
+                ui_visual_orientation=_orientation_after_presentation_transform(PRESENTATION_TRANSFORM)
+                if presentation_reason is None
+                else RAW_VISUAL_ORIENTATION,
                 presentation_transform=PRESENTATION_TRANSFORM if presentation_reason is None else "none",
                 presentation_transform_reason=PRESENTATION_TRANSFORM_REASON if presentation_reason is None else presentation_reason,
             )
@@ -833,7 +842,7 @@ def _build_playback_media(
                 media_quality_status=quality_status,
                 media_quality_reason=quality_reason,
                 raw_visual_orientation=RAW_VISUAL_ORIENTATION,
-                ui_visual_orientation=UI_VISUAL_ORIENTATION,
+                ui_visual_orientation=_orientation_after_presentation_transform(PRESENTATION_TRANSFORM),
                 presentation_transform=PRESENTATION_TRANSFORM,
                 presentation_transform_reason=PRESENTATION_TRANSFORM_REASON,
             )
@@ -853,7 +862,9 @@ def _build_playback_media(
             media_quality_status=quality_status,
             media_quality_reason=quality_reason,
             raw_visual_orientation=RAW_VISUAL_ORIENTATION,
-            ui_visual_orientation=UI_VISUAL_ORIENTATION if presentation_reason is None else RAW_VISUAL_ORIENTATION,
+            ui_visual_orientation=_orientation_after_presentation_transform(PRESENTATION_TRANSFORM)
+            if presentation_reason is None
+            else RAW_VISUAL_ORIENTATION,
             presentation_transform=PRESENTATION_TRANSFORM if presentation_reason is None else "none",
             presentation_transform_reason=PRESENTATION_TRANSFORM_REASON if presentation_reason is None else presentation_reason,
         )
@@ -902,6 +913,7 @@ def _media_result(
     ui_visual_orientation: str,
     presentation_transform: str,
     presentation_transform_reason: str | None,
+    semantic_visual_orientation: str = SEMANTIC_VISUAL_ORIENTATION,
 ) -> dict[str, object]:
     if playback_kind not in PLAYBACK_KINDS:
         raise ValueError(f"Unsupported playback kind: {playback_kind}")
@@ -917,6 +929,7 @@ def _media_result(
         "playback_frames": playback_frames,
         "media_quality_status": media_quality_status,
         "media_quality_reason": media_quality_reason,
+        "semantic_visual_orientation": semantic_visual_orientation,
         "raw_visual_orientation": raw_visual_orientation,
         "ui_visual_orientation": ui_visual_orientation,
         "presentation_transform": presentation_transform,
@@ -1032,7 +1045,7 @@ def _build_presentation_frames(
 ) -> tuple[list[Path], str | None]:
     if presentation_transform == "none":
         return normalized_frames, None
-    if presentation_transform != "horizontal_mirror":
+    if presentation_transform not in {"horizontal_mirror", "vertical_mirror", "rotate_180"}:
         return [], f"Unsupported presentation transform: {presentation_transform}"
     try:
         from PIL import Image, ImageOps
@@ -1045,11 +1058,31 @@ def _build_presentation_frames(
         target = presentation_frames_dir / frame.name
         try:
             with Image.open(frame) as image:
-                ImageOps.mirror(image).save(target, format="PNG")
+                _apply_presentation_transform(image, presentation_transform, ImageOps).save(target, format="PNG")
         except OSError as exc:
             return [], f"Aligned presentation frame generation failed: {exc}"
         presentation_frames.append(target)
     return presentation_frames, None
+
+
+def _apply_presentation_transform(image, presentation_transform: str, image_ops):
+    if presentation_transform == "horizontal_mirror":
+        return image_ops.mirror(image)
+    if presentation_transform == "vertical_mirror":
+        return image_ops.flip(image)
+    if presentation_transform == "rotate_180":
+        return image.rotate(180)
+    return image
+
+
+def _orientation_after_presentation_transform(presentation_transform: str) -> str:
+    orientations = {
+        "none": RAW_VISUAL_ORIENTATION,
+        "horizontal_mirror": "world_x_screen_right_world_y_screen_down",
+        "vertical_mirror": "world_x_screen_left_world_y_screen_up",
+        "rotate_180": SEMANTIC_VISUAL_ORIENTATION,
+    }
+    return orientations.get(presentation_transform, "unknown")
 
 
 def _attach_presentation_frames(

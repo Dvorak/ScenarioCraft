@@ -53,6 +53,8 @@ RECOMMENDED_EXAMPLE_FILES = (
 )
 REFERENCE_CATEGORIES = ("stable_demo", "qc_fail", "esmini_long_running")
 CRITICALITY_MAX_TTC_S = 3.0
+PREVIEW_VISUAL_CAPTION = "ScenarioSpec layout · +x → right · +y → up"
+RUNTIME_VISUAL_CAPTION = "OpenSCENARIO + OpenDRIVE runtime · +x → right · +y → up"
 
 
 def main() -> None:
@@ -244,7 +246,7 @@ def _render_playback_tabs(output_dir: Path) -> None:
     preview_col, playback_col = st.columns(2, gap="large")
     with preview_col:
         st.markdown("#### 2D Semantic Preview")
-        st.caption("ScenarioSpec layout · +x -> right")
+        st.caption(PREVIEW_VISUAL_CAPTION)
         spec = _current_spec(show_error=False)
         if spec is None:
             st.info("Generate a mock ScenarioSpec to see the deterministic 2D preview.")
@@ -256,7 +258,7 @@ def _render_playback_tabs(output_dir: Path) -> None:
                 st.warning("2D preview could not be generated.")
     with playback_col:
         st.markdown("#### esmini Runtime Playback")
-        st.caption("OpenSCENARIO + OpenDRIVE runtime · +x -> right")
+        st.caption(RUNTIME_VISUAL_CAPTION)
         _render_playback_panel(output_dir)
 
 
@@ -386,6 +388,7 @@ def _render_playback_details(playback_result: EsminiPlaybackResult) -> None:
         st.caption(f"Frame count: `{playback_result.playback_frame_count}`")
         st.caption(f"Capture policy: `{playback_result.capture_window_policy}`")
         st.caption(f"Media quality: `{playback_result.media_quality_status}`")
+        st.caption(f"Semantic orientation: `{playback_result.semantic_visual_orientation}`")
         st.caption(f"Raw orientation: `{playback_result.raw_visual_orientation}`")
         st.caption(f"UI orientation: `{playback_result.ui_visual_orientation}`")
         st.caption(f"Presentation transform: `{playback_result.presentation_transform}`")

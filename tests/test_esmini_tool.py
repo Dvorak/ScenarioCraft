@@ -5,6 +5,7 @@ from pathlib import Path
 import scenariocraft.tools.esmini_tool as esmini_tool
 from scenariocraft.tools.esmini_tool import (
     _build_playback_media,
+    _build_presentation_frames,
     _build_capture_command,
     _capture_mode_for_platform,
     _classify_media_quality,
@@ -21,6 +22,29 @@ def _write_image(path: Path, color: tuple[int, int, int] = (255, 0, 0)) -> None:
     from PIL import Image
 
     Image.new("RGB", (3, 2), color=color).save(path)
+
+
+def _write_directional_image(path: Path) -> None:
+    from PIL import Image
+
+    image = Image.new("RGB", (2, 2))
+    image.putpixel((0, 0), (255, 0, 0))
+    image.putpixel((1, 0), (0, 255, 0))
+    image.putpixel((0, 1), (0, 0, 255))
+    image.putpixel((1, 1), (255, 255, 0))
+    image.save(path)
+
+
+def _pixels(path: Path) -> dict[tuple[int, int], tuple[int, int, int]]:
+    from PIL import Image
+
+    with Image.open(path) as image:
+        rgb = image.convert("RGB")
+        return {
+            (x, y): rgb.getpixel((x, y))
+            for y in range(rgb.height)
+            for x in range(rgb.width)
+        }
 
 
 def test_esmini_unavailable(monkeypatch, tmp_path) -> None:
@@ -297,12 +321,88 @@ def test_build_playback_media_ignores_preview_and_preserves_provenance(tmp_path)
     assert media["playback_frames"][0]["normalized_frame_path"].endswith("frames/frame_000001.png")
     assert media["playback_frames"][0]["presentation_frame_path"].endswith("frames_aligned/frame_000001.png")
     assert media["playback_frames"][0]["source_extension"] == ".tga"
-    assert media["raw_visual_orientation"] == "world_x_screen_left"
-    assert media["ui_visual_orientation"] == "world_x_screen_right"
-    assert media["presentation_transform"] == "horizontal_mirror"
+    assert media["semantic_visual_orientation"] == "world_x_screen_right_world_y_screen_up"
+    assert media["raw_visual_orientation"] == "world_x_screen_left_world_y_screen_down"
+    assert media["ui_visual_orientation"] == "world_x_screen_right_world_y_screen_up"
+    assert media["presentation_transform"] == "rotate_180"
     assert "preview_2d.png" not in {
         Path(frame["original_source_path"]).name for frame in media["playback_frames"]
     }
+
+
+def test_presentation_transform_none_preserves_raw_media_path(tmp_path) -> None:
+    raw_dir = tmp_path / "frames"
+    raw_dir.mkdir()
+    raw = raw_dir / "frame_000001.png"
+    _write_directional_image(raw)
+    before = raw.read_bytes()
+
+    frames, reason = _build_presentation_frames([raw], tmp_path / "frames_aligned", "none")
+
+    assert reason is None
+    assert frames == [raw]
+    assert raw.read_bytes() == before
+    assert not (tmp_path / "frames_aligned").exists()
+
+
+def test_presentation_transform_horizontal_mirror_affects_x_only(tmp_path) -> None:
+    raw = tmp_path / "frame_000001.png"
+    _write_directional_image(raw)
+
+    frames, reason = _build_presentation_frames([raw], tmp_path / "frames_aligned", "horizontal_mirror")
+
+    assert reason is None
+    pixels = _pixels(frames[0])
+    assert pixels[(0, 0)] == (0, 255, 0)
+    assert pixels[(1, 0)] == (255, 0, 0)
+    assert pixels[(0, 1)] == (255, 255, 0)
+    assert pixels[(1, 1)] == (0, 0, 255)
+
+
+def test_presentation_transform_vertical_mirror_affects_y_only(tmp_path) -> None:
+    raw = tmp_path / "frame_000001.png"
+    _write_directional_image(raw)
+
+    frames, reason = _build_presentation_frames([raw], tmp_path / "frames_aligned", "vertical_mirror")
+
+    assert reason is None
+    pixels = _pixels(frames[0])
+    assert pixels[(0, 0)] == (0, 0, 255)
+    assert pixels[(1, 0)] == (255, 255, 0)
+    assert pixels[(0, 1)] == (255, 0, 0)
+    assert pixels[(1, 1)] == (0, 255, 0)
+
+
+def test_presentation_transform_rotate_180_affects_x_and_y(tmp_path) -> None:
+    raw = tmp_path / "frame_000001.png"
+    _write_directional_image(raw)
+
+    frames, reason = _build_presentation_frames([raw], tmp_path / "frames_aligned", "rotate_180")
+
+    assert reason is None
+    pixels = _pixels(frames[0])
+    assert pixels[(0, 0)] == (255, 255, 0)
+    assert pixels[(1, 0)] == (0, 0, 255)
+    assert pixels[(0, 1)] == (0, 255, 0)
+    assert pixels[(1, 1)] == (255, 0, 0)
+
+
+def test_build_playback_media_keeps_raw_and_aligned_artifacts_separate(tmp_path) -> None:
+    _write_directional_image(tmp_path / "screen_shot_00000.tga")
+    _write_image(tmp_path / "screen_shot_00001.tga", color=(0, 255, 0))
+
+    media = _build_playback_media(tmp_path, frame_duration_s=0.05)
+
+    raw_frame = tmp_path / "frames" / "frame_000001.png"
+    aligned_frame = tmp_path / "frames_aligned" / "frame_000001.png"
+    assert raw_frame.exists()
+    assert aligned_frame.exists()
+    assert raw_frame.read_bytes() != aligned_frame.read_bytes()
+    assert (tmp_path / "playback_esmini_raw.gif").exists()
+    assert media["playback_path"] == str(tmp_path / "playback_esmini_aligned.gif")
+    assert (tmp_path / "playback_esmini_aligned.gif").exists()
+    assert media["playback_frames"][0]["normalized_frame_path"] == str(raw_frame)
+    assert media["playback_frames"][0]["presentation_frame_path"] == str(aligned_frame)
 
 
 def test_classifies_multiple_esmini_frames_as_sequence_when_gif_encoder_unavailable(monkeypatch, tmp_path) -> None:
@@ -360,7 +460,7 @@ def test_classifies_one_esmini_frame_as_single_frame(tmp_path) -> None:
     assert media["playback_path"] == str(tmp_path / "frames_aligned" / "frame_000001.png")
     assert media["playback_frames"][0]["normalized_frame_path"].endswith("frames/frame_000001.png")
     assert media["playback_frames"][0]["presentation_frame_path"].endswith("frames_aligned/frame_000001.png")
-    assert media["presentation_transform"] == "horizontal_mirror"
+    assert media["presentation_transform"] == "rotate_180"
 
 
 def test_preview_fallback_is_explicit_and_never_esmini_gif(monkeypatch, tmp_path) -> None:
