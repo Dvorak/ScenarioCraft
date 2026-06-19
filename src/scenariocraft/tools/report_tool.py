@@ -199,6 +199,7 @@ def _esmini_media_summary(result: EsminiPlaybackResult | None) -> str:
         f"- UI visual orientation: `{result.ui_visual_orientation}`",
         f"- Presentation transform: `{result.presentation_transform}`",
         f"- Presentation transform reason: `{result.presentation_transform_reason}`",
+        f"- Preview display orientation: `{result.preview_display_orientation}`",
         f"- Visual media safe to display: `{_visual_media_safe_to_display(result)}`",
         f"- Frame count: `{result.playback_frame_count}`",
         f"- Animated: `{result.playback_is_animated}`",

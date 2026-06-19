@@ -19,11 +19,9 @@ MEDIA_QUALITY_NEAR_BLACK_FRACTION_THRESHOLD = 0.98
 MEDIA_QUALITY_MIN_DIMENSION_PX = 2
 SEMANTIC_VISUAL_ORIENTATION = "world_x_screen_right_world_y_screen_up"
 RAW_VISUAL_ORIENTATION = "world_x_screen_left_world_y_screen_down"
-PRESENTATION_TRANSFORM = "rotate_180"
-PRESENTATION_TRANSFORM_REASON = (
-    "presentation-only rotate_180 aligns esmini top-camera media with the canonical "
-    "semantic preview: +x right and +y up"
-)
+PRESENTATION_TRANSFORM = "none"
+PRESENTATION_TRANSFORM_REASON = "raw_esmini_media_is_authoritative"
+PREVIEW_DISPLAY_ORIENTATION = "esmini_top_camera_raw"
 MACOS_PREFERRED_CAPTURE_WINDOW = ("2500", "1200", "960", "540")
 MACOS_FALLBACK_CAPTURE_WINDOW = ("100", "100", "960", "540")
 DEFAULT_PLATFORM_CAPTURE_WINDOW = ("0", "0", "960", "540")
@@ -101,6 +99,7 @@ class EsminiPlaybackResult:
     ui_visual_orientation: str = "unknown"
     presentation_transform: str = "none"
     presentation_transform_reason: str | None = None
+    preview_display_orientation: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -295,6 +294,7 @@ def run_esmini_playback(
     ui_visual_orientation = "unknown"
     presentation_transform = "none"
     presentation_transform_reason: str | None = None
+    preview_display_orientation: str | None = None
     if resolved_binary is None:
         fallback_reason = "esmini was not found. Playback video could not be generated."
         esmini_result = run_esmini(
@@ -383,6 +383,7 @@ def run_esmini_playback(
             semantic_visual_orientation = str(media["semantic_visual_orientation"])
             presentation_transform = str(media["presentation_transform"])
             presentation_transform_reason = media["presentation_transform_reason"]
+            preview_display_orientation = str(media["preview_display_orientation"])
             fallback_reason = fallback_note or media["playback_fallback_reason"]
             capture_window_policy = _selected_capture_window_policy(capture_attempts)
             capture_window_x, capture_window_y, capture_window_width, capture_window_height = _capture_window_numbers(
@@ -480,6 +481,7 @@ def run_esmini_playback(
         ui_visual_orientation=ui_visual_orientation,
         presentation_transform=presentation_transform,
         presentation_transform_reason=presentation_transform_reason,
+        preview_display_orientation=preview_display_orientation,
     )
     (output_dir / "esmini_result.json").write_text(esmini_result.to_json(), encoding="utf-8")
     (output_dir / "esmini_playback_result.json").write_text(playback_result.to_json(), encoding="utf-8")
@@ -798,7 +800,7 @@ def _build_playback_media(
             presentation_frames_dir,
             PRESENTATION_TRANSFORM,
         )
-        if presentation_frames:
+        if PRESENTATION_TRANSFORM != "none" and presentation_frames:
             provenance = _attach_presentation_frames(provenance, presentation_frames)
         else:
             presentation_frames = normalized_frames
@@ -811,7 +813,7 @@ def _build_playback_media(
                 playback_frame_count=1,
                 playback_is_animated=False,
                 playback_frame_duration_s=None,
-                playback_path=str(presentation_frames[0]),
+                playback_path=str(normalized_frames[0]),
                 playback_fallback_reason=presentation_reason,
                 playback_frames=[item.to_dict() for item in provenance],
                 media_quality_status=quality_status,
@@ -825,8 +827,12 @@ def _build_playback_media(
             )
         raw_gif_path = output_dir / "playback_esmini_raw.gif"
         raw_gif_reason = _encode_esmini_gif(normalized_frames, raw_gif_path, frame_duration_s)
-        gif_path = output_dir / "playback_esmini_aligned.gif"
-        gif_reason = _encode_esmini_gif(presentation_frames, gif_path, frame_duration_s) if presentation_reason is None else presentation_reason
+        gif_path = raw_gif_path if PRESENTATION_TRANSFORM == "none" else output_dir / "playback_esmini_aligned.gif"
+        gif_reason = raw_gif_reason if PRESENTATION_TRANSFORM == "none" else (
+            _encode_esmini_gif(presentation_frames, gif_path, frame_duration_s)
+            if presentation_reason is None
+            else presentation_reason
+        )
         gif_frame_count = _gif_frame_count(gif_path) if gif_reason is None else 0
         if gif_reason is None and gif_path.exists() and gif_path.stat().st_size > 0 and gif_frame_count > 1:
             return _media_result(
@@ -934,6 +940,7 @@ def _media_result(
         "ui_visual_orientation": ui_visual_orientation,
         "presentation_transform": presentation_transform,
         "presentation_transform_reason": presentation_transform_reason,
+        "preview_display_orientation": PREVIEW_DISPLAY_ORIENTATION,
     }
 
 

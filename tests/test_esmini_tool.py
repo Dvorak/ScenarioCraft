@@ -312,19 +312,21 @@ def test_build_playback_media_ignores_preview_and_preserves_provenance(tmp_path)
     assert media["playback_frame_count"] == 2
     assert media["playback_is_animated"] is True
     assert media["playback_frame_duration_s"] == 0.05
-    assert media["playback_path"] == str(tmp_path / "playback_esmini_aligned.gif")
-    assert (tmp_path / "playback_esmini_aligned.gif").exists()
+    assert media["playback_path"] == str(tmp_path / "playback_esmini_raw.gif")
+    assert not (tmp_path / "playback_esmini_aligned.gif").exists()
     assert (tmp_path / "playback_esmini_raw.gif").exists()
     assert (tmp_path / "frames" / "frame_000001.png").exists()
-    assert (tmp_path / "frames_aligned" / "frame_000001.png").exists()
+    assert not (tmp_path / "frames_aligned").exists()
     assert media["playback_frames"][0]["original_source_path"].endswith("screen_shot_00000.tga")
     assert media["playback_frames"][0]["normalized_frame_path"].endswith("frames/frame_000001.png")
-    assert media["playback_frames"][0]["presentation_frame_path"].endswith("frames_aligned/frame_000001.png")
+    assert media["playback_frames"][0]["presentation_frame_path"] is None
     assert media["playback_frames"][0]["source_extension"] == ".tga"
     assert media["semantic_visual_orientation"] == "world_x_screen_right_world_y_screen_up"
     assert media["raw_visual_orientation"] == "world_x_screen_left_world_y_screen_down"
-    assert media["ui_visual_orientation"] == "world_x_screen_right_world_y_screen_up"
-    assert media["presentation_transform"] == "rotate_180"
+    assert media["ui_visual_orientation"] == "world_x_screen_left_world_y_screen_down"
+    assert media["presentation_transform"] == "none"
+    assert media["presentation_transform_reason"] == "raw_esmini_media_is_authoritative"
+    assert media["preview_display_orientation"] == "esmini_top_camera_raw"
     assert "preview_2d.png" not in {
         Path(frame["original_source_path"]).name for frame in media["playback_frames"]
     }
@@ -387,22 +389,20 @@ def test_presentation_transform_rotate_180_affects_x_and_y(tmp_path) -> None:
     assert pixels[(1, 1)] == (255, 0, 0)
 
 
-def test_build_playback_media_keeps_raw_and_aligned_artifacts_separate(tmp_path) -> None:
+def test_build_playback_media_uses_raw_artifacts_for_normal_playback(tmp_path) -> None:
     _write_directional_image(tmp_path / "screen_shot_00000.tga")
     _write_image(tmp_path / "screen_shot_00001.tga", color=(0, 255, 0))
 
     media = _build_playback_media(tmp_path, frame_duration_s=0.05)
 
     raw_frame = tmp_path / "frames" / "frame_000001.png"
-    aligned_frame = tmp_path / "frames_aligned" / "frame_000001.png"
     assert raw_frame.exists()
-    assert aligned_frame.exists()
-    assert raw_frame.read_bytes() != aligned_frame.read_bytes()
     assert (tmp_path / "playback_esmini_raw.gif").exists()
-    assert media["playback_path"] == str(tmp_path / "playback_esmini_aligned.gif")
-    assert (tmp_path / "playback_esmini_aligned.gif").exists()
+    assert media["playback_path"] == str(tmp_path / "playback_esmini_raw.gif")
+    assert not (tmp_path / "playback_esmini_aligned.gif").exists()
+    assert not (tmp_path / "frames_aligned").exists()
     assert media["playback_frames"][0]["normalized_frame_path"] == str(raw_frame)
-    assert media["playback_frames"][0]["presentation_frame_path"] == str(aligned_frame)
+    assert media["playback_frames"][0]["presentation_frame_path"] is None
 
 
 def test_classifies_multiple_esmini_frames_as_sequence_when_gif_encoder_unavailable(monkeypatch, tmp_path) -> None:
@@ -457,10 +457,10 @@ def test_classifies_one_esmini_frame_as_single_frame(tmp_path) -> None:
     assert media["playback_generated"] is True
     assert media["playback_frame_count"] == 1
     assert media["playback_is_animated"] is False
-    assert media["playback_path"] == str(tmp_path / "frames_aligned" / "frame_000001.png")
+    assert media["playback_path"] == str(tmp_path / "frames" / "frame_000001.png")
     assert media["playback_frames"][0]["normalized_frame_path"].endswith("frames/frame_000001.png")
-    assert media["playback_frames"][0]["presentation_frame_path"].endswith("frames_aligned/frame_000001.png")
-    assert media["presentation_transform"] == "rotate_180"
+    assert media["playback_frames"][0]["presentation_frame_path"] is None
+    assert media["presentation_transform"] == "none"
 
 
 def test_preview_fallback_is_explicit_and_never_esmini_gif(monkeypatch, tmp_path) -> None:

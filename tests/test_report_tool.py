@@ -144,9 +144,10 @@ def test_report_includes_playback_provenance_labels(tmp_path: Path) -> None:
         media_quality_reason=None,
         semantic_visual_orientation="world_x_screen_right_world_y_screen_up",
         raw_visual_orientation="world_x_screen_left_world_y_screen_down",
-        ui_visual_orientation="world_x_screen_right_world_y_screen_up",
-        presentation_transform="rotate_180",
-        presentation_transform_reason="presentation-only rotate_180 aligns esmini top-camera media",
+        ui_visual_orientation="world_x_screen_left_world_y_screen_down",
+        presentation_transform="none",
+        presentation_transform_reason="raw_esmini_media_is_authoritative",
+        preview_display_orientation="esmini_top_camera_raw",
     )
 
     report_path = generate_validation_report(
@@ -170,8 +171,10 @@ def test_report_includes_playback_provenance_labels(tmp_path: Path) -> None:
     assert "Media quality status: `valid`" in report
     assert "Semantic visual orientation: `world_x_screen_right_world_y_screen_up`" in report
     assert "Raw visual orientation: `world_x_screen_left_world_y_screen_down`" in report
-    assert "UI visual orientation: `world_x_screen_right_world_y_screen_up`" in report
-    assert "Presentation transform: `rotate_180`" in report
+    assert "UI visual orientation: `world_x_screen_left_world_y_screen_down`" in report
+    assert "Presentation transform: `none`" in report
+    assert "Presentation transform reason: `raw_esmini_media_is_authoritative`" in report
+    assert "Preview display orientation: `esmini_top_camera_raw`" in report
     assert "Visual media safe to display: `True`" in report
     assert "Frame count: `3`" in report
     assert "screen_shot_00000.tga" in report
