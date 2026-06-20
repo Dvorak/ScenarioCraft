@@ -119,6 +119,8 @@ def test_workspace_css_hides_streamlit_chrome_and_scopes_icon_controls() -> None
     assert ".st-key-workspace_playback_stage" in css
     assert "object-fit: contain" in css
     assert "@media (max-width: 900px)" in css
+    assert '[data-testid="stHorizontalBlock"]:has(.st-key-workspace_left_normal, .st-key-workspace_left_repair)' in css
+    assert '> [data-testid="stColumn"]' in css
     assert "height: auto" in css
 
 

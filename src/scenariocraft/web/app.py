@@ -2251,64 +2251,75 @@ def _inject_css() -> None:
         .st-key-workspace_left_repair,
         .st-key-workspace_right {
             height: var(--workspace-desktop-height);
+            flex: 0 0 var(--workspace-desktop-height) !important;
             min-height: 0;
         }
         .st-key-workspace_left_normal,
         .st-key-workspace_left_repair {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
             overflow-y: auto;
             overflow-x: hidden;
             scrollbar-gutter: stable;
             padding-right: 0.18rem;
         }
-        .st-key-workspace_left_normal > div,
-        .st-key-workspace_left_repair > div {
-            min-height: 100%;
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-        }
-        .st-key-workspace_left_normal .st-key-workspace_brief {
+        .st-key-workspace_left_normal > [data-testid="stLayoutWrapper"]:has(.st-key-workspace_brief) {
             flex: 1 1 auto;
             min-height: 12rem;
+        }
+        .st-key-workspace_left_normal .st-key-workspace_brief {
+            height: 100%;
         }
         .st-key-workspace_left_normal .st-key-workspace_brief > div {
             height: 100%;
         }
-        .st-key-workspace_left_repair .st-key-workspace_repair_panel {
+        .st-key-workspace_left_repair > [data-testid="stLayoutWrapper"]:has(.st-key-workspace_repair_panel) {
             flex: 0 0 auto;
             min-height: clamp(20rem, 42vh, 28rem);
         }
-        .st-key-workspace_left_repair .st-key-workspace_brief {
+        .st-key-workspace_left_repair > [data-testid="stLayoutWrapper"]:has(.st-key-workspace_brief) {
             flex: 0 0 auto;
             min-height: 16rem;
         }
-        .st-key-workspace_right > div {
-            height: 100%;
+        .st-key-workspace_right {
             display: grid;
+            grid-template-columns: minmax(0, 1fr);
             grid-template-rows: repeat(2, minmax(0, 1fr));
             gap: 0.75rem;
         }
+        .st-key-workspace_right > [data-testid="stLayoutWrapper"] {
+            width: 100% !important;
+            height: 100% !important;
+            min-width: 0;
+            min-height: 0;
+            align-self: stretch;
+        }
         .st-key-workspace_preview_panel,
         .st-key-workspace_playback_panel {
-            min-height: 0;
-            overflow: hidden;
-        }
-        .st-key-workspace_preview_panel > div,
-        .st-key-workspace_playback_panel > div {
             height: 100%;
             min-height: 0;
+            overflow: hidden;
             display: flex;
             flex-direction: column;
             gap: 0.55rem;
         }
+        .st-key-workspace_preview_panel > [data-testid="stLayoutWrapper"]:has(.st-key-workspace_preview_stage),
+        .st-key-workspace_playback_panel > [data-testid="stLayoutWrapper"]:has(.st-key-workspace_playback_stage) {
+            flex: 1 1 0 !important;
+            min-height: 0;
+            overflow: hidden;
+        }
         .st-key-workspace_preview_stage,
         .st-key-workspace_playback_stage {
+            height: 100%;
             flex: 1 1 auto;
             min-height: 0;
-            overflow: auto;
             display: flex;
             align-items: center;
         }
+        .st-key-workspace_preview_stage { overflow: hidden; }
+        .st-key-workspace_playback_stage { overflow: auto; }
         .st-key-workspace_preview_stage > div,
         .st-key-workspace_playback_stage > div {
             width: 100%;
@@ -2316,16 +2327,34 @@ def _inject_css() -> None:
         }
         .st-key-workspace_preview_stage [data-testid="stImage"],
         .st-key-workspace_playback_stage [data-testid="stImage"] {
-            height: 100%;
+            height: 100% !important;
+            max-height: 100% !important;
             display: flex;
             align-items: center;
             justify-content: center;
         }
+        .st-key-workspace_preview_stage [data-testid="stFullScreenFrame"] > div,
+        .st-key-workspace_playback_stage [data-testid="stFullScreenFrame"] > div {
+            height: 100% !important;
+            max-height: 100% !important;
+            min-height: 0;
+        }
+        .st-key-workspace_preview_stage [data-testid="stElementContainer"]:has([data-testid="stImage"]),
+        .st-key-workspace_playback_stage [data-testid="stElementContainer"]:has([data-testid="stImage"]),
+        .st-key-workspace_preview_stage [data-testid="stFullScreenFrame"],
+        .st-key-workspace_playback_stage [data-testid="stFullScreenFrame"],
+        .st-key-workspace_preview_stage [data-testid="stImageContainer"],
+        .st-key-workspace_playback_stage [data-testid="stImageContainer"] {
+            height: 100% !important;
+            max-height: 100% !important;
+            min-height: 0;
+        }
         .st-key-workspace_preview_stage [data-testid="stImage"] img,
         .st-key-workspace_playback_stage [data-testid="stImage"] img {
-            width: 100%;
-            height: 100%;
-            max-height: none;
+            width: 100% !important;
+            height: 100% !important;
+            max-width: 100% !important;
+            max-height: 100% !important;
             object-fit: contain;
         }
         .st-key-workspace_playback_stage [data-testid="stVideo"] video {
@@ -2453,19 +2482,27 @@ def _inject_css() -> None:
             .workspace-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
         @media (max-width: 900px) {
+            [data-testid="stHorizontalBlock"]:has(.st-key-workspace_left_normal, .st-key-workspace_left_repair) {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            [data-testid="stHorizontalBlock"]:has(.st-key-workspace_left_normal, .st-key-workspace_left_repair)
+            > [data-testid="stColumn"] {
+                width: 100% !important;
+                flex: 1 1 100% !important;
+            }
             .st-key-workspace_left_normal,
             .st-key-workspace_left_repair,
             .st-key-workspace_right {
                 height: auto;
+                flex: 0 0 auto !important;
                 min-height: 0;
                 overflow: visible;
                 padding-right: 0;
             }
-            .st-key-workspace_left_normal > div,
-            .st-key-workspace_left_repair > div,
-            .st-key-workspace_right > div {
-                height: auto;
-                min-height: 0;
+            .st-key-workspace_left_normal,
+            .st-key-workspace_left_repair,
+            .st-key-workspace_right {
                 display: flex;
                 flex-direction: column;
             }
@@ -2474,6 +2511,15 @@ def _inject_css() -> None:
             .st-key-workspace_left_repair .st-key-workspace_brief {
                 flex: 0 0 auto;
                 min-height: 0;
+            }
+            .st-key-workspace_left_normal > [data-testid="stLayoutWrapper"]:has(.st-key-workspace_brief),
+            .st-key-workspace_left_repair > [data-testid="stLayoutWrapper"]:has(.st-key-workspace_repair_panel),
+            .st-key-workspace_left_repair > [data-testid="stLayoutWrapper"]:has(.st-key-workspace_brief) {
+                flex: 0 0 auto;
+                min-height: 0;
+            }
+            .st-key-workspace_right > [data-testid="stLayoutWrapper"] {
+                height: auto !important;
             }
             .st-key-workspace_preview_panel,
             .st-key-workspace_playback_panel { min-height: 28rem; }
