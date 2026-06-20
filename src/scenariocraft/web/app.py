@@ -10,7 +10,12 @@ import streamlit as st
 
 from scenariocraft.generators import MockScenarioGenerator, ScenarioGenerator
 from scenariocraft.references import ReferenceScenarioOption, XoscMetadata, discover_external_scenarios, extract_xosc_metadata
-from scenariocraft.schemas import ActorSpec, CriticalitySpec, ScenarioSpec, TriggerSpec
+from scenariocraft.schemas import (
+    ActorSpec,
+    CriticalitySpec,
+    ScenarioSpec,
+    TriggerSpec,
+)
 from scenariocraft.tools import (
     AsamQcResult,
     BuildResult,
@@ -25,12 +30,26 @@ from scenariocraft.tools import (
     validate_semantics,
 )
 from scenariocraft.tools.semantic_validator import SemanticValidationResult
+from scenariocraft.web.demo_cases import (
+    DEMO_CASES,
+    DemoCaseExecution,
+    PreparedDemoCase,
+    execute_prepared_demo_case,
+    get_demo_case,
+    prepare_demo_case,
+    run_demo_case,
+)
 from scenariocraft.web.view_models import (
+    DemoExperimentTraceViewModel,
     ExternalScenarioViewModel,
     GeneratedScenarioViewModel,
+    RepairProbeTraceViewModel,
     StatusCardViewModel,
+    build_demo_experiment_trace_view_model,
     build_external_scenario_view_model,
     build_generated_scenario_view_model,
+    build_workspace_repair_view_model,
+    build_workspace_status_view_model,
 )
 
 
@@ -41,7 +60,6 @@ DEFAULT_SCENARIO_TEXT = (
 DEFAULT_OUTPUT_ROOT = Path("outputs/web_demo")
 DEFAULT_OUTPUT_DIR = DEFAULT_OUTPUT_ROOT / "latest"
 DEFAULT_EXTERNAL_ROOT = Path("external")
-DEMO_MODES = ("Normal good scenario", "Missing pedestrian", "Low criticality")
 REFERENCE_SOURCES = ("All", "OSC-NCAP-scenarios", "ALKS scenarios", "Other external scenarios")
 CURATED_REFERENCE_EXAMPLES_PATH = Path("examples/reference_examples.yaml")
 RECOMMENDED_EXAMPLE_FILES = (
@@ -56,6 +74,16 @@ CRITICALITY_MAX_TTC_S = 3.0
 WEB_PREVIEW_DISPLAY_ORIENTATION = "esmini_top_camera_raw"
 PREVIEW_VISUAL_CAPTION = "Renderer-aligned ScenarioSpec layout · world +x → left · world +y → down"
 RUNTIME_VISUAL_CAPTION = "Raw OpenSCENARIO + OpenDRIVE runtime view · world +x → left · world +y → down"
+WORKSPACE_PAGES = ("Workspace", "Advanced")
+WORKSPACE_PROVIDER = "mock"
+WORKSPACE_GENERATE_ICON = ":material/send:"
+WORKSPACE_REPAIR_ICON = ":material/build:"
+WORKSPACE_DESKTOP_HEIGHT = "clamp(720px, calc(100dvh - 6.5rem), 960px)"
+WORKSPACE_MEDIA_TITLES = ("Preview 2D Semantic", "Playback Esmini")
+
+
+def workspace_case_options() -> tuple[tuple[str, str], ...]:
+    return tuple((case.case_id, case.display_name) for case in DEMO_CASES)
 
 
 def main() -> None:
@@ -63,18 +91,237 @@ def main() -> None:
     _inject_css()
     _ensure_state()
 
-    st.markdown("## ScenarioCraft-Agent")
-    st.caption("Generated ScenarioSpec -> OpenSCENARIO -> 2D preview -> esmini playback/check -> validation report")
+    header = st.columns([0.68, 0.32], vertical_alignment="center")
+    with header[0]:
+        st.markdown("## ScenarioCraft")
+    with header[1]:
+        active_page = st.segmented_control(
+            "View",
+            WORKSPACE_PAGES,
+            default=st.session_state.active_page,
+            label_visibility="collapsed",
+            width="stretch",
+        )
+        st.session_state.active_page = active_page or "Workspace"
 
-    first_row = st.columns([0.34, 0.66], gap="large")
-    with first_row[0]:
-        _render_request_panel()
-    with first_row[1]:
-        _render_generated_brief_panel()
+    output_dir = Path(st.session_state.output_dir)
+    if st.session_state.active_page == "Advanced":
+        _render_advanced_page(output_dir)
+    else:
+        _render_workspace(output_dir)
 
-    _render_playback_tabs(Path(st.session_state.output_dir))
-    _render_validation_status_panel()
-    _render_advanced_artifacts(Path(st.session_state.output_dir))
+
+def _render_workspace(output_dir: Path) -> None:
+    workspace = st.columns([0.4, 0.6], gap="large", vertical_alignment="top")
+    with workspace[0]:
+        left_key = "workspace_left_repair" if build_workspace_repair_view_model(_prepared_case()).visible else "workspace_left_normal"
+        with st.container(key=left_key):
+            _render_workspace_request(output_dir)
+            _render_workspace_status()
+            _render_workspace_repair()
+            _render_workspace_brief()
+    with workspace[1]:
+        with st.container(key="workspace_right"):
+            _render_workspace_visuals(output_dir)
+
+
+def _render_workspace_request(output_dir: Path) -> None:
+    with st.container(border=True, key="workspace_request"):
+        st.markdown("### Scenario Request")
+        scenario_text = st.text_area(
+            "Request",
+            value=st.session_state.scenario_text,
+            height=118,
+            label_visibility="collapsed",
+            placeholder="Describe the scenario to generate...",
+        )
+        st.session_state.scenario_text = scenario_text
+        repair = build_workspace_repair_view_model(_prepared_case())
+        with st.container(key="workspace_toolbar"):
+            tools = st.columns(
+                [1.0, 0.12, 0.12] if repair.can_repair else [1.0, 0.12],
+                vertical_alignment="bottom",
+            )
+            with tools[0]:
+                case_ids = [case_id for case_id, _ in workspace_case_options()]
+                selected_case_id = st.selectbox(
+                    "Demo Case",
+                    case_ids,
+                    index=case_ids.index(st.session_state.selected_demo_case_id),
+                    format_func=lambda case_id: get_demo_case(case_id).display_name,
+                    label_visibility="collapsed",
+                )
+                st.session_state.selected_demo_case_id = selected_case_id
+            with tools[1]:
+                if st.button(
+                    "Generate",
+                    type="primary",
+                    icon=WORKSPACE_GENERATE_ICON,
+                    help="Generate selected scenario",
+                    key="workspace_generate",
+                    width="stretch",
+                ):
+                    _generate_selected_case(WORKSPACE_PROVIDER, selected_case_id)
+                    st.rerun()
+            if repair.can_repair:
+                with tools[2]:
+                    if st.button(
+                        "Repair",
+                        icon=WORKSPACE_REPAIR_ICON,
+                        help="Repair and revalidate scenario",
+                        key="workspace_repair",
+                        width="stretch",
+                    ):
+                        _execute_workspace_repair(output_dir)
+                        st.rerun()
+
+
+def _render_workspace_status() -> None:
+    with st.container(border=True, key="workspace_status"):
+        st.markdown("### Status")
+        status = build_workspace_status_view_model(
+            _current_spec(show_error=False),
+            prepared_case=_prepared_case(),
+            semantic_result=st.session_state.semantic_result,
+            qc_result=st.session_state.qc_result,
+            esmini_result=st.session_state.esmini_result,
+        )
+        items = "".join(
+            f'<div class="status-item status-{escape(item.state)}">'
+            f'<span class="status-label">{escape(item.label)}</span>'
+            f'<strong><i aria-hidden="true"></i>{escape(item.value)}</strong></div>'
+            for item in status.items
+        )
+        st.markdown(
+            f'<div class="workspace-status-grid" role="status">{items}</div>',
+            unsafe_allow_html=True,
+        )
+
+
+def _render_workspace_repair() -> None:
+    repair = build_workspace_repair_view_model(_prepared_case())
+    if not repair.visible:
+        return
+    with st.container(border=True, key="workspace_repair_panel"):
+        heading = "Artifact mismatch" if repair.detection_only else "Repair required"
+        st.markdown(f"### {heading}")
+        failures = "".join(
+            '<div class="repair-failure">'
+            f'<strong>{escape(failure.name)}</strong>'
+            f'<span>{escape(failure.message)}</span></div>'
+            for failure in repair.failures
+        )
+        st.markdown(f'<div class="repair-failure-list">{failures}</div>', unsafe_allow_html=True)
+        if repair.detection_only:
+            st.caption("Detection only · no provider or ScenarioSpec patch is allowed for this case.")
+        else:
+            st.caption(f"Provider · {repair.provider_name}")
+            if repair.suggested_operations:
+                operation_names = [str(item.get("op", "operation")) for item in repair.suggested_operations]
+                st.caption("Suggested operation · " + ", ".join(operation_names))
+        with st.expander("Evidence", expanded=False):
+            for failure in repair.failures:
+                st.markdown(f"**{failure.name}**")
+                st.json(failure.measured)
+
+
+def _render_workspace_brief() -> None:
+    with st.container(border=True, key="workspace_brief"):
+        st.markdown("### Scenario Brief")
+        vm = _generated_view_model()
+        if _current_spec(show_error=False) is None:
+            st.caption("Generate a scenario to see its semantic brief.")
+            return
+        st.markdown(f"**{vm.title}**")
+        metrics = st.columns(3)
+        metrics[0].metric("Ego", vm.ego_speed)
+        metrics[1].metric("Pedestrian", vm.pedestrian_speed)
+        metrics[2].metric("TTC", vm.estimated_ttc)
+        st.caption(f"{vm.road_summary} · {vm.weather_summary}")
+        st.caption(vm.trigger_summary)
+
+
+def _render_workspace_visuals(output_dir: Path) -> None:
+    with st.container(border=True, key="workspace_preview_panel"):
+        st.markdown(f"### {WORKSPACE_MEDIA_TITLES[0]}")
+        with st.container(key="workspace_preview_stage"):
+            spec = _current_spec(show_error=False)
+            if spec is None:
+                st.info("Generate a scenario to preview it.")
+            else:
+                preview_path = _ensure_preview(output_dir, spec)
+                if preview_path is not None and preview_path.exists():
+                    st.image(str(preview_path), width="stretch")
+                else:
+                    st.warning("Preview unavailable.")
+    with st.container(border=True, key="workspace_playback_panel"):
+        st.markdown(f"### {WORKSPACE_MEDIA_TITLES[1]}")
+        with st.container(key="workspace_playback_stage"):
+            _render_workspace_runtime_media(output_dir)
+
+
+def _render_workspace_runtime_media(output_dir: Path) -> None:
+    playback_result = st.session_state.playback_result
+    if not isinstance(playback_result, EsminiPlaybackResult):
+        st.info("Runtime media has not been generated.")
+        return
+    playback_path = Path(playback_result.playback_path) if playback_result.playback_path else None
+    if playback_result.media_quality_status == "corrupt":
+        st.warning("Verified runtime media is unavailable.")
+    elif playback_result.playback_kind == "esmini_gif" and _playback_generated_media_exists(playback_result, playback_path):
+        st.image(str(playback_path), width="stretch")
+    elif _should_render_frame_sequence(playback_result):
+        frames = _verified_esmini_frame_paths(playback_result, output_dir)
+        if frames:
+            selected = st.slider("Frame", 1, len(frames), 1, label_visibility="collapsed")
+            st.image(str(frames[selected - 1]), width="stretch")
+    elif playback_result.playback_kind == "esmini_single_frame":
+        frames = _verified_esmini_frame_paths(playback_result, output_dir)
+        if frames:
+            st.image(str(frames[0]), width="stretch")
+    elif playback_result.playback_kind in {"preview_fallback_gif", "preview_static_image"}:
+        st.info("2D Preview Fallback")
+    else:
+        st.info("Playback unavailable.")
+    st.caption(_playback_media_label(playback_result.playback_kind))
+
+
+def _render_advanced_page(output_dir: Path) -> None:
+    st.markdown("### Advanced")
+    columns = st.columns(2, gap="large", vertical_alignment="top")
+    with columns[0]:
+        with st.expander("ScenarioSpec JSON", expanded=True):
+            st.session_state.spec_json = st.text_area(
+                "ScenarioSpec JSON", st.session_state.spec_json, height=320, label_visibility="collapsed"
+            )
+        with st.expander("OpenSCENARIO XML", expanded=False):
+            _render_xml_panel(output_dir)
+        with st.expander("Repair / Experiment Trace", expanded=False):
+            trace = st.session_state.demo_experiment_trace
+            if isinstance(trace, DemoExperimentTraceViewModel):
+                _render_demo_experiment_trace(trace)
+            else:
+                st.info("No repair experiment trace.")
+    with columns[1]:
+        with st.expander("Semantic / Geometry Validation", expanded=True):
+            semantic_result = st.session_state.semantic_result
+            if isinstance(semantic_result, SemanticValidationResult):
+                st.json(semantic_result.to_dict())
+            prepared = _prepared_case()
+            if prepared is not None:
+                st.json([probe.to_dict() for probe in prepared.initial_geometry_probe_results])
+        with st.expander("ASAM QC", expanded=False):
+            qc_result = st.session_state.qc_result
+            st.json(qc_result.to_dict()) if isinstance(qc_result, AsamQcResult) else st.info("ASAM QC has not run.")
+        with st.expander("esmini / Media Provenance", expanded=False):
+            playback_result = st.session_state.playback_result
+            if isinstance(playback_result, EsminiPlaybackResult):
+                st.json(playback_result.to_dict())
+            else:
+                st.info("esmini playback has not run.")
+        with st.expander("Artifacts / Report", expanded=False):
+            st.caption(f"Output · `{output_dir}`")
+            st.text_area("validation_report.md", st.session_state.report_text, height=220, label_visibility="collapsed")
 
 
 def _render_request_panel() -> None:
@@ -493,6 +740,154 @@ def _render_validation_status_panel() -> None:
         st.info("Generate & Play to run validation.")
 
 
+def _render_demo_experiments(output_dir: Path) -> None:
+    with st.expander("Demo Mode: Validation and Repair Experiments", expanded=False):
+        spec = _current_spec(show_error=False)
+        case_ids = [case.case_id for case in DEMO_CASES]
+        selected_case_id = st.selectbox(
+            "Controlled case",
+            case_ids,
+            index=case_ids.index(st.session_state.selected_demo_case_id),
+            format_func=lambda case_id: get_demo_case(case_id).display_name,
+        )
+        st.session_state.selected_demo_case_id = selected_case_id
+        selected_case = get_demo_case(selected_case_id)
+        case_columns = st.columns(3)
+        case_columns[0].metric("Fault domain", selected_case.fault_domain)
+        case_columns[1].metric("Repair expectation", selected_case.repair_expectation)
+        case_columns[2].metric("Provider used", "Yes - Fake" if selected_case.uses_provider else "No")
+        st.caption(selected_case.description)
+        requested = st.button(
+            "Run Selected Demo",
+            disabled=spec is None,
+            key="run_selected_demo_experiment",
+        )
+        if spec is None:
+            st.info("Generate a layout-backed pedestrian_occlusion ScenarioSpec first.")
+        elif requested:
+            try:
+                experiment = _run_demo_experiment_if_requested(
+                    selected_case_id,
+                    spec,
+                    output_dir,
+                    requested=True,
+                )
+                if experiment is not None:
+                    _, trace = experiment
+                    st.session_state.demo_experiment_trace = trace
+                _info("Selected validation and repair experiment completed.")
+            except Exception as exc:
+                st.session_state.demo_experiment_trace = None
+                _error(f"Demo experiment failed: {exc}")
+
+        trace = st.session_state.demo_experiment_trace
+        if isinstance(trace, DemoExperimentTraceViewModel) and trace.case_id == selected_case_id:
+            _render_demo_experiment_trace(trace)
+        elif spec is not None:
+            st.info("The selected experiment has not been run for this generated scenario.")
+
+
+def _render_demo_experiment_trace(trace: DemoExperimentTraceViewModel) -> None:
+    st.markdown(f"#### {trace.display_name}")
+    st.caption(trace.description)
+
+    st.markdown("##### 1. Scenario / Fault Setup")
+    if trace.fault_domain == "none":
+        st.success(trace.setup_description)
+    elif trace.fault_domain == "geometry":
+        st.warning(trace.setup_description)
+    else:
+        st.error(trace.setup_description)
+    st.json(trace.setup_values)
+    if trace.injected_operations:
+        st.caption("Controlled ScenarioSpec injection PatchSpec")
+        st.json(list(trace.injected_operations))
+
+    st.markdown("##### 2. Initial Geometry Probe Result")
+    _render_repair_probe_results(trace.initial_geometry_results, show_failure_evidence=True)
+
+    st.markdown("##### 3. Provider Decision")
+    if trace.provider_name is not None:
+        st.caption(f"Provider: FakeRepairProvider (`{trace.provider_name}`)")
+    st.info(trace.provider_decision)
+
+    st.markdown("##### 4. PatchSpec Proposal")
+    if trace.proposed_operations:
+        st.json(list(trace.proposed_operations))
+    else:
+        st.info("No PatchSpec proposal.")
+
+    st.markdown("##### 5. Patch Application Result")
+    if trace.patch_applied:
+        st.success("Patch applied through deterministic apply_patch.")
+    elif trace.application_error:
+        st.error(trace.application_error)
+    else:
+        st.info("No ScenarioSpec patch was applied.")
+
+    st.markdown("##### 6. Geometry Revalidation")
+    _render_repair_probe_results(trace.final_geometry_results)
+
+    st.markdown("##### 7. Build and Artifact Validation")
+    _render_repair_probe_results(trace.artifact_results, show_failure_evidence=True)
+
+    st.markdown("##### 8. Terminal Status")
+    if trace.terminal_status == "passed":
+        st.success(f"{trace.terminal_status}: {trace.terminal_reason}")
+    else:
+        st.error(f"{trace.terminal_status}: {trace.terminal_reason}")
+
+    st.markdown("##### 9. Artifact Paths")
+    for path in trace.artifact_paths:
+        st.caption(f"`{path}`")
+    with st.expander("Diagnostic evidence", expanded=False):
+        st.json({
+            "setup_values": trace.setup_values,
+            "initial_failures": [
+                {"name": probe.name, "measured": probe.measured}
+                for probe in trace.initial_geometry_results
+                if not probe.passed
+            ],
+            "artifact_failures": [
+                {"name": probe.name, "measured": probe.measured}
+                for probe in trace.artifact_results
+                if not probe.passed
+            ],
+            "artifact_paths": list(trace.artifact_paths),
+        })
+
+
+def _render_repair_probe_results(
+    results: tuple[RepairProbeTraceViewModel, ...],
+    *,
+    show_failure_evidence: bool = False,
+) -> None:
+    if not results:
+        st.warning("No probe evidence was produced.")
+        return
+    for probe in results:
+        message = f"{probe.name}: {probe.message}"
+        if probe.passed:
+            st.success(message)
+        else:
+            st.error(message)
+            if show_failure_evidence:
+                st.json(probe.measured)
+
+
+def _run_demo_experiment_if_requested(
+    case_id: str,
+    spec: ScenarioSpec,
+    output_dir: Path,
+    *,
+    requested: bool,
+) -> tuple[DemoCaseExecution, DemoExperimentTraceViewModel] | None:
+    if not requested:
+        return None
+    execution = run_demo_case(case_id, spec, output_dir)
+    return execution, build_demo_experiment_trace_view_model(execution)
+
+
 def _render_external_scenario_studio(output_dir: Path) -> None:
     top_row = st.columns([0.34, 0.66], gap="large")
     with top_row[0]:
@@ -744,6 +1139,7 @@ def _render_advanced_artifacts(output_dir: Path) -> None:
 
 def _ensure_state() -> None:
     defaults = {
+        "active_page": "Workspace",
         "scenario_text": DEFAULT_SCENARIO_TEXT,
         "spec_json": "",
         "xosc_text": "",
@@ -756,6 +1152,11 @@ def _ensure_state() -> None:
         "esmini_result": None,
         "playback_result": None,
         "repair_history": [],
+        "selected_demo_case_id": DEMO_CASES[0].case_id,
+        "demo_experiment_trace": None,
+        "workspace_original_spec": None,
+        "workspace_prepared_case": None,
+        "workspace_execution": None,
         "output_root": str(DEFAULT_OUTPUT_ROOT),
         "output_dir": str(DEFAULT_OUTPUT_DIR),
         "external_root": str(DEFAULT_EXTERNAL_ROOT),
@@ -769,7 +1170,7 @@ def _ensure_state() -> None:
         "workflow_mode": "Generate from prompt",
         "loaded_xosc_path": "",
         "loaded_xosc_metadata": None,
-        "demo_mode": DEMO_MODES[0],
+        "demo_mode": "Normal good scenario",
         "run_esmini_check": False,
         "try_playback_video": True,
         "playback_mode": "full/playback attempt",
@@ -1192,6 +1593,66 @@ def _generate_and_play(provider_name: str, demo_mode: str) -> None:
     _info("Generated scenario, preview, playback/check, and validation report completed.")
 
 
+def _generate_selected_case(provider_name: str, case_id: str) -> None:
+    output_dir = _new_web_output_dir()
+    try:
+        canonical = _generator(provider_name).generate_spec(st.session_state.scenario_text)
+        prepared = prepare_demo_case(case_id, canonical, output_dir)
+    except Exception as exc:
+        _error(f"Scenario generation or case preparation failed: {exc}")
+        return
+
+    _set_spec(prepared.experiment_spec)
+    st.session_state.workspace_original_spec = prepared.original_spec
+    st.session_state.workspace_prepared_case = prepared
+    st.session_state.workspace_execution = None
+    try:
+        _build_xml(output_dir)
+        _run_semantics()
+        if prepared.case.fault_domain == "none":
+            _run_qc(output_dir)
+            _run_playback(output_dir)
+            _write_report(output_dir)
+        else:
+            st.session_state.qc_result = None
+            st.session_state.esmini_result = None
+            st.session_state.playback_result = None
+    except Exception as exc:
+        _error(f"Scenario preparation failed: {exc}")
+        return
+    _info(f"Prepared {prepared.case.display_name}.")
+
+
+def _execute_workspace_repair(output_dir: Path) -> DemoCaseExecution | None:
+    prepared = _prepared_case()
+    if prepared is None or not prepared.repair_required:
+        return None
+    try:
+        execution = execute_prepared_demo_case(prepared, output_dir)
+    except Exception as exc:
+        _error(f"Repair failed: {exc}")
+        return None
+
+    trace = build_demo_experiment_trace_view_model(execution)
+    st.session_state.workspace_execution = execution
+    st.session_state.demo_experiment_trace = trace
+    if execution.terminal_status == "passed" and execution.repair_run_result is not None:
+        _set_spec(execution.repair_run_result.final_spec)
+        st.session_state.workspace_execution = execution
+        st.session_state.demo_experiment_trace = trace
+        st.session_state.workspace_prepared_case = None
+        try:
+            _build_xml(output_dir)
+            _run_semantics()
+        except Exception as exc:
+            _error(f"Repair passed but refreshed artifacts failed: {exc}")
+            return execution
+        _info("Repair applied and geometry revalidated.")
+    else:
+        _error(execution.terminal_reason)
+    return execution
+
+
 def _new_web_output_dir() -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = Path(st.session_state.output_root) / timestamp
@@ -1301,7 +1762,14 @@ def _set_spec(spec: ScenarioSpec) -> None:
     st.session_state.semantic_result = None
     st.session_state.qc_result = None
     st.session_state.esmini_result = None
+    st.session_state.playback_result = None
     st.session_state.report_text = ""
+    st.session_state.demo_experiment_trace = None
+
+
+def _prepared_case() -> PreparedDemoCase | None:
+    prepared = st.session_state.workspace_prepared_case
+    return prepared if isinstance(prepared, PreparedDemoCase) else None
 
 
 def _build_xml(output_dir: Path) -> None:
@@ -1771,11 +2239,178 @@ def _playback_media_label(playback_kind: str) -> str:
 
 
 def _inject_css() -> None:
-    st.markdown(
-        """
+    css = """
         <style>
-        .block-container { padding-top: 1.6rem; }
-        textarea { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+        :root { --workspace-desktop-height: __WORKSPACE_DESKTOP_HEIGHT__; }
+        header[data-testid="stHeader"] { display: none; }
+        #MainMenu, [data-testid="stDeployButton"] { display: none; }
+        .block-container { max-width: 1680px; padding-top: 0.8rem; padding-bottom: 2rem; }
+        h2 { margin-bottom: 0.2rem; letter-spacing: 0; }
+        h3 { font-size: 1.02rem !important; margin: 0 0 0.65rem 0 !important; letter-spacing: 0; }
+        .st-key-workspace_left_normal,
+        .st-key-workspace_left_repair,
+        .st-key-workspace_right {
+            height: var(--workspace-desktop-height);
+            min-height: 0;
+        }
+        .st-key-workspace_left_normal,
+        .st-key-workspace_left_repair {
+            overflow-y: auto;
+            overflow-x: hidden;
+            scrollbar-gutter: stable;
+            padding-right: 0.18rem;
+        }
+        .st-key-workspace_left_normal > div,
+        .st-key-workspace_left_repair > div {
+            min-height: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        .st-key-workspace_left_normal .st-key-workspace_brief {
+            flex: 1 1 auto;
+            min-height: 12rem;
+        }
+        .st-key-workspace_left_normal .st-key-workspace_brief > div {
+            height: 100%;
+        }
+        .st-key-workspace_left_repair .st-key-workspace_repair_panel {
+            flex: 0 0 auto;
+            min-height: clamp(20rem, 42vh, 28rem);
+        }
+        .st-key-workspace_left_repair .st-key-workspace_brief {
+            flex: 0 0 auto;
+            min-height: 16rem;
+        }
+        .st-key-workspace_right > div {
+            height: 100%;
+            display: grid;
+            grid-template-rows: repeat(2, minmax(0, 1fr));
+            gap: 0.75rem;
+        }
+        .st-key-workspace_preview_panel,
+        .st-key-workspace_playback_panel {
+            min-height: 0;
+            overflow: hidden;
+        }
+        .st-key-workspace_preview_panel > div,
+        .st-key-workspace_playback_panel > div {
+            height: 100%;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 0.55rem;
+        }
+        .st-key-workspace_preview_stage,
+        .st-key-workspace_playback_stage {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow: auto;
+            display: flex;
+            align-items: center;
+        }
+        .st-key-workspace_preview_stage > div,
+        .st-key-workspace_playback_stage > div {
+            width: 100%;
+            min-height: 0;
+        }
+        .st-key-workspace_preview_stage [data-testid="stImage"],
+        .st-key-workspace_playback_stage [data-testid="stImage"] {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .st-key-workspace_preview_stage [data-testid="stImage"] img,
+        .st-key-workspace_playback_stage [data-testid="stImage"] img {
+            width: 100%;
+            height: 100%;
+            max-height: none;
+            object-fit: contain;
+        }
+        .st-key-workspace_playback_stage [data-testid="stVideo"] video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .st-key-workspace_toolbar [data-testid="stHorizontalBlock"] {
+            align-items: end;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .st-key-workspace_toolbar [data-testid="column"]:first-child {
+            flex: 1 1 10rem !important;
+            min-width: 10rem;
+        }
+        .st-key-workspace_toolbar [data-testid="column"]:not(:first-child) {
+            flex: 0 0 2.75rem !important;
+            width: 2.75rem !important;
+            min-width: 2.75rem;
+        }
+        .st-key-workspace_generate button,
+        .st-key-workspace_repair button {
+            width: 2.75rem;
+            min-width: 2.75rem;
+            height: 2.75rem;
+            min-height: 2.75rem;
+            padding: 0;
+        }
+        .st-key-workspace_generate button p,
+        .st-key-workspace_repair button p { font-size: 0; }
+        .st-key-workspace_generate button span,
+        .st-key-workspace_repair button span { font-size: 1.2rem; }
+        [data-testid="stVerticalBlockBorderWrapper"] {
+            border-color: #dfe3e8;
+            border-radius: 8px;
+            box-shadow: none;
+        }
+        [data-testid="stMetric"] { padding: 0; }
+        [data-testid="stMetricLabel"] { font-size: 0.72rem; }
+        [data-testid="stMetricValue"] { font-size: 1.15rem; }
+        [data-testid="stImage"] img { object-fit: contain; max-height: 390px; }
+        .st-key-workspace_status > div { padding-top: 0.1rem; padding-bottom: 0.1rem; }
+        .workspace-status-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            column-gap: 1rem;
+            row-gap: 0.6rem;
+            align-items: start;
+        }
+        .status-item { display: flex; flex-direction: column; gap: 0.24rem; min-width: 0; }
+        .status-label { color: #6b7280; font-size: 0.72rem; line-height: 1.15; white-space: nowrap; }
+        .status-item strong {
+            display: flex;
+            align-items: center;
+            gap: 0.38rem;
+            font-size: 0.9rem;
+            line-height: 1.15;
+            font-weight: 650;
+            white-space: nowrap;
+        }
+        .status-item strong i {
+            display: block;
+            flex: 0 0 auto;
+            width: 0.46rem;
+            height: 0.46rem;
+            border-radius: 50%;
+            background: #9ca3af;
+        }
+        .status-passed strong i { background: #16a34a; }
+        .status-failed strong i { background: #dc2626; }
+        .status-waiting strong i { background: #d97706; }
+        .repair-failure-list { display: grid; gap: 0.55rem; }
+        .repair-failure {
+            display: grid;
+            gap: 0.2rem;
+            padding: 0.7rem 0.8rem;
+            border: 1px solid color-mix(in srgb, #dc2626 28%, transparent);
+            border-radius: 6px;
+            background: color-mix(in srgb, #dc2626 8%, transparent);
+            color: #dc2626;
+            font-size: 0.82rem;
+            line-height: 1.35;
+        }
+        .repair-failure strong { font-size: 0.78rem; overflow-wrap: anywhere; }
         .status-ok, .status-error, .status-muted {
             border-radius: 8px;
             padding: 0.6rem 0.75rem;
@@ -1814,8 +2449,47 @@ def _inject_css() -> None:
         .vehicle-label { fill: white; font-size: 13px; font-weight: 700; }
         .label { fill: #0f172a; font-size: 12px; font-weight: 650; }
         .lane-label { fill: #f8fafc; font-size: 13px; font-weight: 650; opacity: 0.92; }
+        @media (max-width: 1100px) {
+            .workspace-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+        @media (max-width: 900px) {
+            .st-key-workspace_left_normal,
+            .st-key-workspace_left_repair,
+            .st-key-workspace_right {
+                height: auto;
+                min-height: 0;
+                overflow: visible;
+                padding-right: 0;
+            }
+            .st-key-workspace_left_normal > div,
+            .st-key-workspace_left_repair > div,
+            .st-key-workspace_right > div {
+                height: auto;
+                min-height: 0;
+                display: flex;
+                flex-direction: column;
+            }
+            .st-key-workspace_left_normal .st-key-workspace_brief,
+            .st-key-workspace_left_repair .st-key-workspace_repair_panel,
+            .st-key-workspace_left_repair .st-key-workspace_brief {
+                flex: 0 0 auto;
+                min-height: 0;
+            }
+            .st-key-workspace_preview_panel,
+            .st-key-workspace_playback_panel { min-height: 28rem; }
+            .st-key-workspace_preview_stage,
+            .st-key-workspace_playback_stage { min-height: 20rem; }
+        }
+        @media (max-width: 760px) {
+            .block-container { padding-left: 0.8rem; padding-right: 0.8rem; }
+            .st-key-workspace_toolbar [data-testid="column"]:first-child {
+                flex-basis: 100% !important;
+            }
+        }
         </style>
-        """,
+        """
+    st.markdown(
+        css.replace("__WORKSPACE_DESKTOP_HEIGHT__", WORKSPACE_DESKTOP_HEIGHT),
         unsafe_allow_html=True,
     )
 

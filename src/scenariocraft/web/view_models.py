@@ -3,10 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from scenariocraft.loop.types import RepairRunResult
 from scenariocraft.references import XoscMetadata
-from scenariocraft.schemas import ScenarioSpec
+from scenariocraft.schemas import PatchSpec, ProbeResult, ScenarioSpec
 from scenariocraft.tools import AsamQcResult, EsminiResult, estimate_ttc_s
 from scenariocraft.tools.semantic_validator import SemanticValidationResult
+from scenariocraft.web.demo_cases import DemoCaseExecution, PreparedDemoCase
 
 
 @dataclass(frozen=True)
@@ -55,6 +57,317 @@ class GeneratedScenarioViewModel:
     status_cards: list[StatusCardViewModel] = field(default_factory=list)
     diagnostics: list[str] = field(default_factory=list)
     recommendation: str = "Generate and validate the scenario."
+
+
+@dataclass(frozen=True)
+class WorkspaceStatusItemViewModel:
+    label: str
+    value: str
+    state: str
+
+
+@dataclass(frozen=True)
+class WorkspaceStatusViewModel:
+    items: tuple[WorkspaceStatusItemViewModel, ...]
+
+
+@dataclass(frozen=True)
+class WorkspaceRepairViewModel:
+    visible: bool
+    detection_only: bool
+    provider_name: str | None
+    failures: tuple[RepairProbeTraceViewModel, ...]
+    suggested_operations: tuple[dict[str, object], ...]
+    can_repair: bool
+
+
+def build_workspace_status_view_model(
+    spec: ScenarioSpec | None,
+    *,
+    prepared_case: PreparedDemoCase | None = None,
+    semantic_result: SemanticValidationResult | None = None,
+    qc_result: AsamQcResult | None = None,
+    esmini_result: EsminiResult | None = None,
+) -> WorkspaceStatusViewModel:
+    generated = spec is not None
+    if prepared_case is not None:
+        validation_failed = bool(
+            prepared_case.geometry_failures or prepared_case.artifact_failures
+        )
+        validation_value = "Failed" if validation_failed else "Passed"
+        validation_state = "failed" if validation_failed else "passed"
+    elif semantic_result is not None:
+        validation_value = "Passed" if semantic_result.passed else "Failed"
+        validation_state = "passed" if semantic_result.passed else "failed"
+    else:
+        validation_value = "Waiting" if generated else "Not run"
+        validation_state = "waiting" if generated else "neutral"
+    return WorkspaceStatusViewModel(items=(
+        WorkspaceStatusItemViewModel(
+            "ScenarioSpec",
+            "Generated" if generated else "Not run",
+            "passed" if generated else "neutral",
+        ),
+        WorkspaceStatusItemViewModel("Validation", validation_value, validation_state),
+        WorkspaceStatusItemViewModel(
+            "ASAM QC",
+            _workspace_qc_value(qc_result, generated),
+            _workspace_qc_state(qc_result, generated),
+        ),
+        WorkspaceStatusItemViewModel(
+            "esmini",
+            _workspace_esmini_value(esmini_result, generated),
+            _workspace_esmini_state(esmini_result, generated),
+        ),
+    ))
+
+
+def build_workspace_repair_view_model(
+    prepared_case: PreparedDemoCase | None,
+) -> WorkspaceRepairViewModel:
+    if prepared_case is None:
+        return WorkspaceRepairViewModel(False, False, None, (), (), False)
+    failures = prepared_case.geometry_failures or prepared_case.artifact_failures
+    if not failures:
+        return WorkspaceRepairViewModel(False, False, None, (), (), False)
+    suggestions: list[dict[str, object]] = []
+    for result in failures:
+        suggestions.extend(dict(operation) for operation in result.suggested_operations)
+    detection_only = prepared_case.detection_only
+    return WorkspaceRepairViewModel(
+        visible=True,
+        detection_only=detection_only,
+        provider_name=None if detection_only else "FakeRepairProvider",
+        failures=tuple(_repair_probe_view_model(result) for result in failures),
+        suggested_operations=tuple(suggestions),
+        can_repair=prepared_case.repair_required,
+    )
+
+
+def workspace_section_ids(repair: WorkspaceRepairViewModel) -> tuple[str, ...]:
+    sections = ["request", "status"]
+    if repair.visible:
+        sections.append("repair")
+    sections.append("brief")
+    return tuple(sections)
+
+
+def _workspace_qc_value(result: AsamQcResult | None, generated: bool) -> str:
+    if result is None:
+        return "Waiting" if generated else "Not run"
+    if not result.checker_available:
+        return "Unavailable"
+    return "Passed" if result.passed else "Failed"
+
+
+def _workspace_qc_state(result: AsamQcResult | None, generated: bool) -> str:
+    value = _workspace_qc_value(result, generated)
+    return {
+        "Passed": "passed",
+        "Failed": "failed",
+        "Unavailable": "waiting",
+        "Waiting": "waiting",
+    }.get(value, "neutral")
+
+
+def _workspace_esmini_value(result: EsminiResult | None, generated: bool) -> str:
+    if result is None:
+        return "Waiting" if generated else "Not run"
+    if not result.esmini_available:
+        return "Unavailable"
+    if result.executed:
+        return "Passed"
+    return "Failed" if result.executed is False else "Waiting"
+
+
+def _workspace_esmini_state(result: EsminiResult | None, generated: bool) -> str:
+    value = _workspace_esmini_value(result, generated)
+    return {
+        "Passed": "passed",
+        "Failed": "failed",
+        "Unavailable": "waiting",
+        "Waiting": "waiting",
+    }.get(value, "neutral")
+
+
+@dataclass(frozen=True)
+class RepairProbeTraceViewModel:
+    name: str
+    passed: bool
+    severity: str
+    message: str
+    measured: dict[str, object]
+
+
+@dataclass(frozen=True)
+class RepairRoundTraceViewModel:
+    round_index: int
+    provider_name: str
+    provider_rationale: str
+    proposed_operations: tuple[dict[str, object], ...]
+    patch_applied: bool
+    application_error: str | None
+
+
+@dataclass(frozen=True)
+class RepairTraceViewModel:
+    fault_description: str
+    injected_operations: tuple[dict[str, object], ...]
+    initial_failures: tuple[RepairProbeTraceViewModel, ...]
+    rounds: tuple[RepairRoundTraceViewModel, ...]
+    final_geometry_results: tuple[RepairProbeTraceViewModel, ...]
+    final_artifact_results: tuple[RepairProbeTraceViewModel, ...]
+    geometry_revalidated: bool
+    artifacts_consistent: bool
+    terminal_status: str
+    terminal_reason: str
+    artifact_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DemoExperimentTraceViewModel:
+    case_id: str
+    display_name: str
+    description: str
+    fault_domain: str
+    repair_expectation: str
+    provider_will_be_used: bool
+    setup_description: str
+    setup_values: dict[str, object]
+    injected_operations: tuple[dict[str, object], ...]
+    initial_geometry_results: tuple[RepairProbeTraceViewModel, ...]
+    initial_geometry_passed: bool
+    provider_decision: str
+    provider_name: str | None
+    provider_rationale: str
+    proposed_operations: tuple[dict[str, object], ...]
+    patch_applied: bool
+    application_error: str | None
+    final_geometry_results: tuple[RepairProbeTraceViewModel, ...]
+    geometry_revalidated: bool
+    artifact_results: tuple[RepairProbeTraceViewModel, ...]
+    artifacts_consistent: bool
+    terminal_status: str
+    terminal_reason: str
+    artifact_paths: tuple[str, ...]
+
+
+def build_demo_experiment_trace_view_model(
+    execution: DemoCaseExecution,
+) -> DemoExperimentTraceViewModel:
+    initial_geometry = tuple(
+        _repair_probe_view_model(probe)
+        for probe in execution.initial_geometry_probe_results
+    )
+    final_geometry = tuple(
+        _repair_probe_view_model(probe)
+        for probe in execution.final_geometry_probe_results
+    )
+    artifact_results = tuple(
+        _repair_probe_view_model(probe)
+        for probe in execution.artifact_probe_results
+    )
+    return DemoExperimentTraceViewModel(
+        case_id=execution.case.case_id,
+        display_name=execution.case.display_name,
+        description=execution.case.description,
+        fault_domain=execution.case.fault_domain,
+        repair_expectation=execution.case.repair_expectation,
+        provider_will_be_used=execution.case.uses_provider,
+        setup_description=execution.setup_description,
+        setup_values=dict(execution.setup_values),
+        injected_operations=tuple(
+            operation.to_dict()
+            for operation in (
+                execution.injected_patch.operations
+                if execution.injected_patch is not None
+                else ()
+            )
+        ),
+        initial_geometry_results=initial_geometry,
+        initial_geometry_passed=bool(initial_geometry) and all(probe.passed for probe in initial_geometry),
+        provider_decision=execution.provider_rationale,
+        provider_name=execution.provider_name,
+        provider_rationale=execution.provider_rationale,
+        proposed_operations=tuple(
+            operation.to_dict()
+            for operation in (
+                execution.proposed_patch.operations
+                if execution.proposed_patch is not None
+                else ()
+            )
+        ),
+        patch_applied=execution.patch_applied,
+        application_error=execution.application_error,
+        final_geometry_results=final_geometry,
+        geometry_revalidated=bool(final_geometry) and all(probe.passed for probe in final_geometry),
+        artifact_results=artifact_results,
+        artifacts_consistent=bool(artifact_results) and all(probe.passed for probe in artifact_results),
+        terminal_status=execution.terminal_status,
+        terminal_reason=execution.terminal_reason,
+        artifact_paths=tuple(str(path) for path in execution.artifact_paths),
+    )
+
+
+def build_repair_trace_view_model(
+    result: RepairRunResult,
+    *,
+    fault_description: str,
+    injected_patch: PatchSpec,
+) -> RepairTraceViewModel:
+    first_round_results = result.rounds[0].input_probe_results if result.rounds else ()
+    initial_failures = tuple(_repair_probe_view_model(probe) for probe in first_round_results if not probe.passed)
+    rounds = tuple(
+        RepairRoundTraceViewModel(
+            round_index=round_trace.round_index,
+            provider_name=round_trace.provider_name,
+            provider_rationale=round_trace.proposal_rationale,
+            proposed_operations=tuple(
+                operation.to_dict()
+                for operation in (
+                    round_trace.proposed_patch.operations
+                    if round_trace.proposed_patch is not None
+                    else ()
+                )
+            ),
+            patch_applied=round_trace.patch_applied,
+            application_error=round_trace.application_error,
+        )
+        for round_trace in result.rounds
+    )
+    geometry_results = tuple(
+        _repair_probe_view_model(probe) for probe in result.final_geometry_probe_results
+    )
+    artifact_results = tuple(
+        _repair_probe_view_model(probe) for probe in result.final_artifact_probe_results
+    )
+    return RepairTraceViewModel(
+        fault_description=fault_description,
+        injected_operations=tuple(
+            operation.to_dict() for operation in injected_patch.operations
+        ),
+        initial_failures=initial_failures,
+        rounds=rounds,
+        final_geometry_results=geometry_results,
+        final_artifact_results=artifact_results,
+        geometry_revalidated=bool(geometry_results) and all(probe.passed for probe in geometry_results),
+        artifacts_consistent=bool(artifact_results) and all(probe.passed for probe in artifact_results),
+        terminal_status=result.terminal_status,
+        terminal_reason=result.terminal_reason,
+        artifact_paths=tuple(
+            str(path) for path in (result.xosc_path, result.xodr_path) if path is not None
+        ),
+    )
+
+
+def _repair_probe_view_model(probe: ProbeResult) -> RepairProbeTraceViewModel:
+    return RepairProbeTraceViewModel(
+        name=probe.name,
+        passed=probe.passed,
+        severity=probe.severity,
+        message=probe.message,
+        measured=dict(probe.measured),
+    )
 
 
 def build_external_scenario_view_model(
