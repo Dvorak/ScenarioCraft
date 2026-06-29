@@ -13,6 +13,7 @@ from scenariocraft.schemas import (
     RoadBandSpec,
     ScenarioSpec,
 )
+from scenariocraft.tools.timing_metrics import compute_timing_metrics
 
 # Tight tolerances for canonical template geometry expressed directly in ScenarioSpec.layout.
 POSITION_TOLERANCE_M = 1e-6
@@ -44,6 +45,110 @@ def run_pedestrian_occlusion_probes(spec: ScenarioSpec) -> tuple[ProbeResult, ..
         _PedestrianOcclusionProbe("trigger_point_before_conflict_and_in_ego_lane", _trigger_point_before_conflict_and_in_ego_lane),
     )
     return run_probes(spec, probes)
+
+
+def run_pedestrian_occlusion_timing_probes(spec: ScenarioSpec) -> tuple[ProbeResult, ...]:
+    if spec.scenario_type != "pedestrian_occlusion":
+        return ()
+    probes = (
+        _PedestrianOcclusionProbe("ego_lead_time_to_conflict_positive", _ego_lead_time_to_conflict_positive),
+        _PedestrianOcclusionProbe("ego_lead_time_within_timing_policy", _ego_lead_time_within_timing_policy),
+        _PedestrianOcclusionProbe("pedestrian_time_to_conflict_computable", _pedestrian_time_to_conflict_computable),
+        _PedestrianOcclusionProbe("pedestrian_conflict_timing_alignment", _pedestrian_conflict_timing_alignment),
+        _PedestrianOcclusionProbe("trigger_threshold_time_not_ttc", _trigger_threshold_time_not_ttc),
+    )
+    return run_probes(spec, probes)
+
+
+def _ego_lead_time_to_conflict_positive(spec: ScenarioSpec) -> ProbeResult:
+    metrics = compute_timing_metrics(spec)
+    lead_time_s = metrics.ego_lead_time_to_conflict_s
+    passed = lead_time_s is not None and lead_time_s > 0.0
+    required_lead_s = _minimum_required_lead_time_s(spec)
+    return _result(
+        name="ego_lead_time_to_conflict_positive",
+        passed=passed,
+        pass_message="Ego lead time from trigger point to conflict point is positive.",
+        failure_message="Ego lead time from trigger point to conflict point is unavailable or not positive.",
+        measured={
+            **_timing_measured(spec),
+            "required_minimum_lead_time_s": required_lead_s,
+        },
+        suggested_operations=_trigger_point_suggestion(spec, required_lead_s),
+    )
+
+
+def _ego_lead_time_within_timing_policy(spec: ScenarioSpec) -> ProbeResult:
+    metrics = compute_timing_metrics(spec)
+    lead_time_s = metrics.ego_lead_time_to_conflict_s
+    required_lead_s = _minimum_required_lead_time_s(spec)
+    passed = lead_time_s is not None and lead_time_s >= required_lead_s
+    return _result(
+        name="ego_lead_time_within_timing_policy",
+        passed=passed,
+        pass_message="Ego lead time satisfies the minimum semantic timing policy.",
+        failure_message="Ego lead time is unavailable or shorter than the minimum semantic timing policy.",
+        measured={
+            **_timing_measured(spec),
+            "required_minimum_lead_time_s": required_lead_s,
+            "lead_time_margin_s": None if lead_time_s is None else lead_time_s - required_lead_s,
+        },
+        suggested_operations=_trigger_point_suggestion(spec, required_lead_s),
+    )
+
+
+def _pedestrian_time_to_conflict_computable(spec: ScenarioSpec) -> ProbeResult:
+    metrics = compute_timing_metrics(spec)
+    passed = metrics.pedestrian_time_to_conflict_s is not None and metrics.pedestrian_time_to_conflict_s >= 0.0
+    return _result(
+        name="pedestrian_time_to_conflict_computable",
+        passed=passed,
+        pass_message="Pedestrian time to conflict is computable from path and speed.",
+        failure_message="Pedestrian time to conflict is unavailable from path or speed.",
+        measured=_timing_measured(spec),
+    )
+
+
+def _pedestrian_conflict_timing_alignment(spec: ScenarioSpec) -> ProbeResult:
+    metrics = compute_timing_metrics(spec)
+    lead_time_s = metrics.ego_lead_time_to_conflict_s
+    pedestrian_time_s = metrics.pedestrian_time_to_conflict_s
+    target_ttc_s = metrics.target_ttc_s
+    available_time_s = None if lead_time_s is None or target_ttc_s is None else lead_time_s + target_ttc_s
+    timing_margin_s = None if available_time_s is None or pedestrian_time_s is None else available_time_s - pedestrian_time_s
+    passed = timing_margin_s is not None and timing_margin_s >= 0.0
+    required_lead_s = _minimum_required_lead_time_s(spec)
+    if pedestrian_time_s is not None and target_ttc_s is not None:
+        required_lead_s = max(required_lead_s, pedestrian_time_s - target_ttc_s)
+    return _result(
+        name="pedestrian_conflict_timing_alignment",
+        passed=passed,
+        pass_message="Pedestrian conflict timing is aligned with ego lead time and target TTC.",
+        failure_message="Pedestrian conflict timing is not aligned with ego lead time and target TTC.",
+        measured={
+            **_timing_measured(spec),
+            "ego_available_time_with_target_ttc_s": available_time_s,
+            "timing_margin_s": timing_margin_s,
+            "required_minimum_lead_time_s": required_lead_s,
+        },
+        suggested_operations=_trigger_point_suggestion(spec, required_lead_s),
+    )
+
+
+def _trigger_threshold_time_not_ttc(spec: ScenarioSpec) -> ProbeResult:
+    metrics = compute_timing_metrics(spec)
+    passed = metrics.trigger_threshold_time_s is not None and metrics.target_ttc_s is not None
+    return _result(
+        name="trigger_threshold_time_not_ttc",
+        passed=passed,
+        pass_message="Trigger threshold time and target TTC are reported as distinct timing metrics.",
+        failure_message="Trigger threshold time or target TTC is unavailable for distinct timing reporting.",
+        measured={
+            **_timing_measured(spec),
+            "target_ttc_metric_label": "target_ttc_s",
+            "trigger_threshold_metric_label": "trigger_threshold_time_s",
+        },
+    )
 
 
 def _ego_footprint_in_ego_lane(spec: ScenarioSpec) -> ProbeResult:
@@ -268,6 +373,58 @@ def _result(
         measured=measured,
         suggested_operations=() if passed else suggested_operations,
     )
+
+
+def _timing_measured(spec: ScenarioSpec) -> dict[str, object]:
+    metrics = compute_timing_metrics(spec)
+    measured: dict[str, object] = {
+        "target_ttc_s": metrics.target_ttc_s,
+        "trigger_threshold_time_s": metrics.trigger_threshold_time_s,
+        "ego_lead_time_to_conflict_s": metrics.ego_lead_time_to_conflict_s,
+        "pedestrian_time_to_conflict_s": metrics.pedestrian_time_to_conflict_s,
+    }
+    if spec.layout is not None:
+        trigger = spec.layout.points.get("trigger_point")
+        conflict = spec.layout.points.get("conflict_point")
+        if trigger is not None:
+            measured["trigger_point"] = {"x_m": trigger.x_m, "y_m": trigger.y_m}
+        if conflict is not None:
+            measured["conflict_point"] = {"x_m": conflict.x_m, "y_m": conflict.y_m}
+    return measured
+
+
+def _minimum_required_lead_time_s(spec: ScenarioSpec) -> float:
+    metrics = compute_timing_metrics(spec)
+    candidates = [metrics.target_ttc_s or 0.0]
+    if spec.timing is not None:
+        candidates.append(spec.timing.minimum_pre_trigger_context_s)
+    return max(candidates)
+
+
+def _trigger_point_suggestion(spec: ScenarioSpec, lead_time_s: float) -> tuple[dict[str, object], ...]:
+    if spec.layout is None:
+        return ()
+    ego_speed_mps = _ego_speed_mps(spec)
+    if ego_speed_mps is None:
+        return ()
+    trigger = spec.layout.points.get("trigger_point")
+    conflict = spec.layout.points.get("conflict_point")
+    if trigger is None or conflict is None:
+        return ()
+    return ({
+        "op": "set_named_point",
+        "point_id": "trigger_point",
+        "x_m": conflict.x_m - ego_speed_mps * lead_time_s,
+        "y_m": trigger.y_m,
+    },)
+
+
+def _ego_speed_mps(spec: ScenarioSpec) -> float | None:
+    ego = spec.actor_by_id(spec.trigger.source)
+    if ego is None or ego.initial_speed_kph is None:
+        return None
+    speed_mps = ego.initial_speed_kph / 3.6
+    return speed_mps if speed_mps > 0 else None
 
 
 def _require_layout(spec: ScenarioSpec) -> LayoutSpec:

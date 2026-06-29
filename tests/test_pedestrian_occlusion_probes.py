@@ -1,7 +1,7 @@
 from dataclasses import replace
 
 from scenariocraft.generators import MockScenarioGenerator
-from scenariocraft.probes import run_pedestrian_occlusion_probes
+from scenariocraft.probes import run_pedestrian_occlusion_probes, run_pedestrian_occlusion_timing_probes
 from scenariocraft.schemas import PathSpec, Point2D, Pose2D
 
 EXPECTED_PROBE_NAMES = [
@@ -14,6 +14,14 @@ EXPECTED_PROBE_NAMES = [
     "pedestrian_line_of_sight_occluded_by_van",
     "conflict_point_on_path_and_in_ego_lane",
     "trigger_point_before_conflict_and_in_ego_lane",
+]
+
+EXPECTED_TIMING_PROBE_NAMES = [
+    "ego_lead_time_to_conflict_positive",
+    "ego_lead_time_within_timing_policy",
+    "pedestrian_time_to_conflict_computable",
+    "pedestrian_conflict_timing_alignment",
+    "trigger_threshold_time_not_ttc",
 ]
 
 
@@ -33,10 +41,40 @@ def test_layout_free_spec_returns_no_template_aware_probes() -> None:
     assert run_pedestrian_occlusion_probes(spec) == ()
 
 
+def test_layout_free_spec_returns_timing_unavailable_evidence_without_crashing() -> None:
+    spec = replace(_canonical_spec(), layout=None, spatial_relations=())
+
+    results = run_pedestrian_occlusion_timing_probes(spec)
+
+    assert [result.name for result in results] == EXPECTED_TIMING_PROBE_NAMES
+    assert not next(result for result in results if result.name == "ego_lead_time_to_conflict_positive").passed
+    assert not next(result for result in results if result.name == "pedestrian_time_to_conflict_computable").passed
+    threshold = next(result for result in results if result.name == "trigger_threshold_time_not_ttc")
+    assert threshold.passed is True
+    assert threshold.measured["ego_lead_time_to_conflict_s"] is None
+    assert threshold.measured["pedestrian_time_to_conflict_s"] is None
+
+
 def test_unsupported_scenario_type_returns_no_template_aware_probes() -> None:
     spec = replace(_canonical_spec(), scenario_type="cut_in")
 
     assert run_pedestrian_occlusion_probes(spec) == ()
+    assert run_pedestrian_occlusion_timing_probes(spec) == ()
+
+
+def test_canonical_pedestrian_occlusion_timing_probes_all_pass() -> None:
+    spec = _canonical_spec()
+
+    results = run_pedestrian_occlusion_timing_probes(spec)
+
+    assert [result.name for result in results] == EXPECTED_TIMING_PROBE_NAMES
+    assert all(result.passed for result in results)
+    lead_probe = next(result for result in results if result.name == "ego_lead_time_within_timing_policy")
+    assert lead_probe.measured["target_ttc_s"] == 1.5
+    assert lead_probe.measured["trigger_threshold_time_s"] > 0
+    assert lead_probe.measured["ego_lead_time_to_conflict_s"] > 0
+    assert lead_probe.measured["pedestrian_time_to_conflict_s"] > 0
+    assert lead_probe.suggested_operations == ()
 
 
 def test_van_shifted_outside_parking_strip_fails_parking_probe() -> None:
@@ -136,6 +174,41 @@ def test_trigger_after_conflict_fails_trigger_probe() -> None:
     assert result.measured["longitudinal_gap_m"] == -5.0
     assert result.measured["trigger_inside_ego_lane"] is True
     assert result.suggested_operations[0]["point_id"] == "trigger_point"
+
+
+def test_trigger_after_conflict_fails_timing_probes_with_patch_hints() -> None:
+    canonical = _canonical_spec()
+    assert canonical.layout is not None
+    conflict_x = canonical.layout.points["conflict_point"].x_m
+    spec = _with_point("trigger_point", Point2D(conflict_x + 5.0, 0.0))
+
+    results = run_pedestrian_occlusion_timing_probes(spec)
+    failures = {result.name: result for result in results if not result.passed}
+
+    assert "ego_lead_time_to_conflict_positive" in failures
+    assert "ego_lead_time_within_timing_policy" in failures
+    assert "pedestrian_conflict_timing_alignment" in failures
+    assert failures["ego_lead_time_to_conflict_positive"].measured["ego_lead_time_to_conflict_s"] < 0
+    operation = failures["ego_lead_time_to_conflict_positive"].suggested_operations[0]
+    assert operation["op"] == "set_named_point"
+    assert operation["point_id"] == "trigger_point"
+    assert operation["x_m"] < conflict_x
+
+
+def test_too_short_positive_lead_time_fails_timing_policy_and_alignment() -> None:
+    canonical = _canonical_spec()
+    assert canonical.layout is not None
+    conflict = canonical.layout.points["conflict_point"]
+    spec = _with_point("trigger_point", Point2D(conflict.x_m - 0.5, conflict.y_m))
+
+    results = run_pedestrian_occlusion_timing_probes(spec)
+    by_name = {result.name: result for result in results}
+
+    assert by_name["ego_lead_time_to_conflict_positive"].passed is True
+    assert by_name["ego_lead_time_within_timing_policy"].passed is False
+    assert by_name["pedestrian_conflict_timing_alignment"].passed is False
+    assert by_name["ego_lead_time_within_timing_policy"].measured["lead_time_margin_s"] < 0
+    assert by_name["ego_lead_time_within_timing_policy"].suggested_operations[0]["op"] == "set_named_point"
 
 
 def test_path_start_mismatch_fails_start_probe() -> None:
