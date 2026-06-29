@@ -1,20 +1,27 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 from datetime import datetime
-from html import escape
 from pathlib import Path
 
 import streamlit as st
 
-from scenariocraft.generators import MockScenarioGenerator, ScenarioGenerator
-from scenariocraft.schemas import (
-    ActorSpec,
-    CriticalitySpec,
-    ScenarioSpec,
-    TriggerSpec,
+from scenariocraft.application import (
+    ScenarioWorkflowOptions,
+    ScenarioWorkflowRequest,
+    ScenarioWorkflowResult,
+    run_generated_scenario_workflow,
 )
+from scenariocraft.application.demo_cases import (
+    DEMO_CASES,
+    DemoCaseExecution,
+    PreparedDemoCase,
+    execute_prepared_demo_case,
+    get_demo_case,
+    prepare_demo_case,
+    run_demo_case,
+)
+from scenariocraft.schemas import ScenarioSpec
 from scenariocraft.tools import (
     AsamQcResult,
     BuildResult,
@@ -30,32 +37,15 @@ from scenariocraft.tools import (
 from scenariocraft.tools.semantic_validator import SemanticValidationResult
 from scenariocraft.web.actions import run_runtime_probes_for_generated_scenario, write_generated_validation_report
 from scenariocraft.web.advanced_view import render_advanced_page
-from scenariocraft.web.demo_cases import (
-    DEMO_CASES,
-    DemoCaseExecution,
-    PreparedDemoCase,
-    execute_prepared_demo_case,
-    get_demo_case,
-    prepare_demo_case,
-    run_demo_case,
-)
-from scenariocraft.web.external_view import (
-    render_external_scenario_studio,
-    render_loaded_playback_panel,
-)
 from scenariocraft.web.media_view import (
     _frame_sequence_state,
     _playback_media_label,
     _should_render_frame_sequence,
     _verified_esmini_frame_paths,
-    render_playback_panel,
-    render_workspace_runtime_media,
 )
 from scenariocraft.web.state import (
     CRITICALITY_MAX_TTC_S,
-    DEFAULT_OUTPUT_DIR,
     DEFAULT_OUTPUT_ROOT,
-    DEFAULT_SCENARIO_TEXT,
     PREVIEW_VISUAL_CAPTION,
     RUNTIME_VISUAL_CAPTION,
     WEB_PREVIEW_DISPLAY_ORIENTATION,
@@ -75,7 +65,6 @@ from scenariocraft.web.view_models import (
     DemoExperimentTraceViewModel,
     GeneratedScenarioViewModel,
     RepairProbeTraceViewModel,
-    StatusCardViewModel,
     build_demo_experiment_trace_view_model,
     build_generated_scenario_view_model,
 )
@@ -141,182 +130,6 @@ def _render_advanced_page(output_dir: Path) -> None:
         render_demo_trace=_render_demo_experiment_trace,
         demo_trace=st.session_state.demo_experiment_trace,
     )
-
-
-def _render_request_panel() -> None:
-    st.markdown("### Scenario Request")
-
-    scenario_text = st.text_area("Request", value=st.session_state.scenario_text, height=145, label_visibility="collapsed")
-    st.session_state.scenario_text = scenario_text
-    provider_name = st.selectbox("Provider", ["mock"], index=0)
-    demo_mode = st.selectbox("Demo Mode", DEMO_MODES, index=DEMO_MODES.index(st.session_state.demo_mode))
-    st.session_state.demo_mode = demo_mode
-
-    status = _status_label()
-    st.markdown(status, unsafe_allow_html=True)
-
-    actions = st.columns(2)
-    with actions[0]:
-        if st.button("Generate & Play", type="primary", width="stretch"):
-            _generate_and_play(provider_name, demo_mode)
-    with actions[1]:
-        if _needs_repair():
-            if st.button("Repair Scenario", width="stretch"):
-                _repair_current_scenario(output_dir=Path(st.session_state.output_dir))
-        else:
-            st.button("Repair Scenario", disabled=True, width="stretch")
-
-    with st.expander("Advanced settings", expanded=False):
-        output_root = Path(st.text_input("Output root", st.session_state.output_root))
-        st.session_state.output_root = str(output_root)
-        try_video = st.checkbox("Try to generate playback video", value=st.session_state.try_playback_video)
-        st.session_state.try_playback_video = try_video
-        playback_mode = st.selectbox(
-            "esmini mode",
-            ["full/playback attempt", "smoke check"],
-            index=["full/playback attempt", "smoke check"].index(st.session_state.playback_mode),
-        )
-        st.session_state.playback_mode = playback_mode
-        require_esmini = st.checkbox("Require esmini", value=st.session_state.require_esmini)
-        st.session_state.require_esmini = require_esmini
-        esmini_timeout = st.number_input(
-            "esmini timeout",
-            min_value=1.0,
-            max_value=120.0,
-            value=st.session_state.playback_timeout,
-            step=1.0,
-        )
-        st.session_state.playback_timeout = float(esmini_timeout)
-        sim_duration = st.number_input(
-            "sim duration",
-            min_value=0.5,
-            max_value=30.0,
-            value=st.session_state.esmini_sim_duration,
-            step=0.5,
-        )
-        st.session_state.esmini_sim_duration = float(sim_duration)
-        esmini_bin = st.text_input("esmini binary", value=st.session_state.esmini_bin)
-        st.session_state.esmini_bin = esmini_bin
-    st.caption(f"Artifacts: `{st.session_state.output_dir}`")
-
-
-def _render_generated_brief_panel() -> None:
-    st.markdown("### Scenario Brief")
-    vm = _generated_view_model()
-    if _current_spec(show_error=False) is None:
-        st.info(vm.road_summary)
-        return
-    st.markdown(f"#### {vm.title}")
-    st.caption(vm.scenario_type)
-    cols = st.columns(4)
-    cols[0].metric("Ego speed", vm.ego_speed)
-    cols[1].metric("Pedestrian", vm.pedestrian_speed)
-    cols[2].metric("Target TTC", vm.target_ttc)
-    cols[3].metric("Lead Time", vm.ego_lead_time)
-    st.markdown(f"**Road**: {vm.road_summary}")
-    st.markdown(f"**Weather**: {vm.weather_summary}")
-    st.markdown(f"**Trigger**: {vm.trigger_summary}")
-    st.markdown(f"**Trigger threshold**: {vm.trigger_threshold_time}")
-    st.markdown(f"**Pedestrian to conflict**: {vm.pedestrian_time_to_conflict}")
-    st.markdown(f"**Criticality**: {vm.criticality_summary}")
-    if vm.actor_summary:
-        st.caption("Actors: " + ", ".join(f"`{actor}`" for actor in vm.actor_summary))
-    _render_status_cards(vm.status_cards)
-    if vm.recommendation == "Use as generated demo":
-        st.success(vm.recommendation)
-    else:
-        st.info(vm.recommendation)
-    for item in vm.diagnostics:
-        st.caption(item)
-
-
-def _render_playback_tabs(output_dir: Path) -> None:
-    st.markdown("### Visual Comparison")
-    preview_col, playback_col = st.columns(2, gap="large")
-    with preview_col:
-        st.markdown("#### 2D Semantic Preview")
-        st.caption(PREVIEW_VISUAL_CAPTION)
-        spec = _current_spec(show_error=False)
-        if spec is None:
-            st.info("Generate a mock ScenarioSpec to see the deterministic 2D preview.")
-        else:
-            preview_path = _ensure_preview(output_dir, spec)
-            if preview_path is not None and preview_path.exists():
-                st.image(str(preview_path), width="stretch", caption="2D Semantic Preview")
-            else:
-                st.warning("2D preview could not be generated.")
-    with playback_col:
-        st.markdown("#### esmini Runtime Playback")
-        st.caption(RUNTIME_VISUAL_CAPTION)
-        _render_playback_panel(output_dir)
-
-
-def _render_playback_panel(output_dir: Path) -> None:
-    render_playback_panel(
-        output_dir,
-        build_result=st.session_state.build_result,
-        playback_result=st.session_state.playback_result,
-        run_playback=_run_playback,
-    )
-
-
-def _render_validation_status_panel() -> None:
-    st.markdown("### Validation Status")
-    vm = _generated_view_model()
-    _render_status_cards(vm.status_cards)
-    if _needs_repair():
-        st.warning(_failure_summary())
-    elif isinstance(st.session_state.semantic_result, SemanticValidationResult) and st.session_state.semantic_result.passed:
-        st.success("Generated scenario validation passed.")
-    else:
-        st.info("Generate & Play to run validation.")
-
-
-def _render_demo_experiments(output_dir: Path) -> None:
-    with st.expander("Demo Mode: Validation and Repair Experiments", expanded=False):
-        spec = _current_spec(show_error=False)
-        case_ids = [case.case_id for case in DEMO_CASES]
-        selected_case_id = st.selectbox(
-            "Controlled case",
-            case_ids,
-            index=case_ids.index(st.session_state.selected_demo_case_id),
-            format_func=lambda case_id: get_demo_case(case_id).display_name,
-        )
-        st.session_state.selected_demo_case_id = selected_case_id
-        selected_case = get_demo_case(selected_case_id)
-        case_columns = st.columns(3)
-        case_columns[0].metric("Fault domain", selected_case.fault_domain)
-        case_columns[1].metric("Repair expectation", selected_case.repair_expectation)
-        case_columns[2].metric("Provider used", "Yes - Fake" if selected_case.uses_provider else "No")
-        st.caption(selected_case.description)
-        requested = st.button(
-            "Run Selected Demo",
-            disabled=spec is None,
-            key="run_selected_demo_experiment",
-        )
-        if spec is None:
-            st.info("Generate a layout-backed pedestrian_occlusion ScenarioSpec first.")
-        elif requested:
-            try:
-                experiment = _run_demo_experiment_if_requested(
-                    selected_case_id,
-                    spec,
-                    output_dir,
-                    requested=True,
-                )
-                if experiment is not None:
-                    _, trace = experiment
-                    st.session_state.demo_experiment_trace = trace
-                _info("Selected validation and repair experiment completed.")
-            except Exception as exc:
-                st.session_state.demo_experiment_trace = None
-                _error(f"Demo experiment failed: {exc}")
-
-        trace = st.session_state.demo_experiment_trace
-        if isinstance(trace, DemoExperimentTraceViewModel) and trace.case_id == selected_case_id:
-            _render_demo_experiment_trace(trace)
-        elif spec is not None:
-            st.info("The selected experiment has not been run for this generated scenario.")
 
 
 def _render_demo_experiment_trace(trace: DemoExperimentTraceViewModel) -> None:
@@ -420,10 +233,6 @@ def _run_demo_experiment_if_requested(
     return execution, build_demo_experiment_trace_view_model(execution)
 
 
-def _render_external_scenario_studio(output_dir: Path) -> None:
-    render_external_scenario_studio(output_dir)
-
-
 def _render_xml_panel(output_dir: Path) -> None:
     st.markdown("### Generated OpenSCENARIO XML")
     xml_value = st.text_area("OpenSCENARIO XML", value=st.session_state.xosc_text, height=365, label_visibility="collapsed")
@@ -451,172 +260,74 @@ def _render_xml_panel(output_dir: Path) -> None:
         )
 
 
-def _render_preview_panel() -> None:
-    st.markdown("### Playback / 2D Preview")
-    if _is_load_mode():
-        render_loaded_playback_panel()
-        return
-    spec = _current_spec(show_error=False)
-    if spec is None:
-        st.info("Generate a ScenarioSpec to see the 2D preview.")
-        return
-    preview_tab, esmini_tab = st.tabs(["2D Preview", "esmini Check"])
-    with preview_tab:
-        preview_path = _ensure_preview(Path(st.session_state.output_dir), spec)
-        if preview_path is not None and preview_path.exists():
-            st.image(str(preview_path), width="stretch")
-        else:
-            st.warning("2D preview could not be generated.")
-        vm = _generated_view_model()
-        metric_cols = st.columns(4)
-        metric_cols[0].metric("Ego Speed", vm.ego_speed)
-        metric_cols[1].metric("Trigger Dist", f"{spec.trigger.distance_m:g} m")
-        metric_cols[2].metric("Ped Speed", vm.pedestrian_speed)
-        metric_cols[3].metric("Lead Time", vm.ego_lead_time)
-        st.caption(f"{vm.trigger_threshold_summary} · Target TTC: {vm.target_ttc}")
-        _render_status_label()
-    with esmini_tab:
-        st.caption("Optional esmini execution/load check. MP4/GIF rendering is not implemented yet.")
-        if st.button("Run esmini Check", width="stretch"):
-            _run_esmini(
-                Path(st.session_state.output_dir),
-                require_esmini=st.session_state.require_esmini,
-                esmini_bin=st.session_state.esmini_bin or None,
-                timeout_s=st.session_state.esmini_timeout,
-            )
-        esmini_result = st.session_state.esmini_result
-        if isinstance(esmini_result, EsminiResult):
-            st.json(esmini_result.to_dict())
-        else:
-            st.info("esmini has not run.")
-
-
-def _render_advanced_artifacts(output_dir: Path) -> None:
-    st.markdown("### Advanced")
-    with st.expander("ScenarioSpec JSON", expanded=False):
-        spec_json = st.text_area("ScenarioSpec JSON", value=st.session_state.spec_json, height=320, label_visibility="collapsed")
-        st.session_state.spec_json = spec_json
-    with st.expander("OpenSCENARIO XML", expanded=False):
-        _render_xml_panel(output_dir)
-    with st.expander("Semantic validation", expanded=False):
-        semantic_result = st.session_state.semantic_result
-        if isinstance(semantic_result, SemanticValidationResult):
-            st.json(semantic_result.to_dict())
-        else:
-            st.info("Semantic validation has not run.")
-    with st.expander("ASAM QC report", expanded=False):
-        qc_result = st.session_state.qc_result
-        if isinstance(qc_result, AsamQcResult):
-            st.json(qc_result.to_dict())
-        else:
-            st.info("ASAM QC has not run.")
-    with st.expander("esmini log", expanded=False):
-        playback_result = st.session_state.playback_result
-        if isinstance(playback_result, EsminiPlaybackResult):
-            st.json(playback_result.to_dict())
-            playback_json = output_dir / "esmini_playback_result.json"
-            if playback_json.exists():
-                st.text_area("esmini_playback_result.json", playback_json.read_text(encoding="utf-8"), height=180, label_visibility="collapsed")
-        esmini_result = st.session_state.esmini_result
-        if isinstance(esmini_result, EsminiResult):
-            st.json(esmini_result.to_dict())
-            for name in ("esmini_log.txt", "esmini_stdout.txt", "esmini_stderr.txt", "esmini_help.txt"):
-                log_path = output_dir / name
-                if log_path.exists():
-                    st.text_area(name, log_path.read_text(encoding="utf-8"), height=180, label_visibility="collapsed")
-        else:
-            st.info("esmini has not run.")
-    with st.expander("Generated artifact paths", expanded=False):
-        for artifact in [
-            "input.txt",
-            "scenario_spec.json",
-            "scenario.xosc",
-            "preview_2d.png",
-            "playback.mp4",
-            "playback.gif",
-            "esmini_result.json",
-            "esmini_playback_result.json",
-            "validation_report.md",
-        ]:
-            path = output_dir / artifact
-            st.caption(f"{artifact}: `{path}`" + (" exists" if path.exists() else ""))
-    with st.expander("repair history", expanded=False):
-        if st.session_state.repair_history:
-            st.json(st.session_state.repair_history)
-        else:
-            st.info("No repairs recorded.")
-    with st.expander("validation_report.md", expanded=False):
-        st.text_area("validation_report.md", st.session_state.report_text, height=320, label_visibility="collapsed")
-
-
 def _ensure_state() -> None:
     ensure_session_state()
-
-
-def _generator(provider_name: str) -> ScenarioGenerator:
-    if provider_name == "mock":
-        return MockScenarioGenerator()
-    raise ValueError(f"Unsupported provider: {provider_name}")
 
 
 def _is_load_mode() -> bool:
     return st.session_state.workflow_mode == "Load existing .xosc"
 
 
-def _generate_and_run(provider_name: str, demo_mode: str) -> None:
-    _generate_spec(provider_name, st.session_state.scenario_text, demo_mode)
-    _run_pipeline(
-        Path(st.session_state.output_dir),
-        st.session_state.run_esmini_check,
-        st.session_state.require_esmini,
-        st.session_state.esmini_bin or None,
-        st.session_state.esmini_timeout,
-    )
-
-
-def _generate_and_play(provider_name: str, demo_mode: str) -> None:
-    output_dir = _new_web_output_dir()
-    _generate_spec(provider_name, st.session_state.scenario_text, demo_mode)
-    _run_pipeline(
-        output_dir,
-        run_esmini_check=False,
-        require_esmini=st.session_state.require_esmini,
-        esmini_bin=st.session_state.esmini_bin or None,
-        esmini_timeout=st.session_state.playback_timeout,
-    )
-    _run_playback(output_dir)
-    _write_report(output_dir)
-    _info("Generated scenario, preview, playback/check, and validation report completed.")
-
-
 def _generate_selected_case(provider_name: str, case_id: str) -> None:
     output_dir = _new_web_output_dir()
     try:
-        canonical = _generator(provider_name).generate_spec(st.session_state.scenario_text)
-        prepared = prepare_demo_case(case_id, canonical, output_dir)
+        result = run_generated_scenario_workflow(
+            ScenarioWorkflowRequest(
+                scenario_text=st.session_state.scenario_text,
+                output_dir=output_dir,
+                provider_name=provider_name,
+                demo_case_id=case_id,
+                options=ScenarioWorkflowOptions(
+                    run_preview=True,
+                    run_semantics=True,
+                    run_geometry_probes=True,
+                    run_artifact_probes=False,
+                    run_runtime_probes=True,
+                    run_report=True,
+                    run_asam_qc=True,
+                    run_esmini=False,
+                    run_playback=True,
+                    require_esmini=st.session_state.require_esmini,
+                    esmini_bin=st.session_state.esmini_bin or None,
+                    playback_timeout_s=st.session_state.playback_timeout,
+                    esmini_sim_duration_s=st.session_state.esmini_sim_duration,
+                    try_playback_video=st.session_state.try_playback_video,
+                    playback_mode="smoke"
+                    if st.session_state.playback_mode == "smoke check"
+                    else "playback",
+                    preview_display_orientation=WEB_PREVIEW_DISPLAY_ORIENTATION,
+                    preview_presentation_style=WEB_PREVIEW_PRESENTATION_STYLE,
+                    stop_optional_integrations_when_demo_repair_required=True,
+                ),
+            )
+        )
     except Exception as exc:
         _error(f"Scenario generation or case preparation failed: {exc}")
         return
 
-    _set_spec(prepared.experiment_spec)
-    st.session_state.workspace_original_spec = prepared.original_spec
-    st.session_state.workspace_prepared_case = prepared
+    _apply_workflow_result(result)
+    prepared = result.prepared_case
+    display_name = prepared.case.display_name if isinstance(prepared, PreparedDemoCase) else result.spec.scenario_name
+    _info(f"Prepared {display_name}.")
+
+
+def _apply_workflow_result(result: ScenarioWorkflowResult) -> None:
+    _set_spec(result.spec)
+    st.session_state.output_dir = str(result.artifacts.output_dir)
+    st.session_state.workspace_original_spec = result.original_spec
+    st.session_state.workspace_prepared_case = (
+        result.prepared_case if isinstance(result.prepared_case, PreparedDemoCase) else None
+    )
     st.session_state.workspace_execution = None
-    try:
-        _build_xml(output_dir)
-        _run_semantics()
-        if prepared.case.fault_domain == "none":
-            _run_qc(output_dir)
-            _run_playback(output_dir)
-            _write_report(output_dir)
-        else:
-            st.session_state.qc_result = None
-            st.session_state.esmini_result = None
-            st.session_state.playback_result = None
-    except Exception as exc:
-        _error(f"Scenario preparation failed: {exc}")
-        return
-    _info(f"Prepared {prepared.case.display_name}.")
+    st.session_state.build_result = result.build_result
+    st.session_state.xosc_text = result.xosc_text
+    st.session_state.preview_path = str(result.artifacts.preview_path or "")
+    st.session_state.semantic_result = result.semantic_result
+    st.session_state.qc_result = result.qc_result
+    st.session_state.esmini_result = result.esmini_result
+    st.session_state.playback_result = result.playback_result
+    st.session_state.runtime_probe_results = result.runtime_probe_results
+    st.session_state.report_text = result.report_text
 
 
 def _execute_workspace_repair(output_dir: Path) -> DemoCaseExecution | None:
@@ -654,90 +365,6 @@ def _new_web_output_dir() -> Path:
     output_dir = Path(st.session_state.output_root) / timestamp
     st.session_state.output_dir = str(output_dir)
     return output_dir
-
-
-def _run_playback(output_dir: Path) -> None:
-    build_result = _ensure_build_result(output_dir)
-    _write_current_xml_if_present(build_result)
-    mode = "smoke" if st.session_state.playback_mode == "smoke check" else "playback"
-    playback_result = run_esmini_playback(
-        build_result.xosc_path,
-        output_dir,
-        working_dir=build_result.xosc_path.parent,
-        binary=st.session_state.esmini_bin or None,
-        timeout_s=st.session_state.playback_timeout,
-        sim_duration_s=st.session_state.esmini_sim_duration,
-        try_video=st.session_state.try_playback_video,
-        mode=mode,
-    )
-    st.session_state.playback_result = playback_result
-    esmini_json = output_dir / "esmini_result.json"
-    if esmini_json.exists():
-        try:
-            st.session_state.esmini_result = EsminiResult(**json.loads(esmini_json.read_text(encoding="utf-8")))
-        except (TypeError, json.JSONDecodeError):
-            st.session_state.esmini_result = None
-    _run_runtime_probes(output_dir)
-    _info("esmini playback/check completed." if playback_result.esmini_available else "esmini playback/check skipped.")
-
-
-def _generate_spec(provider_name: str, scenario_text: str, demo_mode: str) -> None:
-    try:
-        spec = _apply_demo_mode(_generator(provider_name).generate_spec(scenario_text), demo_mode)
-    except Exception as exc:
-        _error(f"ScenarioSpec generation failed: {exc}")
-        return
-    _set_spec(spec)
-    _info(f"ScenarioSpec generated: {demo_mode}.")
-
-
-def _apply_demo_mode(spec: ScenarioSpec, demo_mode: str) -> ScenarioSpec:
-    if demo_mode == "Missing pedestrian":
-        return replace(
-            spec,
-            actors=[actor for actor in spec.actors if actor.role != "crossing_actor"],
-            metadata={**spec.metadata, "demo_mode": demo_mode},
-        )
-    if demo_mode == "Low criticality":
-        return replace(
-            spec,
-            trigger=TriggerSpec(
-                type=spec.trigger.type,
-                source=spec.trigger.source,
-                target=spec.trigger.target,
-                distance_m=60,
-            ),
-            intended_criticality=CriticalitySpec(type="non_critical", target_min_ttc_s=6),
-            metadata={**spec.metadata, "demo_mode": demo_mode},
-        )
-    return replace(spec, metadata={**spec.metadata, "demo_mode": demo_mode})
-
-
-def _run_pipeline(
-    output_dir: Path,
-    run_esmini_check: bool,
-    require_esmini: bool,
-    esmini_bin: str | None,
-    esmini_timeout: float,
-) -> None:
-    if _current_spec() is None:
-        _error("Generate a ScenarioSpec before running the pipeline.")
-        return
-    try:
-        _build_xml(output_dir)
-        _generate_preview(output_dir)
-        _run_semantics()
-        _run_qc(output_dir)
-        if run_esmini_check:
-            _run_esmini(output_dir, require_esmini=require_esmini, esmini_bin=esmini_bin, timeout_s=esmini_timeout)
-        else:
-            st.session_state.esmini_result = _missing_esmini_result(_ensure_build_result(output_dir).xosc_path)
-        _run_runtime_probes(output_dir)
-        _write_report(output_dir)
-        _write_repair_history(output_dir)
-        _info("Pipeline run completed.")
-    except Exception as exc:
-        _error(f"Pipeline run failed: {exc}")
 
 
 def _current_spec(show_error: bool = True) -> ScenarioSpec | None:
@@ -941,76 +568,6 @@ def _missing_esmini_result(xosc_path: Path) -> EsminiResult:
     )
 
 
-def _repair_current_scenario(output_dir: Path) -> None:
-    spec = _current_spec()
-    if spec is None:
-        return
-    repaired = _repair_spec(spec)
-    st.session_state.repair_history.append({
-        "round": len(st.session_state.repair_history) + 1,
-        "previous_demo_mode": spec.metadata.get("demo_mode", "unknown"),
-        "changes": _repair_summary(spec, repaired),
-    })
-    _set_spec(repaired)
-    _write_repair_history(output_dir)
-    _run_pipeline(
-        output_dir,
-        st.session_state.run_esmini_check,
-        st.session_state.require_esmini,
-        st.session_state.esmini_bin or None,
-        st.session_state.esmini_timeout,
-    )
-
-
-def _repair_spec(spec: ScenarioSpec) -> ScenarioSpec:
-    actors = list(spec.actors)
-    if spec.actor_by_role("crossing_actor") is None:
-        actors.append(ActorSpec(id="pedestrian", type="pedestrian", role="crossing_actor", speed_mps=1.5))
-    repaired_trigger = spec.trigger
-    if spec.trigger.distance_m > 30:
-        repaired_trigger = TriggerSpec(
-            type=spec.trigger.type,
-            source=spec.trigger.source,
-            target=spec.trigger.target,
-            distance_m=18,
-        )
-    repaired_criticality = spec.intended_criticality
-    if _criticality_too_low(spec):
-        repaired_criticality = CriticalitySpec(type="near_miss", target_min_ttc_s=1.5)
-    return replace(
-        spec,
-        actors=actors,
-        trigger=repaired_trigger,
-        intended_criticality=repaired_criticality,
-        metadata={**spec.metadata, "demo_mode": "Normal good scenario", "repaired": True},
-    )
-
-
-def _repair_summary(previous: ScenarioSpec, repaired: ScenarioSpec) -> list[str]:
-    changes: list[str] = []
-    if previous.actor_by_role("crossing_actor") is None and repaired.actor_by_role("crossing_actor") is not None:
-        changes.append("Added pedestrian crossing actor.")
-    if previous.trigger.distance_m != repaired.trigger.distance_m:
-        changes.append(f"Changed trigger distance from {previous.trigger.distance_m:g} m to {repaired.trigger.distance_m:g} m.")
-    if previous.intended_criticality.target_min_ttc_s != repaired.intended_criticality.target_min_ttc_s:
-        changes.append(
-            "Changed target TTC from "
-            f"{previous.intended_criticality.target_min_ttc_s:g} s to "
-            f"{repaired.intended_criticality.target_min_ttc_s:g} s."
-        )
-    return changes or ["No deterministic repair was needed."]
-
-
-def _write_repair_history(output_dir: Path) -> None:
-    if not st.session_state.repair_history:
-        return
-    output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "repair_history.json").write_text(
-        json.dumps(st.session_state.repair_history, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-
-
 def _needs_repair() -> bool:
     spec = _current_spec(show_error=False)
     if spec is None:
@@ -1039,15 +596,6 @@ def _failure_summary() -> str:
     return " ".join(failures)
 
 
-def _render_status_label() -> None:
-    if _needs_repair():
-        st.error(f"Needs repair: {_failure_summary()}")
-    elif st.session_state.semantic_result and st.session_state.semantic_result.passed:
-        st.success("Executable")
-    else:
-        st.warning("Validation warning: semantic validation has not run.")
-
-
 def _generated_view_model() -> GeneratedScenarioViewModel:
     semantic_result = st.session_state.semantic_result if isinstance(st.session_state.semantic_result, SemanticValidationResult) else None
     return build_generated_scenario_view_model(
@@ -1058,23 +606,6 @@ def _generated_view_model() -> GeneratedScenarioViewModel:
         needs_repair=_needs_repair(),
         failure_summary=_failure_summary() if _current_spec(show_error=False) is not None else "",
     )
-
-
-def _render_status_cards(status_cards: list[StatusCardViewModel]) -> None:
-    if not status_cards:
-        return
-    cards = st.columns(min(len(status_cards), 4))
-    for column, card in zip(cards, status_cards):
-        column.metric(card.label, card.value)
-        column.caption(card.detail)
-
-
-def _status_label() -> str:
-    if st.session_state.last_error:
-        return f'<div class="status-error">{escape(st.session_state.last_error)}</div>'
-    if st.session_state.last_info:
-        return f'<div class="status-ok">{escape(st.session_state.last_info)}</div>'
-    return '<div class="status-muted">Ready</div>'
 
 
 def _info(message: str) -> None:

@@ -7,7 +7,8 @@ import pytest
 from scenariocraft.generators import MockScenarioGenerator
 from scenariocraft.probes import run_pedestrian_occlusion_timing_probes
 from scenariocraft.repair.providers import FakeRepairProvider
-from scenariocraft.web.demo_cases import DEMO_CASES, get_demo_case, prepare_demo_case, run_demo_case
+from scenariocraft.application.demo_cases import DEMO_CASES, get_demo_case, prepare_demo_case, run_demo_case
+from scenariocraft.web import demo_cases as web_demo_cases
 
 
 EXPECTED_CASE_IDS = {
@@ -28,6 +29,11 @@ def test_demo_case_registry_contains_exactly_the_required_cases() -> None:
         "detection_only",
     }
     assert get_demo_case("normal_good_scenario").display_name == "Normal Good Scenario"
+
+
+def test_web_demo_case_module_is_compatibility_shim() -> None:
+    assert web_demo_cases.DEMO_CASES is DEMO_CASES
+    assert web_demo_cases.get_demo_case("normal_good_scenario") is get_demo_case("normal_good_scenario")
 
 
 def test_normal_case_passes_without_mutation_or_provider_request(
@@ -85,6 +91,10 @@ def test_van_case_fails_then_repairs_with_fake_provider(tmp_path: Path) -> None:
     assert all(probe.passed for probe in result.artifact_probe_results)
     assert result.terminal_status == "passed"
     assert spec.to_json() == original_json
+    orchestrator_path = tmp_path / "demo_experiments" / "geometry_van_in_ego_lane" / "orchestrator_result.json"
+    assert orchestrator_path.exists()
+    assert result.repair_run_result is not None
+    assert result.repair_run_result.terminal_status == "passed"
 
 
 def test_trigger_case_fails_then_repairs_with_fake_provider(tmp_path: Path) -> None:

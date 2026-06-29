@@ -7,6 +7,11 @@ from streamlit.testing.v1 import AppTest
 from scenariocraft.generators import MockScenarioGenerator
 from scenariocraft.repair.providers import FakeRepairProvider
 from scenariocraft.tools import AsamQcResult, EsminiResult
+from scenariocraft.application.demo_cases import (
+    DEMO_CASES,
+    execute_prepared_demo_case,
+    prepare_demo_case,
+)
 from scenariocraft.web.app import (
     WORKSPACE_DESKTOP_HEIGHT,
     WORKSPACE_GENERATE_ICON,
@@ -17,11 +22,6 @@ from scenariocraft.web.app import (
     WORKSPACE_REPAIR_ICON,
     WEB_PREVIEW_PRESENTATION_STYLE,
     workspace_case_options,
-)
-from scenariocraft.web.demo_cases import (
-    DEMO_CASES,
-    execute_prepared_demo_case,
-    prepare_demo_case,
 )
 from scenariocraft.web.view_models import (
     build_generated_scenario_view_model,
@@ -56,6 +56,28 @@ def test_workspace_is_default_and_has_one_demo_case_selector() -> None:
     assert "### Playback Esmini" in markdown
     assert "### 2D Semantic Preview" not in markdown
     assert "### esmini Runtime Playback" not in markdown
+
+
+def test_web_app_removes_legacy_generated_pipeline_helpers() -> None:
+    source = Path("src/scenariocraft/web/app.py").read_text(encoding="utf-8")
+
+    for helper_name in (
+        "_generate_and_run",
+        "_generate_and_play",
+        "_apply_demo_mode",
+        "_run_pipeline",
+        "_repair_current_scenario",
+        "_repair_spec",
+        "_repair_summary",
+        "_write_repair_history",
+    ):
+        assert f"def {helper_name}" not in source
+    callback = source[
+        source.index("def _generate_selected_case") : source.index("def _apply_workflow_result")
+    ]
+    assert "run_generated_scenario_workflow" in callback
+    for legacy_call in ("_build_xml(", "_run_qc(", "_run_playback(", "_write_report(", "_run_pipeline("):
+        assert legacy_call not in callback
 
 
 def test_advanced_page_retains_diagnostic_artifact_sections() -> None:

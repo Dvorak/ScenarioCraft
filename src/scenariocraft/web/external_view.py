@@ -6,8 +6,14 @@ from pathlib import Path
 
 import streamlit as st
 
+from scenariocraft.application import (
+    ExternalScenarioWorkflowOptions,
+    ExternalScenarioWorkflowRequest,
+    ExternalScenarioWorkflowResult,
+    run_external_scenario_workflow,
+)
 from scenariocraft.references import ReferenceScenarioOption, XoscMetadata, discover_external_scenarios, extract_xosc_metadata
-from scenariocraft.tools import AsamQcResult, BuildResult, EsminiResult, run_asam_qc, run_esmini
+from scenariocraft.tools import AsamQcResult, BuildResult, EsminiResult
 from scenariocraft.web.state import (
     CURATED_REFERENCE_EXAMPLES_PATH,
     RECOMMENDED_EXAMPLE_FILES,
@@ -586,23 +592,25 @@ def _run_loaded_xosc_checks(output_dir: Path) -> None:
         build_result = st.session_state.build_result
     if not isinstance(build_result, BuildResult):
         return
-    xosc_path = build_result.xosc_path
-    st.session_state.loaded_xosc_metadata = extract_xosc_metadata(xosc_path)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    qc_result = run_asam_qc(xosc_path, output_dir)
-    esmini_result = run_esmini(
-        xosc_path,
-        output_dir,
-        working_dir=xosc_path.parent,
-        required=st.session_state.require_esmini,
-        binary=st.session_state.esmini_bin or None,
-        timeout_s=st.session_state.esmini_timeout,
-        mode=st.session_state.external_esmini_mode,
-        sim_duration_s=st.session_state.esmini_sim_duration,
+    result = run_external_scenario_workflow(
+        ExternalScenarioWorkflowRequest(
+            xosc_path=build_result.xosc_path,
+            output_dir=output_dir,
+            source=st.session_state.loaded_xosc_source,
+            relative_path=st.session_state.loaded_xosc_relative_path,
+            options=ExternalScenarioWorkflowOptions(
+                run_asam_qc=True,
+                run_esmini=True,
+                run_report=True,
+                require_esmini=st.session_state.require_esmini,
+                esmini_bin=st.session_state.esmini_bin or None,
+                esmini_timeout_s=st.session_state.esmini_timeout,
+                esmini_mode=st.session_state.external_esmini_mode,
+                esmini_sim_duration_s=st.session_state.esmini_sim_duration,
+            ),
+        )
     )
-    st.session_state.qc_result = qc_result
-    st.session_state.esmini_result = esmini_result
-    _write_loaded_xosc_report(output_dir, xosc_path, _current_metadata(), qc_result, esmini_result)
+    _apply_external_workflow_result(result)
     _info("External OpenSCENARIO checks completed.")
 
 
@@ -613,17 +621,38 @@ def _run_loaded_qc_only(output_dir: Path) -> None:
         build_result = st.session_state.build_result
     if not isinstance(build_result, BuildResult):
         return
-    xosc_path = build_result.xosc_path
-    st.session_state.loaded_xosc_metadata = extract_xosc_metadata(xosc_path)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    qc_result = run_asam_qc(xosc_path, output_dir)
-    esmini_result = st.session_state.esmini_result
-    if not isinstance(esmini_result, EsminiResult):
-        esmini_result = _missing_esmini_result(xosc_path)
-    st.session_state.qc_result = qc_result
-    st.session_state.esmini_result = esmini_result
-    _write_loaded_xosc_report(output_dir, xosc_path, _current_metadata(), qc_result, esmini_result)
-    _info("ASAM QC completed." if qc_result.checker_available else "ASAM QC skipped.")
+    result = run_external_scenario_workflow(
+        ExternalScenarioWorkflowRequest(
+            xosc_path=build_result.xosc_path,
+            output_dir=output_dir,
+            source=st.session_state.loaded_xosc_source,
+            relative_path=st.session_state.loaded_xosc_relative_path,
+            options=ExternalScenarioWorkflowOptions(
+                run_asam_qc=True,
+                run_esmini=False,
+                run_report=True,
+            ),
+        )
+    )
+    _apply_external_workflow_result(result)
+    qc_result = result.qc_result
+    _info("ASAM QC completed." if isinstance(qc_result, AsamQcResult) and qc_result.checker_available else "ASAM QC skipped.")
+
+
+def _apply_external_workflow_result(result: ExternalScenarioWorkflowResult) -> None:
+    st.session_state.loaded_xosc_path = str(result.xosc_path)
+    st.session_state.loaded_xosc_working_dir = str(result.working_dir)
+    st.session_state.loaded_xosc_metadata = result.metadata
+    st.session_state.xosc_text = result.xosc_text
+    st.session_state.spec_json = ""
+    st.session_state.spec = None
+    st.session_state.build_result = result.build_result
+    st.session_state.preview_path = ""
+    st.session_state.semantic_result = None
+    st.session_state.qc_result = result.qc_result
+    st.session_state.esmini_result = result.esmini_result
+    st.session_state.playback_result = None
+    st.session_state.report_text = result.report_text
 
 
 def _write_loaded_xosc_report(
