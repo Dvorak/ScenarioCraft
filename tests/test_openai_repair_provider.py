@@ -54,6 +54,13 @@ def test_request_contains_only_structured_repair_context_and_guardrails() -> Non
     assert payload["failed_probe_results"] == [request.failed_probe_results[0].to_dict()]
     assert payload["allowed_operation_types"] == ["reposition_actor_to_band"]
     assert set(payload["allowed_operation_contract"]) == {"reposition_actor_to_band"}
+    assert payload["repair_authority"] == {
+        "provider_role": "proposal_only",
+        "output_contract": "PatchSpec JSON or refusal",
+        "success_authority": "deterministic probes/build/runtime evidence",
+        "may_mutate_xml": False,
+        "may_claim_repair_success": False,
+    }
     assert "raw OpenSCENARIO XML" in system_prompt
     assert "raw OpenDRIVE XML" in system_prompt
     assert "claims that the repair is successful" in system_prompt

@@ -192,6 +192,13 @@ class OpenAIRepairProvider:
             "failed_probe_results": [result.to_dict() for result in request.failed_probe_results],
             "allowed_operation_types": list(request.allowed_operation_types),
             "allowed_operation_contract": allowed_contract,
+            "repair_authority": {
+                "provider_role": "proposal_only",
+                "output_contract": "PatchSpec JSON or refusal",
+                "success_authority": "deterministic probes/build/runtime evidence",
+                "may_mutate_xml": False,
+                "may_claim_repair_success": False,
+            },
         }
 
     @staticmethod
