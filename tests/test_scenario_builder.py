@@ -4,7 +4,19 @@ from xml.etree import ElementTree as ET
 
 from scenariocraft.generators import MockScenarioGenerator
 from scenariocraft.roads import URBAN_TWO_WAY_PARKING_FILENAME
-from scenariocraft.schemas import PathSpec, Point2D, Pose2D, TriggerSpec
+from scenariocraft.schemas import (
+    PathSpec,
+    Point2D,
+    Pose2D,
+    StoryboardActionSpec,
+    StoryboardActSpec,
+    StoryboardEventSpec,
+    StoryboardManeuverGroupSpec,
+    StoryboardSpec,
+    StoryboardStorySpec,
+    TriggerConditionSpec,
+    TriggerSpec,
+)
 from scenariocraft.tools import FallbackXmlScenarioBuilder, ScenariogenerationBuilder, build_openscenario
 
 
@@ -301,6 +313,82 @@ def test_changing_trigger_distance_changes_generated_xosc_trigger_condition(tmp_
     assert float(time_condition.attrib["value"]) == (DEFAULT_VAN_X_M - 12.5) / DEFAULT_EGO_SPEED_MPS
 
 
+def test_ttc_trigger_condition_builds_xosc_time_to_collision_condition(tmp_path) -> None:
+    spec = MockScenarioGenerator().generate_spec("scenario")
+    changed_spec = replace(
+        spec,
+        trigger=TriggerSpec(
+            type=spec.trigger.type,
+            source=spec.trigger.source,
+            target=spec.trigger.target,
+            distance_m=spec.trigger.distance_m,
+            condition=TriggerConditionSpec(
+                id="ego_ttc_to_conflict",
+                metric="time_to_collision",
+                source="ego",
+                target="conflict_point",
+                rule="lessThan",
+                value=2.5,
+                unit="s",
+                target_kind="named_point",
+                freespace=True,
+            ),
+        ),
+    )
+
+    result = build_openscenario(changed_spec, tmp_path)
+    root = ET.parse(result.xosc_path).getroot()
+    condition = root.find(
+        ".//Event[@name='pedestrian_starts_crossing']/StartTrigger"
+        "//Condition[@name='ego_ttc_to_conflict']/ByEntityCondition/EntityCondition/TimeToCollisionCondition"
+    )
+
+    assert condition is not None
+    world_position = condition.find("./TimeToCollisionConditionTarget/Position/WorldPosition")
+    assert condition.attrib["value"] == "2.5"
+    assert condition.attrib["rule"] == "lessThan"
+    assert condition.attrib["freespace"] == "true"
+    assert world_position is not None
+    assert float(world_position.attrib["x"]) == DEFAULT_CONFLICT_X_M
+    assert float(world_position.attrib["y"]) == 0.0
+    assert root.find(".//Event[@name='pedestrian_starts_crossing']/StartTrigger//RelativeDistanceCondition") is None
+    assert root.find(".//Condition[@name='relative_distance_time_alignment']") is None
+
+
+def test_fallback_builder_builds_ttc_condition_with_entity_target(tmp_path) -> None:
+    spec = MockScenarioGenerator().generate_spec("scenario")
+    changed_spec = replace(
+        spec,
+        trigger=TriggerSpec(
+            type=spec.trigger.type,
+            source=spec.trigger.source,
+            target=spec.trigger.target,
+            distance_m=spec.trigger.distance_m,
+            condition=TriggerConditionSpec(
+                id="ego_ttc_to_van",
+                metric="time_to_collision",
+                source="ego",
+                target="parked_van",
+                rule="lessThan",
+                value=1.25,
+                unit="s",
+                target_kind="entity",
+                freespace=True,
+            ),
+        ),
+    )
+
+    result = build_openscenario(changed_spec, tmp_path, builder=FallbackXmlScenarioBuilder())
+    root = ET.parse(result.xosc_path).getroot()
+    condition = root.find(".//Condition[@name='ego_ttc_to_van']//TimeToCollisionCondition")
+
+    assert condition is not None
+    entity_ref = condition.find("./TimeToCollisionConditionTarget/EntityRef")
+    assert condition.attrib["value"] == "1.25"
+    assert entity_ref is not None
+    assert entity_ref.attrib["entityRef"] == "parked_van"
+
+
 def test_timing_policy_changes_generated_stop_and_nominal_alignment_condition(tmp_path) -> None:
     spec = MockScenarioGenerator().generate_spec(
         "scenario",
@@ -402,6 +490,82 @@ def test_fallback_xml_builder_serializes_ego_driving_trajectory(tmp_path) -> Non
     assert [(x, y) for _, x, y, _ in vertices] == [(0.0, 0.0), (DEFAULT_CONFLICT_X_M + 35.0, 0.0)]
 
 
+def test_builder_consumes_storyboard_ids_for_xosc_hierarchy(tmp_path) -> None:
+    spec = _storyboard_renamed_spec()
+
+    result = build_openscenario(spec, tmp_path)
+    root = ET.parse(result.xosc_path).getroot()
+
+    assert root.find(".//Story[@name='story_from_spec']") is not None
+    assert root.find(".//Act[@name='act_from_spec']") is not None
+    assert root.find(".//ManeuverGroup[@name='ego_group_from_spec']") is not None
+    assert root.find(".//Event[@name='ego_event_from_spec']") is not None
+    assert root.find(".//Action[@name='ego_action_from_spec']") is not None
+    assert root.find(".//ManeuverGroup[@name='ped_group_from_spec']") is not None
+    assert root.find(".//Event[@name='ped_event_from_spec']") is not None
+    assert root.find(".//Action[@name='ped_action_from_spec']") is not None
+    assert root.find(".//Condition[@name='ped_trigger_from_spec']") is not None
+    assert root.find(".//Storyboard/StopTrigger//Condition[@name='stop_from_spec']") is not None
+
+
+def test_builder_consumes_storyboard_action_path_ref(tmp_path) -> None:
+    spec = MockScenarioGenerator().generate_spec("scenario")
+    assert spec.layout is not None
+    alt_path = PathSpec(
+        "alternate_crossing_path",
+        (
+            Point2D(DEFAULT_CONFLICT_X_M + 2.0, 4.6),
+            Point2D(DEFAULT_CONFLICT_X_M + 2.0, -1.0),
+        ),
+    )
+    layout = replace(spec.layout, paths={**spec.layout.paths, "alternate_crossing_path": alt_path})
+    storyboard = StoryboardSpec(
+        stories=(StoryboardStorySpec("story_from_spec", ("act_from_spec",)),),
+        acts=(StoryboardActSpec("act_from_spec", ("ped_group_from_spec",)),),
+        maneuver_groups=(
+            StoryboardManeuverGroupSpec("ped_group_from_spec", ("pedestrian",), ("ped_event_from_spec",)),
+        ),
+        events=(
+            StoryboardEventSpec(
+                "ped_event_from_spec",
+                "overwrite",
+                "ped_trigger_from_spec",
+                ("ped_action_from_spec",),
+            ),
+        ),
+        actions=(
+            StoryboardActionSpec(
+                "ped_action_from_spec",
+                "follow_trajectory",
+                actor_refs=("pedestrian",),
+                path_ref="alternate_crossing_path",
+            ),
+        ),
+    )
+
+    result = build_openscenario(replace(spec, layout=layout, storyboard=storyboard), tmp_path)
+    vertices = _trajectory_vertices(result.xosc_path, "ped_action_from_spec")
+
+    assert [(x, y) for _, x, y, _ in vertices] == [
+        (DEFAULT_CONFLICT_X_M + 2.0, 4.6),
+        (DEFAULT_CONFLICT_X_M + 2.0, -1.0),
+    ]
+    assert _trajectory_vertices(result.xosc_path, "pedestrian_follow_crossing_path") == []
+
+
+def test_fallback_builder_consumes_storyboard_ids_for_xosc_hierarchy(tmp_path) -> None:
+    spec = _storyboard_renamed_spec()
+
+    result = build_openscenario(spec, tmp_path, builder=FallbackXmlScenarioBuilder())
+    root = ET.parse(result.xosc_path).getroot()
+
+    assert root.find(".//Story[@name='story_from_spec']") is not None
+    assert root.find(".//Act[@name='act_from_spec']") is not None
+    assert root.find(".//Event[@name='ped_event_from_spec']") is not None
+    assert root.find(".//Action[@name='ped_action_from_spec']") is not None
+    assert root.find(".//Condition[@name='ped_trigger_from_spec']") is not None
+
+
 def _world_positions_by_entity(xosc_path) -> dict[str, tuple[float, float, float]]:
     root = ET.parse(xosc_path).getroot()
     poses: dict[str, tuple[float, float, float]] = {}
@@ -441,3 +605,34 @@ def _pedestrian_relative_distance_condition(xosc_path) -> ET.Element:
     condition = root.find(".//Event[@name='pedestrian_starts_crossing']/StartTrigger//RelativeDistanceCondition")
     assert condition is not None
     return condition
+
+
+def _storyboard_renamed_spec():
+    spec = MockScenarioGenerator().generate_spec("scenario")
+    storyboard = StoryboardSpec(
+        stories=(StoryboardStorySpec("story_from_spec", ("act_from_spec",)),),
+        acts=(StoryboardActSpec("act_from_spec", ("ego_group_from_spec", "ped_group_from_spec"), "stop_from_spec"),),
+        maneuver_groups=(
+            StoryboardManeuverGroupSpec("ego_group_from_spec", ("ego",), ("ego_event_from_spec",)),
+            StoryboardManeuverGroupSpec("ped_group_from_spec", ("pedestrian",), ("ped_event_from_spec",)),
+        ),
+        events=(
+            StoryboardEventSpec("ego_event_from_spec", "overwrite", "ego_trigger_from_spec", ("ego_action_from_spec",)),
+            StoryboardEventSpec("ped_event_from_spec", "overwrite", "ped_trigger_from_spec", ("ped_action_from_spec",)),
+        ),
+        actions=(
+            StoryboardActionSpec(
+                "ego_action_from_spec",
+                "follow_trajectory",
+                actor_refs=("ego",),
+                path_ref="ego_path",
+            ),
+            StoryboardActionSpec(
+                "ped_action_from_spec",
+                "follow_trajectory",
+                actor_refs=("pedestrian",),
+                path_ref="pedestrian_crossing_path",
+            ),
+        ),
+    )
+    return replace(spec, storyboard=storyboard)

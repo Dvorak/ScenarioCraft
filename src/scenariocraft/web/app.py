@@ -72,6 +72,7 @@ RECOMMENDED_EXAMPLE_FILES = (
 REFERENCE_CATEGORIES = ("stable_demo", "qc_fail", "esmini_long_running")
 CRITICALITY_MAX_TTC_S = 3.0
 WEB_PREVIEW_DISPLAY_ORIENTATION = "esmini_top_camera_raw"
+WEB_PREVIEW_PRESENTATION_STYLE = "clean_split"
 PREVIEW_VISUAL_CAPTION = "Renderer-aligned ScenarioSpec layout · world +x → left · world +y → down"
 RUNTIME_VISUAL_CAPTION = "Raw OpenSCENARIO + OpenDRIVE runtime view · world +x → left · world +y → down"
 WORKSPACE_PAGES = ("Workspace", "Advanced")
@@ -80,6 +81,7 @@ WORKSPACE_GENERATE_ICON = ":material/send:"
 WORKSPACE_REPAIR_ICON = ":material/build:"
 WORKSPACE_DESKTOP_HEIGHT = "clamp(720px, calc(100dvh - 6.5rem), 960px)"
 WORKSPACE_MEDIA_TITLES = ("Preview 2D Semantic", "Playback Esmini")
+WORKSPACE_MEDIA_ASPECT_RATIO = "16 / 9"
 
 
 def workspace_case_options() -> tuple[tuple[str, str], ...]:
@@ -187,7 +189,9 @@ def _render_workspace_status() -> None:
             esmini_result=st.session_state.esmini_result,
         )
         items = "".join(
-            f'<div class="status-item status-{escape(item.state)}">'
+            f'<div class="status-item status-{escape(item.state)}" tabindex="0" '
+            f'title="{escape(item.detail)}" '
+            f'aria-label="{escape(item.label)}: {escape(item.value)}. {escape(item.detail)}">'
             f'<span class="status-label">{escape(item.label)}</span>'
             f'<strong><i aria-hidden="true"></i>{escape(item.value)}</strong></div>'
             for item in status.items
@@ -233,11 +237,13 @@ def _render_workspace_brief() -> None:
             st.caption("Generate a scenario to see its semantic brief.")
             return
         st.markdown(f"**{vm.title}**")
-        metrics = st.columns(3)
+        metrics = st.columns(4)
         metrics[0].metric("Ego", vm.ego_speed)
         metrics[1].metric("Pedestrian", vm.pedestrian_speed)
-        metrics[2].metric("TTC", vm.estimated_ttc)
+        metrics[2].metric("Target TTC", vm.target_ttc)
+        metrics[3].metric("Lead Time", vm.ego_lead_time)
         st.caption(f"{vm.road_summary} · {vm.weather_summary}")
+        st.caption(f"{vm.trigger_threshold_summary} · {vm.pedestrian_conflict_summary}")
         st.caption(vm.trigger_summary)
 
 
@@ -283,7 +289,6 @@ def _render_workspace_runtime_media(output_dir: Path) -> None:
         st.info("2D Preview Fallback")
     else:
         st.info("Playback unavailable.")
-    st.caption(_playback_media_label(playback_result.playback_kind))
 
 
 def _render_advanced_page(output_dir: Path) -> None:
@@ -470,13 +475,16 @@ def _render_generated_brief_panel() -> None:
         return
     st.markdown(f"#### {vm.title}")
     st.caption(vm.scenario_type)
-    cols = st.columns(3)
+    cols = st.columns(4)
     cols[0].metric("Ego speed", vm.ego_speed)
     cols[1].metric("Pedestrian", vm.pedestrian_speed)
-    cols[2].metric("Estimated TTC", vm.estimated_ttc)
+    cols[2].metric("Target TTC", vm.target_ttc)
+    cols[3].metric("Lead Time", vm.ego_lead_time)
     st.markdown(f"**Road**: {vm.road_summary}")
     st.markdown(f"**Weather**: {vm.weather_summary}")
     st.markdown(f"**Trigger**: {vm.trigger_summary}")
+    st.markdown(f"**Trigger threshold**: {vm.trigger_threshold_time}")
+    st.markdown(f"**Pedestrian to conflict**: {vm.pedestrian_time_to_conflict}")
     st.markdown(f"**Criticality**: {vm.criticality_summary}")
     if vm.actor_summary:
         st.caption("Actors: " + ", ".join(f"`{actor}`" for actor in vm.actor_summary))
@@ -1061,7 +1069,8 @@ def _render_preview_panel() -> None:
         metric_cols[0].metric("Ego Speed", vm.ego_speed)
         metric_cols[1].metric("Trigger Dist", f"{spec.trigger.distance_m:g} m")
         metric_cols[2].metric("Ped Speed", vm.pedestrian_speed)
-        metric_cols[3].metric("Estimated TTC", vm.estimated_ttc)
+        metric_cols[3].metric("Lead Time", vm.ego_lead_time)
+        st.caption(f"{vm.trigger_threshold_summary} · Target TTC: {vm.target_ttc}")
         _render_status_label()
     with esmini_tab:
         st.caption("Optional esmini execution/load check. MP4/GIF rendering is not implemented yet.")
@@ -1795,6 +1804,7 @@ def _generate_preview(output_dir: Path) -> Path | None:
             spec,
             output_dir / "preview_2d.png",
             display_orientation=WEB_PREVIEW_DISPLAY_ORIENTATION,
+            presentation_style=WEB_PREVIEW_PRESENTATION_STYLE,
         )
     except Exception as exc:
         _error(f"2D preview generation failed: {exc}")
@@ -1809,7 +1819,12 @@ def _ensure_preview(output_dir: Path, spec: ScenarioSpec) -> Path | None:
     if preview_path.exists():
         return preview_path
     try:
-        preview_path = generate_2d_preview(spec, preview_path, display_orientation=WEB_PREVIEW_DISPLAY_ORIENTATION)
+        preview_path = generate_2d_preview(
+            spec,
+            preview_path,
+            display_orientation=WEB_PREVIEW_DISPLAY_ORIENTATION,
+            presentation_style=WEB_PREVIEW_PRESENTATION_STYLE,
+        )
     except Exception as exc:
         st.warning(f"2D preview generation failed: {exc}")
         return None
@@ -2312,6 +2327,7 @@ def _inject_css() -> None:
         }
         .st-key-workspace_preview_stage,
         .st-key-workspace_playback_stage {
+            --workspace-media-aspect-ratio: __WORKSPACE_MEDIA_ASPECT_RATIO__;
             height: 100%;
             flex: 1 1 auto;
             min-height: 0;
@@ -2405,8 +2421,23 @@ def _inject_css() -> None:
             row-gap: 0.6rem;
             align-items: start;
         }
-        .status-item { display: flex; flex-direction: column; gap: 0.24rem; min-width: 0; }
+        .status-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.24rem;
+            min-width: 0;
+            border-radius: 4px;
+            cursor: help;
+            outline: 2px solid transparent;
+            outline-offset: 3px;
+        }
+        .status-item:focus-visible {
+            outline-color: #ef4444;
+        }
         .status-label { color: #6b7280; font-size: 0.72rem; line-height: 1.15; white-space: nowrap; }
+        @media (prefers-color-scheme: dark) {
+            .status-label { color: #9ca3af; }
+        }
         .status-item strong {
             display: flex;
             align-items: center;
@@ -2535,7 +2566,9 @@ def _inject_css() -> None:
         </style>
         """
     st.markdown(
-        css.replace("__WORKSPACE_DESKTOP_HEIGHT__", WORKSPACE_DESKTOP_HEIGHT),
+        css.replace("__WORKSPACE_DESKTOP_HEIGHT__", WORKSPACE_DESKTOP_HEIGHT).replace(
+            "__WORKSPACE_MEDIA_ASPECT_RATIO__", WORKSPACE_MEDIA_ASPECT_RATIO
+        ),
         unsafe_allow_html=True,
     )
 

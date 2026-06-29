@@ -1,7 +1,12 @@
 from pathlib import Path
+from dataclasses import replace
 
 from scenariocraft.generators import MockScenarioGenerator
-from scenariocraft.probes import run_artifact_consistency_probes, run_pedestrian_occlusion_probes
+from scenariocraft.probes import (
+    run_artifact_consistency_probes,
+    run_pedestrian_occlusion_probes,
+    run_runtime_consistency_probes,
+)
 from scenariocraft.schemas import ProbeResult
 from scenariocraft.tools import build_openscenario, generate_validation_report, validate_semantics
 from scenariocraft.tools.asam_qc_tool import AsamQcResult
@@ -28,11 +33,44 @@ def test_report_includes_missing_tool_warnings(tmp_path: Path) -> None:
     assert "ASAM OpenSCENARIO XML checker was not found" in report
     assert "esmini was not found" in report
     assert "rainy_pedestrian_occlusion" in report
+    assert "## Timing Metrics" in report
+    assert "Target TTC: `1.5 s`" in report
+    assert "Trigger threshold time: `1.9 s`" in report
+    assert "Ego lead time to conflict: `2.4 s`" in report
+    assert "Pedestrian time to conflict: `3.1 s`" in report
+    assert "Runtime minimum TTC: `not implemented`" in report
+    assert "Time headway: `not implemented`" in report
     assert "## Timing Harness" in report
     assert "Preferred trigger window: `1.5` s to `3` s" in report
     assert "Predicted trigger time: `3` s" in report
     assert "Timing classification: `preferred`" in report
     assert "Template-Aware Probes" not in report
+
+
+def test_report_handles_legacy_layout_free_timing_metrics_gracefully(tmp_path: Path) -> None:
+    spec = MockScenarioGenerator().generate_spec("scenario text")
+    legacy_spec = replace(spec, layout=None, spatial_relations=(), timing=None)
+    build_result = build_openscenario(legacy_spec, tmp_path)
+    qc_result = AsamQcResult(False, ["asam-qc-openscenarioxml", "scenario.xosc"], None, "", "", None)
+    esmini_result = EsminiResult(False, ["esmini", "--osc", "scenario.xosc"], None, None, "", "", None, None, None)
+
+    report_path = generate_validation_report(
+        "scenario text",
+        legacy_spec,
+        build_result,
+        qc_result,
+        esmini_result,
+        validate_semantics(legacy_spec),
+        tmp_path,
+    )
+
+    report = report_path.read_text(encoding="utf-8")
+    assert "## Timing Metrics" in report
+    assert "Target TTC: `1.5 s`" in report
+    assert "Trigger threshold time: `1.9 s`" in report
+    assert "Ego lead time to conflict: `n/a`" in report
+    assert "Pedestrian time to conflict: `n/a`" in report
+    assert "## Timing Harness" not in report
 
 
 def test_report_includes_optional_probe_results(tmp_path: Path) -> None:
@@ -124,6 +162,56 @@ def test_report_includes_artifact_consistency_probe_results(tmp_path: Path) -> N
     assert "## Artifact Consistency Probes" in report
     assert "`xosc_actor_poses_match_layout`" in report
     assert "`xosc_logic_file_matches_canonical_road`" in report
+    assert "[PASS]" in report
+
+
+def test_report_includes_runtime_consistency_probe_results(tmp_path: Path) -> None:
+    spec = MockScenarioGenerator().generate_spec("scenario text")
+    build_result = build_openscenario(spec, tmp_path)
+    qc_result = AsamQcResult(False, ["asam-qc-openscenarioxml", "scenario.xosc"], None, "", "", None)
+    esmini_result = EsminiResult(False, ["esmini", "--osc", "scenario.xosc"], None, None, "", "", None, None, None)
+    log_path = tmp_path / "esmini_capture_log.txt"
+    log_path.write_text(
+        "\n".join([
+            "Loaded scenario.xosc",
+            "Loading roadmanager urban_two_way_parking.xodr",
+            "[0.250] pedestrian_starts_crossing standbyState -> startTransition -> runningState",
+            "FollowTrajectoryAction pedestrian_follow_crossing_path started",
+            "[3.950] pedestrian_starts_crossing runningState -> endTransition -> completeState",
+        ]),
+        encoding="utf-8",
+    )
+    playback_path = tmp_path / "esmini_playback_result.json"
+    playback_path.write_text(
+        '{"esmini_available": true, "executed": true, "return_code": 0, '
+        '"playback_kind": "esmini_gif", "playback_frame_count": 3, '
+        '"playback_is_animated": true, "playback_frames": [], '
+        '"media_quality_status": "valid"}',
+        encoding="utf-8",
+    )
+    runtime_results = run_runtime_consistency_probes(
+        spec,
+        xosc_path=build_result.xosc_path,
+        xodr_path=build_result.xodr_path,
+        esmini_log_path=log_path,
+        playback_result_path=playback_path,
+    )
+
+    report_path = generate_validation_report(
+        "scenario text",
+        spec,
+        build_result,
+        qc_result,
+        esmini_result,
+        validate_semantics(spec),
+        tmp_path,
+        runtime_probe_results=runtime_results,
+    )
+
+    report = report_path.read_text(encoding="utf-8")
+    assert "## Runtime Consistency Probes" in report
+    assert "`runtime_pedestrian_event_reached_running_state`" in report
+    assert "`runtime_motion_verifiable`" in report
     assert "[PASS]" in report
 
 

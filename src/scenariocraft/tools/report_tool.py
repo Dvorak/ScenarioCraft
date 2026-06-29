@@ -10,6 +10,7 @@ from scenariocraft.tools.asam_qc_tool import AsamQcResult
 from scenariocraft.tools.esmini_tool import EsminiPlaybackResult, EsminiResult
 from scenariocraft.tools.scenario_builder import BuildResult
 from scenariocraft.tools.semantic_validator import SemanticValidationResult
+from scenariocraft.tools.timing_metrics import compute_timing_metrics
 
 
 def generate_validation_report(
@@ -23,6 +24,7 @@ def generate_validation_report(
     probe_results: Sequence[ProbeResult] | None = None,
     playback_result: EsminiPlaybackResult | None = None,
     artifact_probe_results: Sequence[ProbeResult] | None = None,
+    runtime_probe_results: Sequence[ProbeResult] | None = None,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     report_path = output_dir / "validation_report.md"
@@ -37,6 +39,7 @@ def generate_validation_report(
             probe_results,
             playback_result,
             artifact_probe_results,
+            runtime_probe_results,
         ),
         encoding="utf-8",
     )
@@ -53,6 +56,7 @@ def _render_report(
     probe_results: Sequence[ProbeResult] | None = None,
     playback_result: EsminiPlaybackResult | None = None,
     artifact_probe_results: Sequence[ProbeResult] | None = None,
+    runtime_probe_results: Sequence[ProbeResult] | None = None,
 ) -> str:
     semantic_lines = "\n".join(
         f"- [{'x' if check.passed else ' '}] `{check.name}`: {check.message}" for check in semantic_result.checks
@@ -64,6 +68,7 @@ def _render_report(
     timing_section = _timing_section(spec)
     probe_section = _probe_section(probe_results)
     artifact_probe_section = _artifact_probe_section(artifact_probe_results)
+    runtime_probe_section = _runtime_probe_section(runtime_probe_results)
     return f"""# scenarioCraft Validation Report
 
 ## Input Scenario Intent
@@ -111,6 +116,7 @@ Overall result: `{'passed' if semantic_result.passed else 'failed'}`
 {semantic_lines}
 {probe_section}
 {artifact_probe_section}
+{runtime_probe_section}
 
 ## Known Limitations
 
@@ -126,10 +132,22 @@ Overall result: `{'passed' if semantic_result.passed else 'failed'}`
 
 
 def _timing_section(spec: ScenarioSpec) -> str:
-    if spec.timing is None:
-        return ""
-    assessment = assess_pedestrian_occlusion_timing(spec)
+    metrics = compute_timing_metrics(spec)
     lines = [
+        "",
+        "## Timing Metrics",
+        "",
+        f"- Target TTC: `{_format_seconds(metrics.target_ttc_s)}`",
+        f"- Trigger threshold time: `{_format_seconds(metrics.trigger_threshold_time_s)}`",
+        f"- Ego lead time to conflict: `{_format_seconds(metrics.ego_lead_time_to_conflict_s)}`",
+        f"- Pedestrian time to conflict: `{_format_seconds(metrics.pedestrian_time_to_conflict_s)}`",
+        "- Runtime minimum TTC: `not implemented`",
+        "- Time headway: `not implemented`",
+    ]
+    if spec.timing is None:
+        return "\n".join(lines)
+    assessment = assess_pedestrian_occlusion_timing(spec)
+    lines.extend([
         "",
         "## Timing Harness",
         "",
@@ -138,7 +156,7 @@ def _timing_section(spec: ScenarioSpec) -> str:
         f"`{spec.timing.preferred_trigger_earliest_s:g}` s to `{spec.timing.preferred_trigger_latest_s:g}` s",
         f"- Minimum pre-trigger context: `{spec.timing.minimum_pre_trigger_context_s:g}` s",
         f"- Minimum post-trigger buffer: `{spec.timing.minimum_post_trigger_buffer_s:g}` s",
-    ]
+    ])
     if assessment is None:
         lines.append("- Timing classification: `unavailable`")
         return "\n".join(lines)
@@ -152,6 +170,12 @@ def _timing_section(spec: ScenarioSpec) -> str:
     if derivation:
         lines.append(f"- Trigger-time estimate formula: `{derivation}`")
     return "\n".join(lines)
+
+
+def _format_seconds(value_s: float | None) -> str:
+    if value_s is None:
+        return "n/a"
+    return f"{value_s:.1f} s"
 
 
 def _timing_derivation(spec: ScenarioSpec) -> str | None:
@@ -202,6 +226,18 @@ def _artifact_probe_section(probe_results: Sequence[ProbeResult] | None) -> str:
             lines.append(
                 f"  - suggested_operations: `{json.dumps(list(result.suggested_operations), sort_keys=True)}`"
             )
+    return "\n".join(lines)
+
+
+def _runtime_probe_section(probe_results: Sequence[ProbeResult] | None) -> str:
+    if not probe_results:
+        return ""
+    lines = ["", "## Runtime Consistency Probes", ""]
+    for result in probe_results:
+        state = "PASS" if result.passed else ("WARN" if result.severity == "warning" else "FAIL")
+        lines.append(f"- [{state}] `{result.name}` ({result.severity}): {result.message}")
+        if result.measured:
+            lines.append(f"  - measured: `{json.dumps(result.measured, sort_keys=True)}`")
     return "\n".join(lines)
 
 

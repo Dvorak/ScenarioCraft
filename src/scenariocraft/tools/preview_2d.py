@@ -12,11 +12,14 @@ import matplotlib
 matplotlib.use("Agg")
 
 from matplotlib import pyplot as plt
+from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrow, FancyArrowPatch, Rectangle
 
 from scenariocraft.schemas import FootprintSpec, LayoutSpec, PathSpec, Point2D, Pose2D, RoadBandSpec, ScenarioSpec
 
 PREVIEW_DISPLAY_ORIENTATIONS = {"semantic_canonical", "esmini_top_camera_raw"}
+PREVIEW_PRESENTATION_STYLES = {"annotated", "clean_split"}
+CLEAN_PREVIEW_ASPECT_RATIO = 16 / 9
 
 
 def generate_2d_preview(
@@ -24,13 +27,35 @@ def generate_2d_preview(
     out_path: Path,
     *,
     display_orientation: str = "semantic_canonical",
+    presentation_style: str = "annotated",
 ) -> Path:
     """Generate a deterministic top-down preview image for the scenario."""
     if display_orientation not in PREVIEW_DISPLAY_ORIENTATIONS:
         raise ValueError(f"Unsupported preview display orientation: {display_orientation}")
+    if presentation_style not in PREVIEW_PRESENTATION_STYLES:
+        raise ValueError(f"Unsupported preview presentation style: {presentation_style}")
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    fig, ax = plt.subplots(figsize=(8.8, 5.4), dpi=140)
+    fig, _ax, _legend_ax = _render_preview_figure(
+        spec,
+        display_orientation=display_orientation,
+        presentation_style=presentation_style,
+    )
+    if presentation_style == "clean_split":
+        fig.savefig(out_path, bbox_inches=None, pad_inches=0)
+    else:
+        fig.savefig(out_path, bbox_inches="tight", pad_inches=0.08)
+    plt.close(fig)
+    return out_path
+
+
+def _render_preview_figure(
+    spec: ScenarioSpec,
+    *,
+    display_orientation: str,
+    presentation_style: str,
+) -> tuple[object, object, object | None]:
+    fig, ax, legend_ax = _build_preview_figure(presentation_style)
     if spec.layout is not None:
         xlim, ylim = _layout_plot_limits(spec.layout)
         ax.set_xlim(*xlim)
@@ -42,22 +67,50 @@ def generate_2d_preview(
 
     if spec.layout is not None and spec.layout.road_bands:
         _draw_layout_background(ax)
-        show_band_labels = display_orientation == "semantic_canonical"
+        show_band_labels = presentation_style == "annotated" and display_orientation == "semantic_canonical"
         _draw_layout_road_bands(ax, spec.layout, show_labels=show_band_labels)
     else:
         _draw_background(ax)
         _draw_road(ax)
-    _draw_actors(ax, spec)
-    _draw_scenario_marks(ax, spec)
-    if spec.layout is not None and spec.layout.road_bands and display_orientation == "esmini_top_camera_raw":
-        _draw_road_context_legend(ax, spec.layout, display_orientation)
-    _draw_legend(ax)
-    _draw_title(ax, spec)
+    show_scene_labels = presentation_style == "annotated"
+    _draw_actors(ax, spec, show_labels=show_scene_labels)
+    _draw_scenario_marks(ax, spec, show_labels=show_scene_labels)
+    if presentation_style == "clean_split":
+        assert legend_ax is not None
+        _draw_clean_split_legend(legend_ax, spec, display_orientation)
+    else:
+        if spec.layout is not None and spec.layout.road_bands and display_orientation == "esmini_top_camera_raw":
+            _draw_road_context_legend(ax, spec.layout, display_orientation)
+        _draw_legend(ax)
+        _draw_title(ax, spec)
     _apply_display_orientation(ax, display_orientation)
+    return fig, ax, legend_ax
 
-    fig.savefig(out_path, bbox_inches="tight", pad_inches=0.08)
-    plt.close(fig)
-    return out_path
+
+def _build_preview_figure(
+    presentation_style: str,
+) -> tuple[object, object, object | None]:
+    if presentation_style == "clean_split":
+        fig = plt.figure(figsize=(9.6, 5.4), dpi=140)
+        grid = fig.add_gridspec(
+            2,
+            1,
+            height_ratios=(0.72, 0.28),
+            hspace=0.02,
+            left=0,
+            right=1,
+            top=1,
+            bottom=0,
+        )
+        scene_ax = fig.add_subplot(grid[0])
+        legend_ax = fig.add_subplot(grid[1])
+        legend_ax.set_facecolor("#f6f8f5")
+        legend_ax.set_xlim(0, 1)
+        legend_ax.set_ylim(0, 1)
+        legend_ax.axis("off")
+        return fig, scene_ax, legend_ax
+    fig, scene_ax = plt.subplots(figsize=(8.8, 5.4), dpi=140)
+    return fig, scene_ax, None
 
 
 def _apply_display_orientation(ax: object, display_orientation: str) -> None:
@@ -204,53 +257,77 @@ def _draw_road_context_legend(ax: object, layout: LayoutSpec, display_orientatio
         ax.text(x + 0.019, y, label, fontsize=7.2, color="#334155", va="center", transform=ax.transAxes, zorder=20)
 
 
-def _draw_actors(ax: object, spec: ScenarioSpec) -> None:
+def _draw_actors(ax: object, spec: ScenarioSpec, *, show_labels: bool = True) -> None:
     if spec.layout is not None:
-        _draw_layout_actors(ax, spec)
+        _draw_layout_actors(ax, spec, show_labels=show_labels)
         return
     ego = spec.actor_by_role("ego")
     occluder = spec.actor_by_role("occluder")
     pedestrian = spec.actor_by_role("crossing_actor")
     if ego is not None:
-        _vehicle(ax, x=6, y=-3.25, width=9.5, height=3.4, color="#151515", label="EGO")
+        _vehicle(
+            ax,
+            x=6,
+            y=-3.25,
+            width=9.5,
+            height=3.4,
+            color="#151515",
+            label="EGO" if show_labels else None,
+            show_detail=show_labels,
+        )
         ax.add_patch(FancyArrow(16.2, -3.25, 7.2, 0, width=0.12, head_width=0.95, head_length=1.4, color="#f8fafc"))
     if occluder is not None:
-        _vehicle(ax, x=33, y=3.25, width=12, height=3.6, color="#2563eb", label="VAN")
+        _vehicle(
+            ax,
+            x=33,
+            y=3.25,
+            width=12,
+            height=3.6,
+            color="#2563eb",
+            label="VAN" if show_labels else None,
+            show_detail=show_labels,
+        )
     if pedestrian is not None:
         ax.scatter([35], [-8.2], s=70, color="#f97316", edgecolor="#dc2626", linewidth=1.2, zorder=7)
-        ax.text(36.1, -8.3, "pedestrian", fontsize=8.5, color="#7f1d1d", va="center")
+        if show_labels:
+            ax.text(36.1, -8.3, "pedestrian", fontsize=8.5, color="#7f1d1d", va="center")
 
 
-def _draw_scenario_marks(ax: object, spec: ScenarioSpec) -> None:
+def _draw_scenario_marks(ax: object, spec: ScenarioSpec, *, show_labels: bool = True) -> None:
     if spec.layout is not None:
-        _draw_layout_scenario_marks(ax, spec)
+        _draw_layout_scenario_marks(ax, spec, show_labels=show_labels)
         return
     pedestrian = spec.actor_by_role("crossing_actor")
     trigger_x = min(31, max(17, 6 + spec.trigger.distance_m * 0.55))
     conflict_x = 35 if pedestrian is not None else trigger_x
     if pedestrian is not None:
-        path = FancyArrowPatch(
-            (35, -8.0),
-            (conflict_x, 0.8),
-            connectionstyle="arc3,rad=-0.16",
-            arrowstyle="-|>",
-            mutation_scale=12,
-            linewidth=2.0,
-            linestyle=(0, (4, 4)),
-            color="#ef4444",
-            zorder=6,
-        )
-        ax.add_patch(path)
+        if show_labels:
+            path = FancyArrowPatch(
+                (35, -8.0),
+                (conflict_x, 0.8),
+                connectionstyle="arc3,rad=-0.16",
+                arrowstyle="-|>",
+                mutation_scale=12,
+                linewidth=2.0,
+                linestyle=(0, (4, 4)),
+                color="#ef4444",
+                zorder=6,
+            )
+            ax.add_patch(path)
+        else:
+            ax.plot([35, conflict_x], [-8.0, 0.8], color="#ef4444", linewidth=2.0, linestyle=(0, (4, 4)), zorder=4)
     else:
         ax.plot([conflict_x, conflict_x], [-8, 2], color="#ef4444", linewidth=2, linestyle=(0, (4, 4)), alpha=0.35)
 
     ax.scatter([trigger_x], [-3.25], s=82, color="#7c3aed", edgecolor="white", linewidth=1.3, zorder=8)
-    ax.text(trigger_x + 0.9, -4.35, "trigger", fontsize=8.5, color="#3b0764", va="top")
+    if show_labels:
+        ax.text(trigger_x + 0.9, -4.35, "trigger", fontsize=8.5, color="#3b0764", va="top")
     ax.scatter([conflict_x], [0.8], s=92, color="#f59e0b", edgecolor="white", linewidth=1.3, zorder=8)
-    ax.text(conflict_x + 1.0, 0.15, "conflict point", fontsize=8.5, color="#78350f", va="top")
+    if show_labels:
+        ax.text(conflict_x + 1.0, 0.15, "conflict point", fontsize=8.5, color="#78350f", va="top")
 
 
-def _draw_layout_actors(ax: object, spec: ScenarioSpec) -> None:
+def _draw_layout_actors(ax: object, spec: ScenarioSpec, *, show_labels: bool = True) -> None:
     assert spec.layout is not None
     ego = spec.actor_by_role("ego")
     occluder = spec.actor_by_role("occluder")
@@ -261,11 +338,29 @@ def _draw_layout_actors(ax: object, spec: ScenarioSpec) -> None:
 
     if ego is not None and ego_pose is not None:
         footprint = _layout_footprint(spec.layout, ego.id)
-        _vehicle(ax, x=ego_pose.x_m, y=ego_pose.y_m, width=footprint.length_m, height=footprint.width_m, color="#151515", label="EGO")
+        _vehicle(
+            ax,
+            x=ego_pose.x_m,
+            y=ego_pose.y_m,
+            width=footprint.length_m,
+            height=footprint.width_m,
+            color="#151515",
+            label="EGO" if show_labels else None,
+            show_detail=show_labels,
+        )
         _direction_arrow(ax, ego_pose, color="#f8fafc")
     if occluder is not None and van_pose is not None:
         footprint = _layout_footprint(spec.layout, occluder.id)
-        _vehicle(ax, x=van_pose.x_m, y=van_pose.y_m, width=footprint.length_m, height=footprint.width_m, color="#2563eb", label="VAN")
+        _vehicle(
+            ax,
+            x=van_pose.x_m,
+            y=van_pose.y_m,
+            width=footprint.length_m,
+            height=footprint.width_m,
+            color="#2563eb",
+            label="VAN" if show_labels else None,
+            show_detail=show_labels,
+        )
     if pedestrian is not None and pedestrian_pose is not None:
         footprint = _layout_footprint(spec.layout, pedestrian.id)
         ax.add_patch(Rectangle(
@@ -278,10 +373,11 @@ def _draw_layout_actors(ax: object, spec: ScenarioSpec) -> None:
             zorder=7,
         ))
         ax.scatter([pedestrian_pose.x_m], [pedestrian_pose.y_m], s=24, color="#fed7aa", edgecolor="#dc2626", linewidth=0.8, zorder=8)
-        ax.text(pedestrian_pose.x_m + 0.9, pedestrian_pose.y_m + 0.45, "pedestrian", fontsize=8.5, color="#7f1d1d", va="center")
+        if show_labels:
+            ax.text(pedestrian_pose.x_m + 0.9, pedestrian_pose.y_m + 0.45, "pedestrian", fontsize=8.5, color="#7f1d1d", va="center")
 
 
-def _draw_layout_scenario_marks(ax: object, spec: ScenarioSpec) -> None:
+def _draw_layout_scenario_marks(ax: object, spec: ScenarioSpec, *, show_labels: bool = True) -> None:
     assert spec.layout is not None
     crossing_path = _layout_path(spec.layout, "pedestrian_crossing_path")
     trigger_point = _layout_point(spec.layout, "trigger_point")
@@ -289,24 +385,45 @@ def _draw_layout_scenario_marks(ax: object, spec: ScenarioSpec) -> None:
     if crossing_path is not None and len(crossing_path.points) >= 2:
         start = crossing_path.points[0]
         end = crossing_path.points[-1]
-        path = FancyArrowPatch(
-            (start.x_m, start.y_m),
-            (end.x_m, end.y_m),
-            connectionstyle="arc3,rad=-0.04",
-            arrowstyle="-|>",
-            mutation_scale=12,
-            linewidth=2.0,
-            linestyle=(0, (4, 4)),
-            color="#ef4444",
-            zorder=6,
-        )
-        ax.add_patch(path)
+        if show_labels:
+            path = FancyArrowPatch(
+                (start.x_m, start.y_m),
+                (end.x_m, end.y_m),
+                connectionstyle="arc3,rad=-0.04",
+                arrowstyle="-|>",
+                mutation_scale=12,
+                linewidth=2.0,
+                linestyle=(0, (4, 4)),
+                color="#ef4444",
+                zorder=6,
+            )
+            ax.add_patch(path)
+        else:
+            ax.plot(
+                [point.x_m for point in crossing_path.points],
+                [point.y_m for point in crossing_path.points],
+                color="#ef4444",
+                linewidth=2.0,
+                linestyle=(0, (4, 4)),
+                zorder=4,
+            )
     if trigger_point is not None:
-        ax.scatter([trigger_point.x_m], [trigger_point.y_m], s=82, color="#7c3aed", edgecolor="white", linewidth=1.3, zorder=8)
-        ax.text(trigger_point.x_m + 0.9, trigger_point.y_m - 1.1, "trigger", fontsize=8.5, color="#3b0764", va="top")
+        ax.scatter([trigger_point.x_m], [trigger_point.y_m], s=82, color="#7c3aed", edgecolor="white", linewidth=1.3, marker="D", zorder=8)
+        if show_labels:
+            ax.text(trigger_point.x_m + 0.9, trigger_point.y_m - 1.1, "trigger", fontsize=8.5, color="#3b0764", va="top")
     if conflict_point is not None:
-        ax.scatter([conflict_point.x_m], [conflict_point.y_m], s=92, color="#f59e0b", edgecolor="white", linewidth=1.3, zorder=8)
-        ax.text(conflict_point.x_m + 1.0, conflict_point.y_m - 0.65, "conflict point", fontsize=8.5, color="#78350f", va="top")
+        facecolor = "none" if show_labels else _layout_point_background(spec.layout, conflict_point)
+        ax.scatter(
+            [conflict_point.x_m],
+            [conflict_point.y_m],
+            s=92,
+            facecolor=facecolor,
+            edgecolor="#f59e0b",
+            linewidth=2.0,
+            zorder=9,
+        )
+        if show_labels:
+            ax.text(conflict_point.x_m + 1.0, conflict_point.y_m - 0.65, "conflict point", fontsize=8.5, color="#78350f", va="top")
 
 
 def _direction_arrow(ax: object, pose: Pose2D, color: str) -> None:
@@ -330,6 +447,13 @@ def _layout_point(layout: LayoutSpec, point_name: str) -> Point2D | None:
 
 def _layout_footprint(layout: LayoutSpec, actor_id: str) -> FootprintSpec:
     return layout.actor_footprints.get(actor_id, FootprintSpec(length_m=4.5, width_m=1.8))
+
+
+def _layout_point_background(layout: LayoutSpec, point: Point2D) -> str:
+    for band in layout.road_bands:
+        if band.y_min_m <= point.y_m <= band.y_max_m:
+            return _road_band_color(band)
+    return "#e8f1e6"
 
 
 def _layout_plot_limits(layout: LayoutSpec) -> tuple[tuple[float, float], tuple[float, float]]:
@@ -383,6 +507,118 @@ def _draw_legend(ax: object) -> None:
         x += 0.19 if label != "Trigger/conflict point" else 0.23
 
 
+def _clean_legend_groups(
+    spec: ScenarioSpec,
+    display_orientation: str,
+) -> tuple[tuple[str, tuple[tuple[str, str, str], ...]], ...]:
+    if spec.layout is not None and spec.layout.road_bands:
+        road_items = tuple(
+            (label, color, "swatch")
+            for label, color in _road_context_items(spec.layout, display_orientation)
+        )
+    else:
+        road_items = (
+            ("road surface", "#b8bec3", "swatch"),
+            ("lane boundary", "#eef2f7", "line"),
+        )
+    return (
+        ("Road", road_items),
+        (
+            "Actors",
+            (
+                ("ego vehicle", "#151515", "swatch"),
+                ("parked van", "#2563eb", "swatch"),
+                ("pedestrian", "#f97316", "circle"),
+            ),
+        ),
+        (
+            "Scenario Geometry",
+            (
+                ("pedestrian crossing path", "#ef4444", "dashed_line"),
+                ("trigger point", "#7c3aed", "diamond"),
+                ("conflict point", "#f59e0b", "ring"),
+            ),
+        ),
+    )
+
+
+def _draw_clean_split_legend(ax: object, spec: ScenarioSpec, display_orientation: str) -> None:
+    groups = _clean_legend_groups(spec, display_orientation)
+    positions = {
+        "Road": (0.018, 0.0, 0.49, 1.0),
+        "Actors": (0.525, 0.0, 0.19, 1.0),
+        "Scenario Geometry": (0.73, 0.0, 0.252, 1.0),
+    }
+    for title, items in groups:
+        group_ax = ax.inset_axes(positions[title], transform=ax.transAxes)
+        group_ax.set_label(f"clean-legend:{title}")
+        group_ax.set_xlim(0, 1)
+        group_ax.set_ylim(0, 1)
+        group_ax.axis("off")
+        group_ax.text(0, 0.88, title, fontsize=8.2, weight="bold", color="#334155", va="top", transform=group_ax.transAxes)
+        columns = 2 if title == "Road" and len(items) > 3 else 1
+        rows = math.ceil(len(items) / columns)
+        col_width = 1 / columns
+        for index, (label, color, symbol) in enumerate(items):
+            column = index // rows
+            row = index % rows
+            x = column * col_width
+            y = 0.65 - row * 0.24
+            _draw_clean_legend_symbol(group_ax, x, y, color, symbol)
+            group_ax.text(
+                x + 0.075,
+                y,
+                label,
+                fontsize=7.1,
+                color="#334155",
+                va="center",
+                transform=group_ax.transAxes,
+                clip_on=True,
+            )
+
+
+def _draw_clean_legend_symbol(ax: object, x: float, y: float, color: str, symbol: str) -> None:
+    if symbol in {"swatch", "circle"}:
+        ax.add_patch(
+            Rectangle(
+                (x, y - 0.045),
+                0.055,
+                0.09,
+                facecolor=color,
+                edgecolor="#334155",
+                linewidth=0.45,
+                transform=ax.transAxes,
+                clip_on=False,
+            )
+        )
+        return
+    if symbol in {"line", "dashed_line"}:
+        ax.add_line(
+            Line2D(
+                [x, x + 0.065],
+                [y, y],
+                color=color,
+                linewidth=2.0,
+                linestyle="--" if symbol == "dashed_line" else "-",
+                transform=ax.transAxes,
+            )
+        )
+        return
+    marker = "D" if symbol == "diamond" else "o"
+    ax.scatter(
+        [x + 0.0275],
+        [y],
+        s=30,
+        marker=marker,
+        facecolor=color if symbol == "diamond" else "none",
+        edgecolor="#f59e0b" if symbol == "ring" else "white",
+        linewidth=1.2,
+        transform=ax.transAxes,
+        clip_on=False,
+        zorder=5,
+    )
+
+
 def _draw_title(ax: object, spec: ScenarioSpec) -> None:
     ttc = estimate_ttc_s(spec)
     ttc_label = "n/a" if ttc is None else f"{ttc:.1f} s"
@@ -398,7 +634,17 @@ def _draw_title(ax: object, spec: ScenarioSpec) -> None:
     )
 
 
-def _vehicle(ax: object, x: float, y: float, width: float, height: float, color: str, label: str) -> None:
+def _vehicle(
+    ax: object,
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    color: str,
+    label: str | None,
+    *,
+    show_detail: bool = True,
+) -> None:
     ax.add_patch(
         Rectangle(
             (x - width / 2, y - height / 2),
@@ -410,15 +656,17 @@ def _vehicle(ax: object, x: float, y: float, width: float, height: float, color:
             zorder=5,
         )
     )
-    ax.add_patch(
-        Rectangle(
-            (x - width * 0.18, y - height * 0.36),
-            width * 0.28,
-            height * 0.72,
-            facecolor="white",
-            alpha=0.14,
-            edgecolor="none",
-            zorder=6,
+    if show_detail:
+        ax.add_patch(
+            Rectangle(
+                (x - width * 0.18, y - height * 0.36),
+                width * 0.28,
+                height * 0.72,
+                facecolor="white",
+                alpha=0.14,
+                edgecolor="none",
+                zorder=6,
+            )
         )
-    )
-    ax.text(x, y, label, ha="center", va="center", fontsize=9, color="white", weight="bold", zorder=7)
+    if label:
+        ax.text(x, y, label, ha="center", va="center", fontsize=9, color="white", weight="bold", zorder=7)

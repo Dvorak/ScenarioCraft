@@ -6,7 +6,7 @@ from pathlib import Path
 from scenariocraft.loop.types import RepairRunResult
 from scenariocraft.references import XoscMetadata
 from scenariocraft.schemas import PatchSpec, ProbeResult, ScenarioSpec
-from scenariocraft.tools import AsamQcResult, EsminiResult, estimate_ttc_s
+from scenariocraft.tools import AsamQcResult, EsminiResult, compute_timing_metrics
 from scenariocraft.tools.semantic_validator import SemanticValidationResult
 from scenariocraft.web.demo_cases import DemoCaseExecution, PreparedDemoCase
 
@@ -54,6 +54,12 @@ class GeneratedScenarioViewModel:
     ego_speed: str
     pedestrian_speed: str
     estimated_ttc: str
+    target_ttc: str
+    trigger_threshold_time: str
+    ego_lead_time: str
+    pedestrian_time_to_conflict: str
+    trigger_threshold_summary: str
+    pedestrian_conflict_summary: str
     status_cards: list[StatusCardViewModel] = field(default_factory=list)
     diagnostics: list[str] = field(default_factory=list)
     recommendation: str = "Generate and validate the scenario."
@@ -64,6 +70,8 @@ class WorkspaceStatusItemViewModel:
     label: str
     value: str
     state: str
+    detail: str
+    tool_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -104,22 +112,71 @@ def build_workspace_status_view_model(
         validation_state = "waiting" if generated else "neutral"
     return WorkspaceStatusViewModel(items=(
         WorkspaceStatusItemViewModel(
-            "ScenarioSpec",
+            "Scenario",
             "Generated" if generated else "Not run",
             "passed" if generated else "neutral",
+            "Structured source: ScenarioSpec",
+            "ScenarioSpec",
         ),
-        WorkspaceStatusItemViewModel("Validation", validation_value, validation_state),
         WorkspaceStatusItemViewModel(
-            "ASAM QC",
+            "Probes",
+            validation_value,
+            validation_state,
+            _workspace_probe_detail(prepared_case, semantic_result),
+        ),
+        WorkspaceStatusItemViewModel(
+            "OSC Quality",
             _workspace_qc_value(qc_result, generated),
             _workspace_qc_state(qc_result, generated),
+            _workspace_qc_detail(qc_result),
+            "ASAM QC",
         ),
         WorkspaceStatusItemViewModel(
-            "esmini",
+            "Simulation",
             _workspace_esmini_value(esmini_result, generated),
             _workspace_esmini_state(esmini_result, generated),
+            _workspace_esmini_detail(esmini_result),
+            "esmini",
         ),
     ))
+
+
+def _workspace_probe_detail(
+    prepared_case: PreparedDemoCase | None,
+    semantic_result: SemanticValidationResult | None,
+) -> str:
+    if prepared_case is not None:
+        results = (
+            prepared_case.initial_geometry_probe_results
+            + prepared_case.artifact_probe_results
+        )
+        if results:
+            passed = sum(result.passed for result in results)
+            return f"Deterministic validation: {passed}/{len(results)} probes passed"
+    if semantic_result is not None and semantic_result.checks:
+        passed = sum(check.passed for check in semantic_result.checks)
+        return f"Deterministic validation: {passed}/{len(semantic_result.checks)} semantic checks passed"
+    return "Deterministic validation: semantic and geometry probes"
+
+
+def _workspace_qc_detail(result: AsamQcResult | None) -> str:
+    if result is None:
+        return "Current checker: ASAM QC · not run"
+    if not result.checker_available:
+        return "Current checker: ASAM QC · unavailable"
+    return f"Current checker: ASAM QC · {'passed' if result.passed else 'failed'}"
+
+
+def _workspace_esmini_detail(result: EsminiResult | None) -> str:
+    if result is None:
+        return "Current simulator: esmini · not run"
+    if not result.esmini_available:
+        return "Current simulator: esmini · unavailable"
+    if result.executed:
+        return "Current simulator: esmini · execution passed"
+    if result.executed is False:
+        return "Current simulator: esmini · execution failed"
+    return "Current simulator: esmini · waiting"
 
 
 def build_workspace_repair_view_model(
@@ -447,6 +504,12 @@ def build_generated_scenario_view_model(
             ego_speed="missing",
             pedestrian_speed="missing",
             estimated_ttc="n/a",
+            target_ttc="n/a",
+            trigger_threshold_time="n/a",
+            ego_lead_time="n/a",
+            pedestrian_time_to_conflict="n/a",
+            trigger_threshold_summary="Trigger threshold: n/a",
+            pedestrian_conflict_summary="Pedestrian to conflict: n/a",
             status_cards=[
                 StatusCardViewModel("ScenarioSpec", "not generated", "Run the mock generator first."),
                 StatusCardViewModel("Semantic", "not run", "Validation has not started."),
@@ -469,6 +532,9 @@ def build_generated_scenario_view_model(
         diagnostics.append("Run Generate & Run to build artifacts and validation results.")
 
     recommendation = "Repair Scenario" if needs_repair else "Use as generated demo" if semantic_result is not None and semantic_result.passed else "Generate and validate"
+    timing_metrics = compute_timing_metrics(spec)
+    trigger_threshold = seconds_label(timing_metrics.trigger_threshold_time_s)
+    pedestrian_time = seconds_label(timing_metrics.pedestrian_time_to_conflict_s)
     return GeneratedScenarioViewModel(
         title=spec.scenario_name,
         scenario_type=spec.scenario_type,
@@ -479,7 +545,17 @@ def build_generated_scenario_view_model(
         criticality_summary=f"{spec.intended_criticality.type}, target TTC {spec.intended_criticality.target_min_ttc_s:g} s",
         ego_speed=ego_speed_label(spec),
         pedestrian_speed=pedestrian_speed_label(spec),
-        estimated_ttc=ttc_label(spec),
+        estimated_ttc=seconds_label(timing_metrics.target_ttc_s),
+        target_ttc=seconds_label(timing_metrics.target_ttc_s),
+        trigger_threshold_time=trigger_threshold,
+        ego_lead_time=seconds_label(timing_metrics.ego_lead_time_to_conflict_s),
+        pedestrian_time_to_conflict=pedestrian_time,
+        trigger_threshold_summary=(
+            f"Trigger threshold: {trigger_threshold} from {spec.trigger.type.replace('_', '-')} {spec.trigger.distance_m:g} m"
+            if timing_metrics.trigger_threshold_time_s is not None
+            else "Trigger threshold: n/a"
+        ),
+        pedestrian_conflict_summary=f"Pedestrian to conflict: {pedestrian_time}",
         status_cards=[
             StatusCardViewModel("ScenarioSpec", "generated", "Structured scenario intent is available."),
             StatusCardViewModel("Semantic", semantic_value, semantic_detail),
@@ -719,8 +795,11 @@ def pedestrian_speed_label(spec: ScenarioSpec) -> str:
     return f"{pedestrian.speed_mps:g} m/s"
 
 
-def ttc_label(spec: ScenarioSpec) -> str:
-    estimate = estimate_ttc_s(spec)
-    if estimate is None:
+def seconds_label(value_s: float | None) -> str:
+    if value_s is None:
         return "n/a"
-    return f"{estimate:.1f} s"
+    return f"{value_s:.1f} s"
+
+
+def ttc_label(spec: ScenarioSpec) -> str:
+    return seconds_label(compute_timing_metrics(spec).target_ttc_s)
