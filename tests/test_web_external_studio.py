@@ -11,10 +11,10 @@ from scenariocraft.web.app import (
     WEB_PREVIEW_DISPLAY_ORIENTATION,
     _frame_sequence_state,
     _playback_media_label,
-    _recommended_reference_examples,
     _should_render_frame_sequence,
     _verified_esmini_frame_paths,
 )
+from scenariocraft.web.external_view import _recommended_reference_examples
 from scenariocraft.web.view_models import (
     build_external_scenario_view_model,
     build_generated_scenario_view_model,
