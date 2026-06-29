@@ -68,6 +68,18 @@ _OPERATION_SCHEMAS: dict[str, dict[str, object]] = {
         "required": ["op", "point_id", "x_m", "y_m"],
         "additionalProperties": False,
     },
+    "set_trigger_point_by_lead_time": {
+        "type": "object",
+        "properties": {
+            "op": {"type": "string", "enum": ["set_trigger_point_by_lead_time"]},
+            "point_id": {"type": "string"},
+            "reference_point_id": {"type": "string"},
+            "speed_source_actor_id": {"type": "string"},
+            "lead_time_s": {"type": "number"},
+        },
+        "required": ["op", "point_id", "reference_point_id", "speed_source_actor_id", "lead_time_s"],
+        "additionalProperties": False,
+    },
 }
 
 _SYSTEM_PROMPT = """Return only a structured repair proposal.

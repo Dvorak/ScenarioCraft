@@ -1,7 +1,7 @@
 from dataclasses import replace
 
 from scenariocraft.generators import MockScenarioGenerator
-from scenariocraft.probes import run_pedestrian_occlusion_probes
+from scenariocraft.probes import run_pedestrian_occlusion_probes, run_pedestrian_occlusion_timing_probes
 from scenariocraft.repair import apply_patch
 from scenariocraft.repair.providers import FakeRepairProvider, RepairRequest
 from scenariocraft.schemas import (
@@ -11,6 +11,7 @@ from scenariocraft.schemas import (
     ProbeResult,
     RepositionActorToBandOperation,
     SetNamedPointOperation,
+    SetTriggerPointByLeadTimeOperation,
 )
 
 
@@ -59,6 +60,31 @@ def test_fake_provider_proposes_trigger_patch_and_manual_revalidation_passes() -
     assert operation.y_m == original_trigger_y
     repaired = apply_patch(invalid, proposal.patch)
     assert _probe(repaired, "trigger_point_before_conflict_and_in_ego_lane").passed is True
+
+
+def test_fake_provider_proposes_timing_lead_time_patch_and_revalidation_passes() -> None:
+    invalid = _trigger_too_close_to_conflict()
+    failed = _failed_timing_probe(invalid, "ego_lead_time_within_timing_policy")
+    request = RepairRequest(
+        user_intent="Repair trigger timing.",
+        scenario_spec=invalid,
+        failed_probe_results=(failed,),
+        allowed_operation_types=("set_trigger_point_by_lead_time",),
+    )
+
+    proposal = FakeRepairProvider().propose_patch(request)
+
+    assert isinstance(proposal.patch, PatchSpec)
+    assert len(proposal.patch.operations) == 1
+    operation = proposal.patch.operations[0]
+    assert isinstance(operation, SetTriggerPointByLeadTimeOperation)
+    assert operation.point_id == "trigger_point"
+    assert operation.reference_point_id == "conflict_point"
+    assert operation.speed_source_actor_id == "ego"
+    assert operation.lead_time_s > failed.measured["required_minimum_lead_time_s"]
+    repaired = apply_patch(invalid, proposal.patch)
+    timing_results = run_pedestrian_occlusion_timing_probes(repaired)
+    assert all(result.passed for result in timing_results)
 
 
 def test_fake_provider_declines_disallowed_operation_type() -> None:
@@ -166,6 +192,18 @@ def _trigger_after_conflict():
     return replace(spec, layout=replace(spec.layout, points=points))
 
 
+def _trigger_too_close_to_conflict():
+    spec = _canonical_spec()
+    assert spec.layout is not None
+    conflict = spec.layout.points["conflict_point"]
+    trigger = spec.layout.points["trigger_point"]
+    points = {
+        **spec.layout.points,
+        "trigger_point": Point2D(conflict.x_m - 0.5, trigger.y_m),
+    }
+    return replace(spec, layout=replace(spec.layout, points=points))
+
+
 def _failed_probe(spec, name: str) -> ProbeResult:
     result = _probe(spec, name)
     assert result.passed is False
@@ -174,3 +212,9 @@ def _failed_probe(spec, name: str) -> ProbeResult:
 
 def _probe(spec, name: str) -> ProbeResult:
     return next(result for result in run_pedestrian_occlusion_probes(spec) if result.name == name)
+
+
+def _failed_timing_probe(spec, name: str) -> ProbeResult:
+    result = next(result for result in run_pedestrian_occlusion_timing_probes(spec) if result.name == name)
+    assert result.passed is False
+    return result

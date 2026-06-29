@@ -5,8 +5,9 @@ from pathlib import Path
 import pytest
 
 from scenariocraft.generators import MockScenarioGenerator
+from scenariocraft.probes import run_pedestrian_occlusion_timing_probes
 from scenariocraft.repair.providers import FakeRepairProvider
-from scenariocraft.web.demo_cases import DEMO_CASES, get_demo_case, run_demo_case
+from scenariocraft.web.demo_cases import DEMO_CASES, get_demo_case, prepare_demo_case, run_demo_case
 
 
 EXPECTED_CASE_IDS = {
@@ -112,6 +113,18 @@ def test_trigger_case_fails_then_repairs_with_fake_provider(tmp_path: Path) -> N
     assert all(probe.passed for probe in result.final_geometry_probe_results)
     assert result.terminal_status == "passed"
     assert spec.to_json() == original_json
+
+
+def test_trigger_case_preparation_exposes_timing_probe_failures(tmp_path: Path) -> None:
+    spec = _canonical_spec()
+
+    prepared = prepare_demo_case("geometry_trigger_after_conflict", spec, tmp_path)
+    timing_results = run_pedestrian_occlusion_timing_probes(prepared.experiment_spec)
+    failures = {result.name for result in timing_results if not result.passed}
+
+    assert "ego_lead_time_to_conflict_positive" in failures
+    assert "ego_lead_time_within_timing_policy" in failures
+    assert "pedestrian_conflict_timing_alignment" in failures
 
 
 def test_artifact_drift_is_detection_only_and_scenario_spec_remains_canonical(

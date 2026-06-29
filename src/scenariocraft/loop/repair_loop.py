@@ -3,7 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from scenariocraft.loop.types import RepairRoundTrace, RepairRunResult, TerminalStatus
-from scenariocraft.probes import run_artifact_consistency_probes, run_pedestrian_occlusion_probes
+from scenariocraft.probes import (
+    run_artifact_consistency_probes,
+    run_pedestrian_occlusion_probes,
+    run_pedestrian_occlusion_timing_probes,
+)
 from scenariocraft.repair import PatchApplicationError, apply_patch
 from scenariocraft.repair.providers import RepairProvider, RepairRequest
 from scenariocraft.schemas import ProbeResult, ScenarioSpec
@@ -15,6 +19,7 @@ ALLOWED_OPERATION_TYPES = (
     "reposition_actor_to_band",
     "set_path_points",
     "set_named_point",
+    "set_trigger_point_by_lead_time",
 )
 
 
@@ -46,25 +51,25 @@ def run_bounded_repair_loop(
             reason="The bounded repair loop supports layout-backed pedestrian_occlusion scenarios only.",
         )
 
-    geometry_results = run_pedestrian_occlusion_probes(current_spec)
-    if not geometry_results:
+    validation_results = _scenario_validation_results(current_spec)
+    if not validation_results:
         return _result(
             initial_spec,
             current_spec,
             rounds,
-            geometry_results,
+            validation_results,
             status="geometry_validation_failed",
-            reason="No geometry probe evidence was produced for the supported scenario.",
+            reason="No geometry or timing probe evidence was produced for the supported scenario.",
         )
-    failures = _failures(geometry_results)
+    failures = _failures(validation_results)
     if failures and max_rounds == 0:
         return _result(
             initial_spec,
             current_spec,
             rounds,
-            geometry_results,
+            validation_results,
             status="max_rounds_reached",
-            reason="Geometry failures remain and max_rounds is zero.",
+            reason="Scenario validation failures remain and max_rounds is zero.",
         )
 
     while failures and len(rounds) < max_rounds:
@@ -80,7 +85,7 @@ def run_bounded_repair_loop(
             rounds.append(
                 RepairRoundTrace(
                     round_index=len(rounds) + 1,
-                    input_probe_results=geometry_results,
+                    input_probe_results=validation_results,
                     allowed_operation_types=ALLOWED_OPERATION_TYPES,
                     provider_name=proposal.provider_name,
                     proposal_rationale=proposal.rationale,
@@ -92,9 +97,9 @@ def run_bounded_repair_loop(
                 initial_spec,
                 current_spec,
                 rounds,
-                geometry_results,
+                validation_results,
                 status="provider_refused",
-                reason="The repair provider returned no patch for the current geometry failures.",
+                reason="The repair provider returned no patch for the current scenario validation failures.",
             )
 
         try:
@@ -103,7 +108,7 @@ def run_bounded_repair_loop(
             rounds.append(
                 RepairRoundTrace(
                     round_index=len(rounds) + 1,
-                    input_probe_results=geometry_results,
+                    input_probe_results=validation_results,
                     allowed_operation_types=ALLOWED_OPERATION_TYPES,
                     provider_name=proposal.provider_name,
                     proposal_rationale=proposal.rationale,
@@ -116,7 +121,7 @@ def run_bounded_repair_loop(
                 initial_spec,
                 current_spec,
                 rounds,
-                geometry_results,
+                validation_results,
                 status="patch_application_failed",
                 reason=f"Patch application failed: {exc}",
             )
@@ -124,7 +129,7 @@ def run_bounded_repair_loop(
         rounds.append(
             RepairRoundTrace(
                 round_index=len(rounds) + 1,
-                input_probe_results=geometry_results,
+                input_probe_results=validation_results,
                 allowed_operation_types=ALLOWED_OPERATION_TYPES,
                 provider_name=proposal.provider_name,
                 proposal_rationale=proposal.rationale,
@@ -133,26 +138,26 @@ def run_bounded_repair_loop(
             )
         )
         current_spec = patched_spec
-        geometry_results = run_pedestrian_occlusion_probes(current_spec)
-        if not geometry_results:
+        validation_results = _scenario_validation_results(current_spec)
+        if not validation_results:
             return _result(
                 initial_spec,
                 current_spec,
                 rounds,
-                geometry_results,
+                validation_results,
                 status="geometry_validation_failed",
-                reason="No geometry probe evidence was produced after patch application.",
+                reason="No geometry or timing probe evidence was produced after patch application.",
             )
-        failures = _failures(geometry_results)
+        failures = _failures(validation_results)
 
     if failures:
         return _result(
             initial_spec,
             current_spec,
             rounds,
-            geometry_results,
+            validation_results,
             status="max_rounds_reached",
-            reason=f"Geometry failures remain after {max_rounds} repair round(s).",
+            reason=f"Scenario validation failures remain after {max_rounds} repair round(s).",
         )
 
     try:
@@ -162,7 +167,7 @@ def run_bounded_repair_loop(
             initial_spec,
             current_spec,
             rounds,
-            geometry_results,
+            validation_results,
             status="build_failed",
             reason=f"Deterministic artifact build failed with {type(exc).__name__}: {exc}",
         )
@@ -177,7 +182,7 @@ def run_bounded_repair_loop(
             initial_spec,
             current_spec,
             rounds,
-            geometry_results,
+            validation_results,
             artifact_results=artifact_results,
             status="artifact_validation_failed",
             reason=(
@@ -192,10 +197,10 @@ def run_bounded_repair_loop(
         initial_spec,
         current_spec,
         rounds,
-        geometry_results,
+        validation_results,
         artifact_results=artifact_results,
         status="passed",
-        reason="Geometry and static artifact consistency probes passed.",
+        reason="Geometry, timing, and static artifact consistency probes passed.",
         xosc_path=build_result.xosc_path,
         xodr_path=build_result.xodr_path,
     )
@@ -203,6 +208,14 @@ def run_bounded_repair_loop(
 
 def _failures(results: tuple[ProbeResult, ...]) -> tuple[ProbeResult, ...]:
     return tuple(result for result in results if not result.passed)
+
+
+def _scenario_validation_results(spec: ScenarioSpec) -> tuple[ProbeResult, ...]:
+    geometry_results = run_pedestrian_occlusion_probes(spec)
+    if not geometry_results:
+        return ()
+    timing_results = run_pedestrian_occlusion_timing_probes(spec)
+    return geometry_results + timing_results
 
 
 def _result(

@@ -10,6 +10,7 @@ from scenariocraft.schemas import (
     SetActorPoseOperation,
     SetNamedPointOperation,
     SetPathPointsOperation,
+    SetTriggerPointByLeadTimeOperation,
 )
 
 
@@ -39,6 +40,13 @@ def test_patch_spec_parses_and_round_trips_typed_operations() -> None:
                 "x_m": 25.0,
                 "y_m": 0.0,
             },
+            {
+                "op": "set_trigger_point_by_lead_time",
+                "point_id": "trigger_point",
+                "reference_point_id": "conflict_point",
+                "speed_source_actor_id": "ego",
+                "lead_time_s": 3.0,
+            },
         ]
     }
 
@@ -50,6 +58,7 @@ def test_patch_spec_parses_and_round_trips_typed_operations() -> None:
     assert isinstance(patch.operations[1], RepositionActorToBandOperation)
     assert isinstance(patch.operations[2], SetPathPointsOperation)
     assert isinstance(patch.operations[3], SetNamedPointOperation)
+    assert isinstance(patch.operations[4], SetTriggerPointByLeadTimeOperation)
     assert patch.operations[2].points == (Point2D(25.0, 4.6), Point2D(25.0, -1.0))
 
 
@@ -112,6 +121,19 @@ def test_patch_spec_rejects_malformed_extra_fields() -> None:
                 "x_m": 25.0,
                 "y_m": 0.0,
                 "raw_xml": "<Position/>",
+            }]
+        })
+
+
+def test_set_trigger_point_by_lead_time_requires_positive_lead_time() -> None:
+    with pytest.raises(PatchSpecError, match="lead_time_s must be positive"):
+        PatchSpec.from_dict({
+            "operations": [{
+                "op": "set_trigger_point_by_lead_time",
+                "point_id": "trigger_point",
+                "reference_point_id": "conflict_point",
+                "speed_source_actor_id": "ego",
+                "lead_time_s": 0.0,
             }]
         })
 

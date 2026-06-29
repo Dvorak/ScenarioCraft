@@ -6,13 +6,16 @@ from streamlit.testing.v1 import AppTest
 
 from scenariocraft.generators import MockScenarioGenerator
 from scenariocraft.repair.providers import FakeRepairProvider
+from scenariocraft.tools import AsamQcResult, EsminiResult
 from scenariocraft.web.app import (
     WORKSPACE_DESKTOP_HEIGHT,
     WORKSPACE_GENERATE_ICON,
     WORKSPACE_MEDIA_TITLES,
+    WORKSPACE_MEDIA_ASPECT_RATIO,
     WORKSPACE_PAGES,
     WORKSPACE_PROVIDER,
     WORKSPACE_REPAIR_ICON,
+    WEB_PREVIEW_PRESENTATION_STYLE,
     workspace_case_options,
 )
 from scenariocraft.web.demo_cases import (
@@ -21,6 +24,7 @@ from scenariocraft.web.demo_cases import (
     prepare_demo_case,
 )
 from scenariocraft.web.view_models import (
+    build_generated_scenario_view_model,
     build_workspace_repair_view_model,
     build_workspace_status_view_model,
     workspace_section_ids,
@@ -31,9 +35,11 @@ def test_workspace_navigation_and_media_contract() -> None:
     assert WORKSPACE_PAGES == ("Workspace", "Advanced")
     assert WORKSPACE_DESKTOP_HEIGHT == "clamp(720px, calc(100dvh - 6.5rem), 960px)"
     assert WORKSPACE_MEDIA_TITLES == ("Preview 2D Semantic", "Playback Esmini")
+    assert WORKSPACE_MEDIA_ASPECT_RATIO == "16 / 9"
     assert WORKSPACE_PROVIDER == "mock"
     assert WORKSPACE_GENERATE_ICON == ":material/send:"
     assert WORKSPACE_REPAIR_ICON == ":material/build:"
+    assert WEB_PREVIEW_PRESENTATION_STYLE == "clean_split"
 
 
 def test_workspace_is_default_and_has_one_demo_case_selector() -> None:
@@ -90,6 +96,21 @@ def test_workspace_repair_appears_only_until_successful_revalidation(tmp_path: P
     assert "Repair" not in [button.label for button in app.button]
 
 
+def test_workspace_brief_uses_explicit_timing_metric_labels(tmp_path: Path) -> None:
+    app = AppTest.from_file("src/scenariocraft/web/app.py", default_timeout=20).run()
+    app.session_state["output_root"] = str(tmp_path)
+    next(button for button in app.button if button.label == "Generate").click().run()
+
+    labels = [metric.label for metric in app.metric]
+    assert "Target TTC" in labels
+    assert "Lead Time" in labels
+    assert "TTC" not in labels
+    assert "Estimated TTC" not in labels
+    captions = "\n".join(item.value for item in app.caption)
+    assert "Trigger threshold:" in captions
+    assert "Pedestrian to conflict:" in captions
+
+
 def test_artifact_detection_only_does_not_render_repair_action(tmp_path: Path) -> None:
     app = AppTest.from_file("src/scenariocraft/web/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
@@ -117,6 +138,7 @@ def test_workspace_css_hides_streamlit_chrome_and_scopes_icon_controls() -> None
     assert "grid-template-rows: repeat(2, minmax(0, 1fr))" in css
     assert ".st-key-workspace_preview_stage" in css
     assert ".st-key-workspace_playback_stage" in css
+    assert f"--workspace-media-aspect-ratio: {WORKSPACE_MEDIA_ASPECT_RATIO}" in css
     assert "object-fit: contain" in css
     assert "@media (max-width: 900px)" in css
     assert '[data-testid="stHorizontalBlock"]:has(.st-key-workspace_left_normal, .st-key-workspace_left_repair)' in css
@@ -133,9 +155,14 @@ def test_workspace_status_is_one_textual_four_stage_grid() -> None:
     )
 
     assert status_markup.count('class="status-item ') == 4
-    for label in ("ScenarioSpec", "Validation", "ASAM QC", "esmini"):
+    for label in ("Scenario", "Probes", "OSC Quality", "Simulation"):
         assert label in status_markup
-    assert status_markup.count("Not run") == 4
+    assert status_markup.count("</i>Not run</strong>") == 4
+    assert status_markup.count('tabindex="0"') == 4
+    assert status_markup.count("aria-label=") == 4
+    assert "Structured source: ScenarioSpec" in status_markup
+    assert "Current checker: ASAM QC" in status_markup
+    assert "Current simulator: esmini" in status_markup
 
 
 def test_workspace_uses_only_registered_demo_cases() -> None:
@@ -188,6 +215,31 @@ def test_geometry_failure_exposes_explicit_fake_repair(tmp_path: Path) -> None:
     assert all(result.passed for result in execution.final_geometry_probe_results)
 
 
+def test_trigger_after_conflict_view_model_shows_negative_lead_time_before_repair(tmp_path: Path) -> None:
+    spec = MockScenarioGenerator().generate_spec("pedestrian occlusion")
+    prepared = prepare_demo_case("geometry_trigger_after_conflict", spec, tmp_path)
+
+    vm = build_generated_scenario_view_model(prepared.experiment_spec)
+
+    assert vm.ego_lead_time == "-0.1 s"
+    assert vm.trigger_threshold_time == "1.9 s"
+    assert vm.target_ttc == "1.5 s"
+
+
+def test_repaired_trigger_changes_lead_time_not_trigger_threshold_time(tmp_path: Path) -> None:
+    spec = MockScenarioGenerator().generate_spec("pedestrian occlusion")
+    prepared = prepare_demo_case("geometry_trigger_after_conflict", spec, tmp_path)
+    before = build_generated_scenario_view_model(prepared.experiment_spec)
+
+    execution = execute_prepared_demo_case(prepared, tmp_path)
+    assert execution.repair_run_result is not None
+    after = build_generated_scenario_view_model(execution.repair_run_result.final_spec)
+
+    assert before.trigger_threshold_time == after.trigger_threshold_time == "1.9 s"
+    assert before.ego_lead_time == "-0.1 s"
+    assert after.ego_lead_time == "1.6 s"
+
+
 def test_artifact_failure_is_detection_only_without_patch_provider(tmp_path: Path) -> None:
     spec = MockScenarioGenerator().generate_spec("pedestrian occlusion")
     prepared = prepare_demo_case("artifact_xosc_actor_pose_drift", spec, tmp_path)
@@ -208,8 +260,43 @@ def test_workspace_status_reports_prepared_probe_failure(tmp_path: Path) -> None
 
     values = {item.label: item.value for item in status.items}
     assert values == {
-        "ScenarioSpec": "Generated",
-        "Validation": "Failed",
-        "ASAM QC": "Waiting",
-        "esmini": "Waiting",
+        "Scenario": "Generated",
+        "Probes": "Failed",
+        "OSC Quality": "Waiting",
+        "Simulation": "Waiting",
     }
+    details = {item.label: item.detail for item in status.items}
+    assert "ScenarioSpec" in details["Scenario"]
+    assert "probes passed" in details["Probes"]
+    assert "ASAM QC" in details["OSC Quality"]
+    assert "esmini" in details["Simulation"]
+
+
+def test_workspace_status_keeps_optional_tool_unavailability_explicit() -> None:
+    spec = MockScenarioGenerator().generate_spec("pedestrian occlusion")
+    qc_result = AsamQcResult(False, ["qc_openscenario"], None, "", "missing", None)
+    esmini_result = EsminiResult(
+        False,
+        ["esmini"],
+        None,
+        None,
+        "",
+        "missing",
+        None,
+        "esmini was not found",
+        None,
+    )
+
+    status = build_workspace_status_view_model(
+        spec,
+        qc_result=qc_result,
+        esmini_result=esmini_result,
+    )
+
+    items = {item.label: item for item in status.items}
+    assert items["OSC Quality"].value == "Unavailable"
+    assert items["OSC Quality"].tool_name == "ASAM QC"
+    assert items["OSC Quality"].detail.endswith("unavailable")
+    assert items["Simulation"].value == "Unavailable"
+    assert items["Simulation"].tool_name == "esmini"
+    assert items["Simulation"].detail.endswith("unavailable")

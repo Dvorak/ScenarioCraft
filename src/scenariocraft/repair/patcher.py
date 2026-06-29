@@ -12,6 +12,7 @@ from scenariocraft.schemas import (
     SetActorPoseOperation,
     SetNamedPointOperation,
     SetPathPointsOperation,
+    SetTriggerPointByLeadTimeOperation,
 )
 
 
@@ -35,6 +36,8 @@ def apply_patch(spec: ScenarioSpec, patch: PatchSpec) -> ScenarioSpec:
             patched = _set_path_points(patched, operation)
         elif isinstance(operation, SetNamedPointOperation):
             patched = _set_named_point(patched, operation)
+        elif isinstance(operation, SetTriggerPointByLeadTimeOperation):
+            patched = _set_trigger_point_by_lead_time(patched, operation)
         else:
             raise PatchApplicationError(f"Unsupported patch operation: {type(operation).__name__}.")
     return patched
@@ -95,6 +98,38 @@ def _set_named_point(spec: ScenarioSpec, operation: SetNamedPointOperation) -> S
         raise PatchApplicationError(f"Named point not found: {operation.point_id}.")
     points = dict(layout.points)
     points[operation.point_id] = Point2D(x_m=operation.x_m, y_m=operation.y_m)
+    return replace(spec, layout=replace(layout, points=points))
+
+
+def _set_trigger_point_by_lead_time(
+    spec: ScenarioSpec,
+    operation: SetTriggerPointByLeadTimeOperation,
+) -> ScenarioSpec:
+    layout = _require_layout(spec)
+    if operation.point_id not in layout.points:
+        raise PatchApplicationError(f"Named point not found: {operation.point_id}.")
+    reference = layout.points.get(operation.reference_point_id)
+    if reference is None:
+        raise PatchApplicationError(f"Named point not found: {operation.reference_point_id}.")
+    speed_source = spec.actor_by_id(operation.speed_source_actor_id)
+    if speed_source is None:
+        raise PatchApplicationError(f"Actor not found: {operation.speed_source_actor_id}.")
+    if speed_source.initial_speed_kph is None:
+        raise PatchApplicationError(
+            f"Actor initial_speed_kph is required for lead-time patch: {operation.speed_source_actor_id}."
+        )
+    speed_mps = speed_source.initial_speed_kph / 3.6
+    if speed_mps <= 0.0:
+        raise PatchApplicationError(
+            f"Actor speed must be positive for lead-time patch: {operation.speed_source_actor_id}."
+        )
+
+    current = layout.points[operation.point_id]
+    points = dict(layout.points)
+    points[operation.point_id] = Point2D(
+        x_m=reference.x_m - speed_mps * operation.lead_time_s,
+        y_m=current.y_m,
+    )
     return replace(spec, layout=replace(layout, points=points))
 
 

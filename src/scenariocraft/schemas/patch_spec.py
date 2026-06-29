@@ -125,11 +125,48 @@ class SetNamedPointOperation:
         }
 
 
+@dataclass(frozen=True)
+class SetTriggerPointByLeadTimeOperation:
+    point_id: str
+    reference_point_id: str
+    speed_source_actor_id: str
+    lead_time_s: float
+
+    op: ClassVar[str] = "set_trigger_point_by_lead_time"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "point_id", _require_non_empty_string(self.point_id, "point_id"))
+        object.__setattr__(
+            self,
+            "reference_point_id",
+            _require_non_empty_string(self.reference_point_id, "reference_point_id"),
+        )
+        object.__setattr__(
+            self,
+            "speed_source_actor_id",
+            _require_non_empty_string(self.speed_source_actor_id, "speed_source_actor_id"),
+        )
+        lead_time_s = _require_finite_number(self.lead_time_s, "lead_time_s")
+        if lead_time_s <= 0.0:
+            raise PatchSpecError("lead_time_s must be positive.")
+        object.__setattr__(self, "lead_time_s", lead_time_s)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "op": self.op,
+            "point_id": self.point_id,
+            "reference_point_id": self.reference_point_id,
+            "speed_source_actor_id": self.speed_source_actor_id,
+            "lead_time_s": self.lead_time_s,
+        }
+
+
 PatchOperation: TypeAlias = (
     SetActorPoseOperation
     | RepositionActorToBandOperation
     | SetPathPointsOperation
     | SetNamedPointOperation
+    | SetTriggerPointByLeadTimeOperation
 )
 
 _OPERATION_TYPES = (
@@ -137,6 +174,7 @@ _OPERATION_TYPES = (
     RepositionActorToBandOperation,
     SetPathPointsOperation,
     SetNamedPointOperation,
+    SetTriggerPointByLeadTimeOperation,
 )
 
 
@@ -217,6 +255,18 @@ def _operation_from_dict(value: object, index: int) -> PatchOperation:
             point_id=value["point_id"],
             x_m=value["x_m"],
             y_m=value["y_m"],
+        )
+    if canonical_op == "set_trigger_point_by_lead_time":
+        _require_exact_fields(
+            value,
+            {"op", "point_id", "reference_point_id", "speed_source_actor_id", "lead_time_s"},
+            f"operations[{index}]",
+        )
+        return SetTriggerPointByLeadTimeOperation(
+            point_id=value["point_id"],
+            reference_point_id=value["reference_point_id"],
+            speed_source_actor_id=value["speed_source_actor_id"],
+            lead_time_s=value["lead_time_s"],
         )
     raise PatchSpecError(f"Unknown patch operation: {op}.")
 

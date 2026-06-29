@@ -12,6 +12,7 @@ from scenariocraft.schemas import (
     SetActorPoseOperation,
     SetNamedPointOperation,
     SetPathPointsOperation,
+    SetTriggerPointByLeadTimeOperation,
 )
 
 
@@ -95,6 +96,21 @@ def test_set_named_point_replaces_only_target_point() -> None:
     assert patched.layout.paths["pedestrian_crossing_path"] == pedestrian_path
 
 
+def test_set_trigger_point_by_lead_time_computes_x_and_preserves_y() -> None:
+    spec = _canonical_spec()
+    assert spec.layout is not None
+    original_trigger = spec.layout.points["trigger_point"]
+    conflict = spec.layout.points["conflict_point"]
+    patch = PatchSpec((SetTriggerPointByLeadTimeOperation("trigger_point", "conflict_point", "ego", 3.0),))
+
+    patched = apply_patch(spec, patch)
+
+    trigger = patched.layout.points["trigger_point"]
+    assert trigger.x_m == pytest.approx(conflict.x_m - (35.0 / 3.6) * 3.0)
+    assert trigger.y_m == original_trigger.y_m
+    assert spec.layout.points["trigger_point"] == original_trigger
+
+
 @pytest.mark.parametrize(
     ("operation", "message"),
     [
@@ -108,11 +124,36 @@ def test_set_named_point_replaces_only_target_point() -> None:
             "Path not found: missing_path",
         ),
         (SetNamedPointOperation("missing_point", 0.0, 0.0), "Named point not found: missing_point"),
+        (
+            SetTriggerPointByLeadTimeOperation("missing_point", "conflict_point", "ego", 2.0),
+            "Named point not found: missing_point",
+        ),
+        (
+            SetTriggerPointByLeadTimeOperation("trigger_point", "missing_point", "ego", 2.0),
+            "Named point not found: missing_point",
+        ),
+        (
+            SetTriggerPointByLeadTimeOperation("trigger_point", "conflict_point", "missing_actor", 2.0),
+            "Actor not found: missing_actor",
+        ),
     ],
 )
 def test_unknown_patch_references_are_rejected(operation, message: str) -> None:
     with pytest.raises(PatchApplicationError, match=message):
         apply_patch(_canonical_spec(), PatchSpec((operation,)))
+
+
+def test_set_trigger_point_by_lead_time_rejects_nonpositive_speed() -> None:
+    spec = _canonical_spec()
+    actors = tuple(
+        replace(actor, initial_speed_kph=0.0) if actor.id == "ego" else actor
+        for actor in spec.actors
+    )
+    stopped_ego = replace(spec, actors=actors)
+    patch = PatchSpec((SetTriggerPointByLeadTimeOperation("trigger_point", "conflict_point", "ego", 2.0),))
+
+    with pytest.raises(PatchApplicationError, match="Actor speed must be positive"):
+        apply_patch(stopped_ego, patch)
 
 
 def test_missing_actor_footprint_is_rejected() -> None:

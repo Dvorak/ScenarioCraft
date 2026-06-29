@@ -10,6 +10,7 @@ import pytest
 import scenariocraft.loop.repair_loop as repair_loop_module
 from scenariocraft.generators import MockScenarioGenerator
 from scenariocraft.loop import ALLOWED_OPERATION_TYPES, run_bounded_repair_loop
+from scenariocraft.probes import run_pedestrian_occlusion_timing_probes
 from scenariocraft.repair.providers import FakeRepairProvider
 from scenariocraft.schemas import FootprintSpec, Point2D, Pose2D, ProbeResult
 
@@ -76,12 +77,35 @@ def test_trigger_after_conflict_is_repaired_and_revalidated(tmp_path: Path) -> N
     patch = result.rounds[0].proposed_patch
     assert patch is not None
     assert patch.operations[0].to_dict()["op"] == "set_named_point"
+    assert patch.operations[1].to_dict()["op"] == "set_trigger_point_by_lead_time"
     trigger_probe = next(
         probe
         for probe in result.final_geometry_probe_results
         if probe.name == "trigger_point_before_conflict_and_in_ego_lane"
     )
     assert trigger_probe.passed is True
+    assert all(probe.passed for probe in run_pedestrian_occlusion_timing_probes(result.final_spec))
+
+
+def test_timing_failure_is_repaired_with_lead_time_operation(tmp_path: Path) -> None:
+    spec = _trigger_too_close_to_conflict()
+
+    result = run_bounded_repair_loop(
+        spec,
+        provider=FakeRepairProvider(),
+        output_dir=tmp_path,
+    )
+
+    assert result.terminal_status == "passed"
+    assert len(result.rounds) == 1
+    patch = result.rounds[0].proposed_patch
+    assert patch is not None
+    assert [operation.to_dict()["op"] for operation in patch.operations] == ["set_trigger_point_by_lead_time"]
+    assert any(
+        probe.name == "ego_lead_time_within_timing_policy" and not probe.passed
+        for probe in result.rounds[0].input_probe_results
+    )
+    assert all(probe.passed for probe in result.final_geometry_probe_results)
 
 
 def test_unsupported_geometry_failure_stops_on_provider_refusal_without_build(
@@ -280,6 +304,18 @@ def _trigger_after_conflict():
     points = {
         **spec.layout.points,
         "trigger_point": Point2D(conflict.x_m + 5.0, trigger.y_m),
+    }
+    return replace(spec, layout=replace(spec.layout, points=points))
+
+
+def _trigger_too_close_to_conflict():
+    spec = _canonical_spec()
+    assert spec.layout is not None
+    conflict = spec.layout.points["conflict_point"]
+    trigger = spec.layout.points["trigger_point"]
+    points = {
+        **spec.layout.points,
+        "trigger_point": Point2D(conflict.x_m - 0.5, trigger.y_m),
     }
     return replace(spec, layout=replace(spec.layout, points=points))
 
