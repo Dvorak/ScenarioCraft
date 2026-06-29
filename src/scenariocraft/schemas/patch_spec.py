@@ -5,7 +5,7 @@ import math
 from dataclasses import dataclass
 from typing import Any, ClassVar, Mapping, TypeAlias
 
-from scenariocraft.schemas.scenario_spec import Point2D
+from scenariocraft.schemas.layout_spec import Point2D
 
 
 class PatchSpecError(ValueError):

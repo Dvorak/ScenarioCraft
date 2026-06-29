@@ -7,7 +7,7 @@ from scenariocraft.roads import URBAN_TWO_WAY_PARKING_FILENAME
 from scenariocraft.schemas import Point2D
 from scenariocraft.schemas import ScenarioSpec
 from scenariocraft.templates import PedestrianOcclusionTemplate, get_template, registered_templates
-from scenariocraft.tools import (
+from scenariocraft.metrics import (
     compute_timing_metrics,
     ego_lead_time_to_conflict_s,
     pedestrian_time_to_conflict_s,

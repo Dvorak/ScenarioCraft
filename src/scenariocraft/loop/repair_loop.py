@@ -10,8 +10,8 @@ from scenariocraft.probes import (
 )
 from scenariocraft.repair import PatchApplicationError, apply_patch
 from scenariocraft.repair.providers import RepairProvider, RepairRequest
+from scenariocraft.build import build_openscenario
 from scenariocraft.schemas import ProbeResult, ScenarioSpec
-from scenariocraft.tools import build_openscenario
 
 
 ALLOWED_OPERATION_TYPES = (

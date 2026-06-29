@@ -6,7 +6,7 @@ from streamlit.testing.v1 import AppTest
 
 from scenariocraft.generators import MockScenarioGenerator
 from scenariocraft.repair.providers import FakeRepairProvider
-from scenariocraft.tools import AsamQcResult, EsminiResult
+from scenariocraft.runtime import AsamQcResult, EsminiResult
 from scenariocraft.application.demo_cases import (
     DEMO_CASES,
     execute_prepared_demo_case,

@@ -9,7 +9,7 @@ import pytest
 
 from scenariocraft.generators import MockScenarioGenerator
 from scenariocraft.probes import run_artifact_consistency_probes
-from scenariocraft.tools import BuildResult, build_openscenario
+from scenariocraft.build import BuildResult, build_openscenario
 
 EXPECTED_PROBE_NAMES = [
     "xosc_actor_poses_match_layout",

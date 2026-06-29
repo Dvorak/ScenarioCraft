@@ -25,7 +25,7 @@ from scenariocraft.schemas import (
     TriggerSpec,
     WeatherSpec,
 )
-from scenariocraft.schemas.scenario_spec import ScenarioSpecError
+from scenariocraft.schemas.common import ScenarioSpecError
 
 
 def test_scenario_spec_round_trip_json() -> None:

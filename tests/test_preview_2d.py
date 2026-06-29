@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from scenariocraft.generators import MockScenarioGenerator
-from scenariocraft.tools import estimate_ttc_s, generate_2d_preview
+from scenariocraft.presentation import estimate_ttc_s, generate_2d_preview
 from scenariocraft.presentation.preview_2d import (
     CLEAN_PREVIEW_ASPECT_RATIO,
     _apply_display_orientation,
@@ -213,7 +213,7 @@ def test_preview_supports_esmini_top_camera_raw_orientation_without_mutating_spe
 
 
 def test_renderer_aligned_preview_suppresses_in_road_band_labels(monkeypatch, tmp_path: Path) -> None:
-    import scenariocraft.tools.preview_2d as preview_2d
+    import scenariocraft.presentation.preview_2d as preview_2d
 
     spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
     calls = []
@@ -256,7 +256,7 @@ def test_road_context_legend_uses_band_colors() -> None:
 
 
 def test_actor_legend_is_still_drawn(monkeypatch, tmp_path: Path) -> None:
-    import scenariocraft.tools.preview_2d as preview_2d
+    import scenariocraft.presentation.preview_2d as preview_2d
 
     spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
     called = {"actor_legend": False}

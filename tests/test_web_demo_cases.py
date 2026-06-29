@@ -8,7 +8,6 @@ from scenariocraft.generators import MockScenarioGenerator
 from scenariocraft.probes import run_pedestrian_occlusion_timing_probes
 from scenariocraft.repair.providers import FakeRepairProvider
 from scenariocraft.application.demo_cases import DEMO_CASES, get_demo_case, prepare_demo_case, run_demo_case
-from scenariocraft.web import demo_cases as web_demo_cases
 
 
 EXPECTED_CASE_IDS = {
@@ -29,11 +28,6 @@ def test_demo_case_registry_contains_exactly_the_required_cases() -> None:
         "detection_only",
     }
     assert get_demo_case("normal_good_scenario").display_name == "Normal Good Scenario"
-
-
-def test_web_demo_case_module_is_compatibility_shim() -> None:
-    assert web_demo_cases.DEMO_CASES is DEMO_CASES
-    assert web_demo_cases.get_demo_case("normal_good_scenario") is get_demo_case("normal_good_scenario")
 
 
 def test_normal_case_passes_without_mutation_or_provider_request(
@@ -205,9 +199,9 @@ def test_demo_cases_do_not_call_runtime_external_or_model_tools(tmp_path: Path, 
     def forbidden(*args, **kwargs):
         raise AssertionError("Demo case called a forbidden runtime, external, or model tool.")
 
-    monkeypatch.setattr("scenariocraft.tools.run_esmini", forbidden)
-    monkeypatch.setattr("scenariocraft.tools.run_esmini_playback", forbidden)
-    monkeypatch.setattr("scenariocraft.tools.run_asam_qc", forbidden)
+    monkeypatch.setattr("scenariocraft.runtime.run_esmini", forbidden)
+    monkeypatch.setattr("scenariocraft.runtime.run_esmini_playback", forbidden)
+    monkeypatch.setattr("scenariocraft.runtime.run_asam_qc", forbidden)
     monkeypatch.setattr("scenariocraft.repair.providers.OpenAIRepairProvider", forbidden)
 
     for case in DEMO_CASES:

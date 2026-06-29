@@ -61,7 +61,7 @@ def test_core_candidates_remain_free_of_delivery_runtime_and_provider_imports() 
     assert offenders == {}
 
 
-def test_semantic_packages_preserve_legacy_tool_exports() -> None:
+def test_canonical_semantic_package_imports_are_available() -> None:
     from scenariocraft.build import build_openscenario
     from scenariocraft.build.scenario_builder import BuildResult
     from scenariocraft.metrics import compute_timing_metrics
@@ -70,27 +70,41 @@ def test_semantic_packages_preserve_legacy_tool_exports() -> None:
     from scenariocraft.presentation.preview_2d import estimate_ttc_s
     from scenariocraft.runtime import AsamQcResult, EsminiResult, run_asam_qc, run_esmini
     from scenariocraft.runtime.esmini import run_esmini_playback
-    from scenariocraft.tools import build_openscenario as legacy_build_openscenario
-    from scenariocraft.tools import compute_timing_metrics as legacy_compute_timing_metrics
-    from scenariocraft.tools import generate_2d_preview as legacy_generate_2d_preview
-    from scenariocraft.tools import generate_validation_report as legacy_generate_validation_report
-    from scenariocraft.tools import run_asam_qc as legacy_run_asam_qc
-    from scenariocraft.tools import run_esmini as legacy_run_esmini
-    from scenariocraft.tools import run_esmini_playback as legacy_run_esmini_playback
-    from scenariocraft.tools import validate_semantics as legacy_validate_semantics
-    from scenariocraft.tools.timing_metrics import time_headway_s as legacy_time_headway_s
     from scenariocraft.validation import validate_semantics
 
-    assert legacy_build_openscenario is build_openscenario
-    assert legacy_compute_timing_metrics is compute_timing_metrics
-    assert legacy_generate_2d_preview is generate_2d_preview
-    assert legacy_generate_validation_report is generate_validation_report
-    assert legacy_run_asam_qc is run_asam_qc
-    assert legacy_run_esmini is run_esmini
-    assert legacy_run_esmini_playback is run_esmini_playback
-    assert legacy_time_headway_s is time_headway_s
-    assert legacy_validate_semantics is validate_semantics
     assert AsamQcResult.__name__ == "AsamQcResult"
     assert BuildResult.__name__ == "BuildResult"
     assert EsminiResult.__name__ == "EsminiResult"
     assert callable(estimate_ttc_s)
+    assert callable(build_openscenario)
+    assert callable(compute_timing_metrics)
+    assert callable(generate_2d_preview)
+    assert callable(generate_validation_report)
+    assert callable(run_asam_qc)
+    assert callable(run_esmini)
+    assert callable(run_esmini_playback)
+    assert callable(time_headway_s)
+    assert callable(validate_semantics)
+
+
+def test_pre_release_compatibility_facades_are_not_used_by_source() -> None:
+    checked_paths = [
+        path
+        for root in (Path("src/scenariocraft"), Path("tests"))
+        for path in root.rglob("*.py")
+        if "__pycache__" not in path.parts
+    ]
+    forbidden = (
+        "scenariocraft.tools",
+        "scenariocraft.schemas.scenario_spec",
+        "scenariocraft.web.demo_cases",
+    )
+
+    offenders = {
+        str(path): [pattern for pattern in forbidden if pattern in path.read_text(encoding="utf-8")]
+        for path in checked_paths
+        if path.name != Path(__file__).name
+    }
+    offenders = {path: patterns for path, patterns in offenders.items() if patterns}
+
+    assert offenders == {}

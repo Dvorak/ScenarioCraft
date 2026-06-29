@@ -10,6 +10,7 @@ from scenariocraft.loop.orchestrator import run_bounded_orchestrator
 from scenariocraft.probes import run_artifact_consistency_probes, run_pedestrian_occlusion_probes
 from scenariocraft.repair import apply_patch
 from scenariocraft.repair.providers import FakeRepairProvider
+from scenariocraft.build import build_openscenario
 from scenariocraft.schemas import (
     PatchSpec,
     ProbeResult,
@@ -17,7 +18,6 @@ from scenariocraft.schemas import (
     SetActorPoseOperation,
     SetNamedPointOperation,
 )
-from scenariocraft.tools import build_openscenario
 
 
 FaultDomain: TypeAlias = Literal["none", "geometry", "artifact"]

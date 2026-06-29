@@ -4,7 +4,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from scenariocraft.web.demo_cases import DEMO_CASES
+from scenariocraft.application.demo_cases import DEMO_CASES
 
 
 DEFAULT_SCENARIO_TEXT = (

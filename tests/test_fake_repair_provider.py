@@ -150,8 +150,8 @@ def test_fake_provider_does_not_call_patch_build_runtime_or_artifact_tools(monke
         raise AssertionError("Provider crossed its proposal-only boundary.")
 
     monkeypatch.setattr("scenariocraft.repair.apply_patch", forbidden)
-    monkeypatch.setattr("scenariocraft.tools.build_openscenario", forbidden)
-    monkeypatch.setattr("scenariocraft.tools.run_esmini", forbidden)
+    monkeypatch.setattr("scenariocraft.build.build_openscenario", forbidden)
+    monkeypatch.setattr("scenariocraft.runtime.run_esmini", forbidden)
     monkeypatch.setattr("scenariocraft.probes.run_artifact_consistency_probes", forbidden)
     invalid = _van_outside_parking_strip()
     request = RepairRequest(

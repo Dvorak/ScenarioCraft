@@ -1,6 +1,6 @@
 import subprocess
 
-from scenariocraft.tools.asam_qc_tool import run_asam_qc
+from scenariocraft.runtime.asam_qc import run_asam_qc
 
 
 def test_asam_qc_unavailable(monkeypatch, tmp_path) -> None:

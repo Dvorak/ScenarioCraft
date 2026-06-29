@@ -193,8 +193,8 @@ def test_provider_does_not_mutate_or_call_repair_build_probe_runtime_or_web(monk
         raise AssertionError("OpenAI provider crossed its proposal-only boundary.")
 
     monkeypatch.setattr("scenariocraft.repair.apply_patch", forbidden)
-    monkeypatch.setattr("scenariocraft.tools.build_openscenario", forbidden)
-    monkeypatch.setattr("scenariocraft.tools.run_esmini", forbidden)
+    monkeypatch.setattr("scenariocraft.build.build_openscenario", forbidden)
+    monkeypatch.setattr("scenariocraft.runtime.run_esmini", forbidden)
     monkeypatch.setattr("scenariocraft.probes.run_artifact_consistency_probes", forbidden)
     request = _request()
     original = request.scenario_spec.to_json()

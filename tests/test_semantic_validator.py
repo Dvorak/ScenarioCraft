@@ -1,5 +1,5 @@
 from scenariocraft.generators import MockScenarioGenerator
-from scenariocraft.tools import validate_semantics
+from scenariocraft.validation import validate_semantics
 
 
 def test_semantic_validator_passes_mock_spec() -> None:

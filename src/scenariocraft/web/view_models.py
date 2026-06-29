@@ -9,7 +9,7 @@ from scenariocraft.metrics import compute_timing_metrics
 from scenariocraft.runtime import AsamQcResult, EsminiResult
 from scenariocraft.schemas import PatchSpec, ProbeResult, ScenarioSpec
 from scenariocraft.validation import SemanticValidationResult
-from scenariocraft.web.demo_cases import DemoCaseExecution, PreparedDemoCase
+from scenariocraft.application.demo_cases import DemoCaseExecution, PreparedDemoCase
 
 
 @dataclass(frozen=True)

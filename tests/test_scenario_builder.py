@@ -17,7 +17,7 @@ from scenariocraft.schemas import (
     TriggerConditionSpec,
     TriggerSpec,
 )
-from scenariocraft.tools import FallbackXmlScenarioBuilder, ScenariogenerationBuilder, build_openscenario
+from scenariocraft.build import FallbackXmlScenarioBuilder, ScenariogenerationBuilder, build_openscenario
 
 
 DEFAULT_EGO_SPEED_MPS = 35.0 / 3.6
