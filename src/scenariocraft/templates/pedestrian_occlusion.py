@@ -17,6 +17,13 @@ from scenariocraft.schemas import (
     ScenarioSpec,
     ScenarioTimingSpec,
     SpatialRelationSpec,
+    StoryboardActionSpec,
+    StoryboardActSpec,
+    StoryboardEventSpec,
+    StoryboardManeuverGroupSpec,
+    StoryboardSpec,
+    StoryboardStorySpec,
+    TriggerConditionSpec,
     TriggerSpec,
     WeatherSpec,
 )
@@ -81,12 +88,14 @@ class PedestrianOcclusionTemplate:
                 source="ego",
                 target="parked_van",
                 distance_m=template_parameters.trigger_offset_m,
+                condition=_trigger_condition(template_parameters),
             ),
             intended_criticality=CriticalitySpec(type="near_miss", target_min_ttc_s=1.5),
             metadata=metadata,
             layout=layout,
             spatial_relations=_spatial_relations(template_parameters),
             timing=timing,
+            storyboard=_storyboard_semantics(),
         )
 
 
@@ -113,6 +122,80 @@ def _derive_timing(parameters: PedestrianOcclusionParameters) -> ScenarioTimingS
         preferred_trigger_latest_s=parameters.preferred_trigger_latest_s,
         minimum_pre_trigger_context_s=parameters.minimum_pre_trigger_context_s,
         minimum_post_trigger_buffer_s=parameters.minimum_post_trigger_buffer_s,
+    )
+
+
+def _trigger_condition(parameters: PedestrianOcclusionParameters) -> TriggerConditionSpec:
+    return TriggerConditionSpec(
+        id="pedestrian_start_relative_distance",
+        metric="relative_distance",
+        source="ego",
+        target="parked_van",
+        rule="lessThan",
+        value=parameters.trigger_offset_m,
+        unit="m",
+        coordinate_system="entity",
+        relative_distance_type="longitudinal",
+        freespace=False,
+        target_kind="entity",
+    )
+
+
+def _storyboard_semantics() -> StoryboardSpec:
+    return StoryboardSpec(
+        stories=(
+            StoryboardStorySpec(
+                id="rainy_pedestrian_occlusion_story",
+                act_refs=("pedestrian_occlusion_act",),
+            ),
+        ),
+        acts=(
+            StoryboardActSpec(
+                id="pedestrian_occlusion_act",
+                maneuver_group_refs=("ego_driving", "pedestrian_crossing"),
+                stop_trigger_ref="scenario_stop_time",
+            ),
+        ),
+        maneuver_groups=(
+            StoryboardManeuverGroupSpec(
+                id="ego_driving",
+                actor_refs=("ego",),
+                event_refs=("ego_drives_forward",),
+            ),
+            StoryboardManeuverGroupSpec(
+                id="pedestrian_crossing",
+                actor_refs=("pedestrian",),
+                event_refs=("pedestrian_starts_crossing",),
+            ),
+        ),
+        events=(
+            StoryboardEventSpec(
+                id="ego_drives_forward",
+                priority="overwrite",
+                start_trigger_ref="ego_starts_driving",
+                action_refs=("ego_follow_ego_path",),
+            ),
+            StoryboardEventSpec(
+                id="pedestrian_starts_crossing",
+                priority="overwrite",
+                start_trigger_ref="pedestrian_start_relative_distance",
+                action_refs=("pedestrian_follow_crossing_path",),
+            ),
+        ),
+        actions=(
+            StoryboardActionSpec(
+                id="ego_follow_ego_path",
+                type="follow_trajectory",
+                actor_refs=("ego",),
+                path_ref="ego_path",
+            ),
+            StoryboardActionSpec(
+                id="pedestrian_follow_crossing_path",
+                type="follow_trajectory",
+                actor_refs=("pedestrian",),
+                path_ref="pedestrian_crossing_path",
+            ),
+        ),
     )
 
 

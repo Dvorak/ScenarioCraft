@@ -7,6 +7,12 @@ from scenariocraft.roads import URBAN_TWO_WAY_PARKING_FILENAME
 from scenariocraft.schemas import Point2D
 from scenariocraft.schemas import ScenarioSpec
 from scenariocraft.templates import PedestrianOcclusionTemplate, get_template, registered_templates
+from scenariocraft.tools import (
+    compute_timing_metrics,
+    ego_lead_time_to_conflict_s,
+    pedestrian_time_to_conflict_s,
+    trigger_threshold_time_s,
+)
 from scenariocraft.templates.pedestrian_occlusion import (
     PedestrianOcclusionParameters,
     _actor_rectangle,
@@ -85,6 +91,76 @@ def test_pedestrian_occlusion_template_emits_default_timing_policy() -> None:
     assert spec.timing.preferred_trigger_latest_s == 3.0
     assert spec.timing.minimum_pre_trigger_context_s == 0.5
     assert spec.timing.minimum_post_trigger_buffer_s == 0.5
+
+
+def test_pedestrian_occlusion_template_emits_trigger_and_storyboard_semantics() -> None:
+    spec = get_template("pedestrian_occlusion").instantiate(source_text="rainy pedestrian occlusion")
+
+    assert spec.trigger.condition is not None
+    assert spec.trigger.condition.id == "pedestrian_start_relative_distance"
+    assert spec.trigger.condition.metric == "relative_distance"
+    assert spec.trigger.condition.source == "ego"
+    assert spec.trigger.condition.target == "parked_van"
+    assert spec.trigger.condition.rule == "lessThan"
+    assert spec.trigger.condition.value == DEFAULT_TRIGGER_DISTANCE_M
+    assert spec.trigger.condition.unit == "m"
+    assert spec.trigger.condition.coordinate_system == "entity"
+    assert spec.trigger.condition.relative_distance_type == "longitudinal"
+    assert spec.storyboard is not None
+    events = {event.id: event for event in spec.storyboard.events}
+    actions = {action.id: action for action in spec.storyboard.actions}
+    assert events["pedestrian_starts_crossing"].start_trigger_ref == "pedestrian_start_relative_distance"
+    assert events["pedestrian_starts_crossing"].action_refs == ("pedestrian_follow_crossing_path",)
+    assert actions["pedestrian_follow_crossing_path"].type == "follow_trajectory"
+    assert actions["pedestrian_follow_crossing_path"].actor_refs == ("pedestrian",)
+    assert actions["pedestrian_follow_crossing_path"].path_ref == "pedestrian_crossing_path"
+
+
+def test_canonical_timing_metrics_distinguish_target_ttc_threshold_and_lead_time() -> None:
+    spec = get_template("pedestrian_occlusion").instantiate(source_text="rainy pedestrian occlusion")
+
+    metrics = compute_timing_metrics(spec)
+
+    assert metrics.target_ttc_s == 1.5
+    assert metrics.trigger_threshold_time_s == pytest.approx(DEFAULT_TRIGGER_DISTANCE_M / DEFAULT_EGO_SPEED_MPS)
+    assert metrics.ego_lead_time_to_conflict_s == pytest.approx(
+        (DEFAULT_CONFLICT_X_M - DEFAULT_TRIGGER_X_M) / DEFAULT_EGO_SPEED_MPS
+    )
+    assert metrics.pedestrian_time_to_conflict_s == pytest.approx(4.6 / 1.5)
+    assert metrics.runtime_min_ttc_s is None
+    assert metrics.time_headway_s is None
+    assert trigger_threshold_time_s(spec) == metrics.trigger_threshold_time_s
+    assert ego_lead_time_to_conflict_s(spec) == metrics.ego_lead_time_to_conflict_s
+    assert pedestrian_time_to_conflict_s(spec) == metrics.pedestrian_time_to_conflict_s
+
+
+def test_trigger_point_repair_changes_lead_time_not_relative_distance_threshold_time() -> None:
+    spec = get_template("pedestrian_occlusion").instantiate(source_text="rainy pedestrian occlusion")
+    assert spec.layout is not None
+    conflict = spec.layout.points["conflict_point"]
+    original_threshold_time = trigger_threshold_time_s(spec)
+
+    after_conflict_layout = replace(
+        spec.layout,
+        points={
+            **spec.layout.points,
+            "trigger_point": Point2D(conflict.x_m + 1.0, spec.layout.points["trigger_point"].y_m),
+        },
+    )
+    after_conflict = replace(spec, layout=after_conflict_layout)
+    repaired_layout = replace(
+        spec.layout,
+        points={
+            **spec.layout.points,
+            "trigger_point": Point2D(conflict.x_m - 1.0, spec.layout.points["trigger_point"].y_m),
+        },
+    )
+    repaired = replace(spec, layout=repaired_layout)
+
+    assert trigger_threshold_time_s(after_conflict) == original_threshold_time
+    assert trigger_threshold_time_s(repaired) == original_threshold_time
+    assert ego_lead_time_to_conflict_s(after_conflict) == pytest.approx(-1.0 / DEFAULT_EGO_SPEED_MPS)
+    assert ego_lead_time_to_conflict_s(repaired) == pytest.approx(1.0 / DEFAULT_EGO_SPEED_MPS)
 
 
 def test_pedestrian_occlusion_template_window_changes_nominal_longitudinal_geometry_only() -> None:

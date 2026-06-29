@@ -109,11 +109,98 @@ class ActorSpec:
 
 
 @dataclass(frozen=True)
+class TriggerConditionSpec:
+    id: str
+    metric: str
+    source: str | None
+    target: str | None
+    rule: str
+    value: float
+    unit: str
+    coordinate_system: str | None = None
+    relative_distance_type: str | None = None
+    freespace: bool | None = None
+    target_kind: str = "entity"
+    notes: str | None = None
+
+    def __post_init__(self) -> None:
+        _require_non_empty(self.id, "trigger.condition.id")
+        if self.metric not in {"relative_distance", "time_to_collision", "time_headway", "simulation_time"}:
+            raise ScenarioSpecError("trigger.condition.metric is not supported.")
+        if self.source is not None:
+            _require_non_empty(self.source, "trigger.condition.source")
+        if self.target is not None:
+            _require_non_empty(self.target, "trigger.condition.target")
+        if self.rule not in {"lessThan", "greaterThan", "equalTo"}:
+            raise ScenarioSpecError("trigger.condition.rule must be lessThan, greaterThan, or equalTo.")
+        value = _require_non_negative_number(self.value, "trigger.condition.value")
+        if self.unit not in {"m", "s"}:
+            raise ScenarioSpecError("trigger.condition.unit must be 'm' or 's'.")
+        if self.coordinate_system is not None and self.coordinate_system not in {"entity", "road", "lane", "trajectory"}:
+            raise ScenarioSpecError("trigger.condition.coordinate_system is not supported.")
+        if self.relative_distance_type is not None and self.relative_distance_type not in {
+            "cartesianDistance",
+            "euclidianDistance",
+            "longitudinal",
+            "lateral",
+        }:
+            raise ScenarioSpecError("trigger.condition.relative_distance_type is not supported.")
+        if self.target_kind not in {"entity", "named_point", "path_position", "simulation_time"}:
+            raise ScenarioSpecError("trigger.condition.target_kind is not supported.")
+        if self.notes is not None:
+            _require_non_empty(self.notes, "trigger.condition.notes")
+        object.__setattr__(self, "value", value)
+
+    def to_dict(self) -> dict[str, Any]:
+        data: dict[str, Any] = {
+            "id": self.id,
+            "metric": self.metric,
+            "rule": self.rule,
+            "value": self.value,
+            "unit": self.unit,
+            "target_kind": self.target_kind,
+        }
+        if self.source is not None:
+            data["source"] = self.source
+        if self.target is not None:
+            data["target"] = self.target
+        if self.coordinate_system is not None:
+            data["coordinate_system"] = self.coordinate_system
+        if self.relative_distance_type is not None:
+            data["relative_distance_type"] = self.relative_distance_type
+        if self.freespace is not None:
+            data["freespace"] = self.freespace
+        if self.notes is not None:
+            data["notes"] = self.notes
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "TriggerConditionSpec":
+        return cls(
+            id=str(data["id"]),
+            metric=str(data["metric"]),
+            source=str(data["source"]) if data.get("source") is not None else None,
+            target=str(data["target"]) if data.get("target") is not None else None,
+            rule=str(data["rule"]),
+            value=float(data["value"]),
+            unit=str(data["unit"]),
+            coordinate_system=str(data["coordinate_system"]) if data.get("coordinate_system") is not None else None,
+            relative_distance_type=(
+                str(data["relative_distance_type"]) if data.get("relative_distance_type") is not None else None
+            ),
+            freespace=bool(data["freespace"]) if data.get("freespace") is not None else None,
+            target_kind=str(data.get("target_kind", "entity")),
+            notes=str(data["notes"]) if data.get("notes") is not None else None,
+        )
+
+
+@dataclass(frozen=True)
 class TriggerSpec:
     type: str
     source: str
     target: str
     distance_m: float
+    condition: TriggerConditionSpec | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty(self.type, "trigger.type")
@@ -121,14 +208,19 @@ class TriggerSpec:
         _require_non_empty(self.target, "trigger.target")
         if not 0.5 <= self.distance_m <= 500:
             raise ScenarioSpecError("trigger.distance_m must be between 0.5 and 500.")
+        if self.condition is not None and not isinstance(self.condition, TriggerConditionSpec):
+            raise ScenarioSpecError("trigger.condition must be a TriggerConditionSpec or None.")
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "type": self.type,
             "source": self.source,
             "target": self.target,
             "distance_m": self.distance_m,
         }
+        if self.condition is not None:
+            data["condition"] = self.condition.to_dict()
+        return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "TriggerSpec":
@@ -137,6 +229,11 @@ class TriggerSpec:
             source=str(data["source"]),
             target=str(data["target"]),
             distance_m=float(data["distance_m"]),
+            condition=(
+                TriggerConditionSpec.from_dict(data["condition"])
+                if data.get("condition") is not None
+                else None
+            ),
         )
 
 
@@ -474,6 +571,235 @@ class SpatialRelationSpec:
 
 
 @dataclass(frozen=True)
+class StoryboardActionSpec:
+    id: str
+    type: str
+    actor_refs: tuple[str, ...] = ()
+    path_ref: str | None = None
+    metadata: dict[str, object] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _require_non_empty(self.id, "storyboard.action.id")
+        _require_non_empty(self.type, f"storyboard.action[{self.id}].type")
+        for actor_ref in self.actor_refs:
+            _require_non_empty(actor_ref, f"storyboard.action[{self.id}].actor_refs")
+        if self.path_ref is not None:
+            _require_non_empty(self.path_ref, f"storyboard.action[{self.id}].path_ref")
+
+    def to_dict(self) -> dict[str, Any]:
+        data: dict[str, Any] = {
+            "id": self.id,
+            "type": self.type,
+            "actor_refs": list(self.actor_refs),
+        }
+        if self.path_ref is not None:
+            data["path_ref"] = self.path_ref
+        if self.metadata:
+            data["metadata"] = self.metadata
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "StoryboardActionSpec":
+        return cls(
+            id=str(data["id"]),
+            type=str(data["type"]),
+            actor_refs=tuple(str(actor) for actor in data.get("actor_refs", ())),
+            path_ref=str(data["path_ref"]) if data.get("path_ref") is not None else None,
+            metadata=dict(data.get("metadata", {})),
+        )
+
+
+@dataclass(frozen=True)
+class StoryboardEventSpec:
+    id: str
+    priority: str
+    start_trigger_ref: str
+    action_refs: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        _require_non_empty(self.id, "storyboard.event.id")
+        _require_non_empty(self.priority, f"storyboard.event[{self.id}].priority")
+        _require_non_empty(self.start_trigger_ref, f"storyboard.event[{self.id}].start_trigger_ref")
+        if not self.action_refs:
+            raise ScenarioSpecError(f"storyboard.event[{self.id}].action_refs must not be empty.")
+        for action_ref in self.action_refs:
+            _require_non_empty(action_ref, f"storyboard.event[{self.id}].action_refs")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "priority": self.priority,
+            "start_trigger_ref": self.start_trigger_ref,
+            "action_refs": list(self.action_refs),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "StoryboardEventSpec":
+        return cls(
+            id=str(data["id"]),
+            priority=str(data["priority"]),
+            start_trigger_ref=str(data["start_trigger_ref"]),
+            action_refs=tuple(str(action) for action in data["action_refs"]),
+        )
+
+
+@dataclass(frozen=True)
+class StoryboardManeuverGroupSpec:
+    id: str
+    actor_refs: tuple[str, ...]
+    event_refs: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        _require_non_empty(self.id, "storyboard.maneuver_group.id")
+        if not self.actor_refs:
+            raise ScenarioSpecError(f"storyboard.maneuver_group[{self.id}].actor_refs must not be empty.")
+        if not self.event_refs:
+            raise ScenarioSpecError(f"storyboard.maneuver_group[{self.id}].event_refs must not be empty.")
+        for actor_ref in self.actor_refs:
+            _require_non_empty(actor_ref, f"storyboard.maneuver_group[{self.id}].actor_refs")
+        for event_ref in self.event_refs:
+            _require_non_empty(event_ref, f"storyboard.maneuver_group[{self.id}].event_refs")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "actor_refs": list(self.actor_refs),
+            "event_refs": list(self.event_refs),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "StoryboardManeuverGroupSpec":
+        return cls(
+            id=str(data["id"]),
+            actor_refs=tuple(str(actor) for actor in data["actor_refs"]),
+            event_refs=tuple(str(event) for event in data["event_refs"]),
+        )
+
+
+@dataclass(frozen=True)
+class StoryboardActSpec:
+    id: str
+    maneuver_group_refs: tuple[str, ...]
+    stop_trigger_ref: str | None = None
+
+    def __post_init__(self) -> None:
+        _require_non_empty(self.id, "storyboard.act.id")
+        if not self.maneuver_group_refs:
+            raise ScenarioSpecError(f"storyboard.act[{self.id}].maneuver_group_refs must not be empty.")
+        for maneuver_group_ref in self.maneuver_group_refs:
+            _require_non_empty(maneuver_group_ref, f"storyboard.act[{self.id}].maneuver_group_refs")
+        if self.stop_trigger_ref is not None:
+            _require_non_empty(self.stop_trigger_ref, f"storyboard.act[{self.id}].stop_trigger_ref")
+
+    def to_dict(self) -> dict[str, Any]:
+        data: dict[str, Any] = {
+            "id": self.id,
+            "maneuver_group_refs": list(self.maneuver_group_refs),
+        }
+        if self.stop_trigger_ref is not None:
+            data["stop_trigger_ref"] = self.stop_trigger_ref
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "StoryboardActSpec":
+        return cls(
+            id=str(data["id"]),
+            maneuver_group_refs=tuple(str(group) for group in data["maneuver_group_refs"]),
+            stop_trigger_ref=str(data["stop_trigger_ref"]) if data.get("stop_trigger_ref") is not None else None,
+        )
+
+
+@dataclass(frozen=True)
+class StoryboardStorySpec:
+    id: str
+    act_refs: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        _require_non_empty(self.id, "storyboard.story.id")
+        if not self.act_refs:
+            raise ScenarioSpecError(f"storyboard.story[{self.id}].act_refs must not be empty.")
+        for act_ref in self.act_refs:
+            _require_non_empty(act_ref, f"storyboard.story[{self.id}].act_refs")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "act_refs": list(self.act_refs),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "StoryboardStorySpec":
+        return cls(
+            id=str(data["id"]),
+            act_refs=tuple(str(act) for act in data["act_refs"]),
+        )
+
+
+@dataclass(frozen=True)
+class StoryboardSpec:
+    stories: tuple[StoryboardStorySpec, ...]
+    acts: tuple[StoryboardActSpec, ...]
+    maneuver_groups: tuple[StoryboardManeuverGroupSpec, ...]
+    events: tuple[StoryboardEventSpec, ...]
+    actions: tuple[StoryboardActionSpec, ...]
+
+    def __post_init__(self) -> None:
+        _require_unique_ids("storyboard.stories", self.stories)
+        _require_unique_ids("storyboard.acts", self.acts)
+        _require_unique_ids("storyboard.maneuver_groups", self.maneuver_groups)
+        _require_unique_ids("storyboard.events", self.events)
+        _require_unique_ids("storyboard.actions", self.actions)
+        action_ids = {action.id for action in self.actions}
+        event_ids = {event.id for event in self.events}
+        maneuver_group_ids = {group.id for group in self.maneuver_groups}
+        act_ids = {act.id for act in self.acts}
+        for event in self.events:
+            for action_ref in event.action_refs:
+                if action_ref not in action_ids:
+                    raise ScenarioSpecError(f"storyboard.event[{event.id}] references unknown action {action_ref}.")
+        for group in self.maneuver_groups:
+            for event_ref in group.event_refs:
+                if event_ref not in event_ids:
+                    raise ScenarioSpecError(f"storyboard.maneuver_group[{group.id}] references unknown event {event_ref}.")
+        for act in self.acts:
+            for group_ref in act.maneuver_group_refs:
+                if group_ref not in maneuver_group_ids:
+                    raise ScenarioSpecError(f"storyboard.act[{act.id}] references unknown maneuver group {group_ref}.")
+        for story in self.stories:
+            for act_ref in story.act_refs:
+                if act_ref not in act_ids:
+                    raise ScenarioSpecError(f"storyboard.story[{story.id}] references unknown act {act_ref}.")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "stories": [story.to_dict() for story in self.stories],
+            "acts": [act.to_dict() for act in self.acts],
+            "maneuver_groups": [group.to_dict() for group in self.maneuver_groups],
+            "events": [event.to_dict() for event in self.events],
+            "actions": [action.to_dict() for action in self.actions],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "StoryboardSpec":
+        return cls(
+            stories=tuple(StoryboardStorySpec.from_dict(story) for story in data.get("stories", ())),
+            acts=tuple(StoryboardActSpec.from_dict(act) for act in data.get("acts", ())),
+            maneuver_groups=tuple(
+                StoryboardManeuverGroupSpec.from_dict(group)
+                for group in data.get("maneuver_groups", ())
+            ),
+            events=tuple(StoryboardEventSpec.from_dict(event) for event in data.get("events", ())),
+            actions=tuple(StoryboardActionSpec.from_dict(action) for action in data.get("actions", ())),
+        )
+
+
+def _require_unique_ids(field_name: str, items: tuple[object, ...]) -> None:
+    ids = [getattr(item, "id", None) for item in items]
+    if len(ids) != len(set(ids)):
+        raise ScenarioSpecError(f"{field_name} ids must be unique.")
+
+
+@dataclass(frozen=True)
 class ScenarioSpec:
     scenario_name: str
     scenario_type: str
@@ -486,6 +812,7 @@ class ScenarioSpec:
     layout: LayoutSpec | None = None
     spatial_relations: tuple[SpatialRelationSpec, ...] = ()
     timing: ScenarioTimingSpec | None = None
+    storyboard: StoryboardSpec | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty(self.scenario_name, "scenario_name")
@@ -499,6 +826,8 @@ class ScenarioSpec:
             raise ScenarioSpecError("layout must be a LayoutSpec or None.")
         if self.timing is not None and not isinstance(self.timing, ScenarioTimingSpec):
             raise ScenarioSpecError("timing must be a ScenarioTimingSpec or None.")
+        if self.storyboard is not None and not isinstance(self.storyboard, StoryboardSpec):
+            raise ScenarioSpecError("storyboard must be a StoryboardSpec or None.")
         for index, relation in enumerate(self.spatial_relations):
             if not isinstance(relation, SpatialRelationSpec):
                 raise ScenarioSpecError(f"spatial_relations[{index}] must be a SpatialRelationSpec.")
@@ -527,6 +856,8 @@ class ScenarioSpec:
             data["spatial_relations"] = [relation.to_dict() for relation in self.spatial_relations]
         if self.timing is not None:
             data["timing"] = self.timing.to_dict()
+        if self.storyboard is not None:
+            data["storyboard"] = self.storyboard.to_dict()
         return data
 
     def to_json(self) -> str:
@@ -549,6 +880,7 @@ class ScenarioSpec:
                 for relation in data.get("spatial_relations", ())
             ),
             timing=ScenarioTimingSpec.from_dict(data["timing"]) if data.get("timing") is not None else None,
+            storyboard=StoryboardSpec.from_dict(data["storyboard"]) if data.get("storyboard") is not None else None,
         )
 
     @classmethod

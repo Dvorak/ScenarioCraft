@@ -15,6 +15,13 @@ from scenariocraft.schemas import (
     ScenarioSpec,
     ScenarioTimingSpec,
     SpatialRelationSpec,
+    StoryboardActionSpec,
+    StoryboardActSpec,
+    StoryboardEventSpec,
+    StoryboardManeuverGroupSpec,
+    StoryboardSpec,
+    StoryboardStorySpec,
+    TriggerConditionSpec,
     TriggerSpec,
     WeatherSpec,
 )
@@ -39,6 +46,7 @@ def test_scenario_spec_round_trip_json() -> None:
     assert loaded.layout is None
     assert loaded.spatial_relations == ()
     assert loaded.timing is None
+    assert loaded.storyboard is None
 
 
 def test_scenario_spec_loads_legacy_json_without_layout_or_spatial_relations() -> None:
@@ -57,6 +65,71 @@ def test_scenario_spec_loads_legacy_json_without_layout_or_spatial_relations() -
     assert spec.layout is None
     assert spec.spatial_relations == ()
     assert spec.timing is None
+    assert spec.storyboard is None
+
+
+def test_trigger_condition_round_trips_with_legacy_trigger_fields() -> None:
+    spec = ScenarioSpec(
+        scenario_name="semantic_trigger_demo",
+        scenario_type="pedestrian_occlusion",
+        road=RoadSpec("urban_straight", 1, 50),
+        weather=WeatherSpec(True, "wet"),
+        actors=[ActorSpec("ego", "car", "ego", initial_speed_kph=35)],
+        trigger=TriggerSpec(
+            "relative_distance",
+            "ego",
+            "parked_van",
+            18,
+            condition=TriggerConditionSpec(
+                id="pedestrian_start_relative_distance",
+                metric="relative_distance",
+                source="ego",
+                target="parked_van",
+                rule="lessThan",
+                value=18,
+                unit="m",
+                coordinate_system="entity",
+                relative_distance_type="longitudinal",
+                freespace=False,
+                target_kind="entity",
+            ),
+        ),
+        intended_criticality=CriticalitySpec("near_miss", 1.5),
+    )
+
+    loaded = ScenarioSpec.from_json(spec.to_json())
+
+    assert loaded == spec
+    assert loaded.trigger.condition is not None
+    assert loaded.trigger.condition.metric == "relative_distance"
+    assert loaded.trigger.condition.value == 18
+
+
+def test_ttc_and_thw_trigger_metrics_are_representable() -> None:
+    ttc = TriggerConditionSpec(
+        id="ego_ttc_to_conflict",
+        metric="time_to_collision",
+        source="ego",
+        target="conflict_point",
+        rule="lessThan",
+        value=2.5,
+        unit="s",
+        target_kind="named_point",
+        freespace=True,
+    )
+    thw = TriggerConditionSpec(
+        id="ego_time_headway_to_lead_vehicle",
+        metric="time_headway",
+        source="ego",
+        target="lead_vehicle",
+        rule="lessThan",
+        value=1.2,
+        unit="s",
+        target_kind="entity",
+    )
+
+    assert TriggerConditionSpec.from_dict(ttc.to_dict()) == ttc
+    assert TriggerConditionSpec.from_dict(thw.to_dict()) == thw
 
 
 def test_scenario_spec_round_trips_layout_and_spatial_relations() -> None:
@@ -153,6 +226,49 @@ def test_scenario_spec_round_trips_timing_policy() -> None:
         "minimum_pre_trigger_context_s": 0.75,
         "minimum_post_trigger_buffer_s": 1.0,
     }
+
+
+def test_scenario_spec_round_trips_lightweight_storyboard_semantics() -> None:
+    storyboard = StoryboardSpec(
+        stories=(StoryboardStorySpec("story", ("act",)),),
+        acts=(StoryboardActSpec("act", ("group",), stop_trigger_ref="stop_after_8s"),),
+        maneuver_groups=(StoryboardManeuverGroupSpec("group", ("pedestrian",), ("event",)),),
+        events=(StoryboardEventSpec("event", "overwrite", "pedestrian_start_relative_distance", ("action",)),),
+        actions=(
+            StoryboardActionSpec(
+                "action",
+                "follow_trajectory",
+                actor_refs=("pedestrian",),
+                path_ref="pedestrian_crossing_path",
+            ),
+        ),
+    )
+    spec = ScenarioSpec(
+        scenario_name="storyboard_demo",
+        scenario_type="pedestrian_occlusion",
+        road=RoadSpec("urban_straight", 1, 50),
+        weather=WeatherSpec(True, "wet"),
+        actors=[ActorSpec("pedestrian", "pedestrian", "crossing_actor", speed_mps=1.5)],
+        trigger=TriggerSpec("relative_distance", "ego", "parked_van", 18),
+        intended_criticality=CriticalitySpec("near_miss", 1.5),
+        storyboard=storyboard,
+    )
+
+    loaded = ScenarioSpec.from_json(spec.to_json())
+
+    assert loaded.storyboard == storyboard
+    assert loaded.to_dict()["storyboard"]["events"][0]["start_trigger_ref"] == "pedestrian_start_relative_distance"
+
+
+def test_storyboard_rejects_dangling_references() -> None:
+    with pytest.raises(ScenarioSpecError, match="unknown action"):
+        StoryboardSpec(
+            stories=(StoryboardStorySpec("story", ("act",)),),
+            acts=(StoryboardActSpec("act", ("group",)),),
+            maneuver_groups=(StoryboardManeuverGroupSpec("group", ("ego",), ("event",)),),
+            events=(StoryboardEventSpec("event", "overwrite", "trigger", ("missing_action",)),),
+            actions=(),
+        )
 
 
 def test_scenario_timing_rejects_invalid_values() -> None:

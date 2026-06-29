@@ -6,6 +6,7 @@ from scenariocraft.schemas.patch_spec import (
     SetActorPoseOperation,
     SetNamedPointOperation,
     SetPathPointsOperation,
+    SetTriggerPointByLeadTimeOperation,
 )
 from scenariocraft.schemas.scenario_spec import (
     ActorSpec,
@@ -20,6 +21,13 @@ from scenariocraft.schemas.scenario_spec import (
     ScenarioSpec,
     ScenarioTimingSpec,
     SpatialRelationSpec,
+    StoryboardActionSpec,
+    StoryboardActSpec,
+    StoryboardEventSpec,
+    StoryboardManeuverGroupSpec,
+    StoryboardSpec,
+    StoryboardStorySpec,
+    TriggerConditionSpec,
     TriggerSpec,
     WeatherSpec,
 )
@@ -45,7 +53,15 @@ __all__ = [
     "SetActorPoseOperation",
     "SetNamedPointOperation",
     "SetPathPointsOperation",
+    "SetTriggerPointByLeadTimeOperation",
     "SpatialRelationSpec",
+    "StoryboardActionSpec",
+    "StoryboardActSpec",
+    "StoryboardEventSpec",
+    "StoryboardManeuverGroupSpec",
+    "StoryboardSpec",
+    "StoryboardStorySpec",
+    "TriggerConditionSpec",
     "TriggerSpec",
     "WeatherSpec",
 ]
