@@ -5,7 +5,7 @@ import pytest
 
 from scenariocraft.generators import MockScenarioGenerator
 from scenariocraft.tools import estimate_ttc_s, generate_2d_preview
-from scenariocraft.tools.preview_2d import (
+from scenariocraft.presentation.preview_2d import (
     CLEAN_PREVIEW_ASPECT_RATIO,
     _apply_display_orientation,
     _clean_legend_groups,

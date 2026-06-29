@@ -40,11 +40,11 @@ TOOL_SEMANTIC_GROUPS = {
         "scenariocraft.tools.scenario_builder",
     ),
     "metrics": (
-        "scenariocraft.tools.timing_metrics",
+        "scenariocraft.metrics.timing",
     ),
     "presentation": (
-        "scenariocraft.tools.preview_2d",
-        "scenariocraft.tools.report_tool",
+        "scenariocraft.presentation.preview_2d",
+        "scenariocraft.presentation.report",
     ),
     "validation": (
         "scenariocraft.tools.semantic_validator",

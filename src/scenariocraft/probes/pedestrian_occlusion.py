@@ -13,7 +13,7 @@ from scenariocraft.schemas import (
     RoadBandSpec,
     ScenarioSpec,
 )
-from scenariocraft.tools.timing_metrics import compute_timing_metrics
+from scenariocraft.metrics import compute_timing_metrics
 
 # Tight tolerances for canonical template geometry expressed directly in ScenarioSpec.layout.
 POSITION_TOLERANCE_M = 1e-6

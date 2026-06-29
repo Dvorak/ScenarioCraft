@@ -23,8 +23,9 @@ def test_core_boundary_manifest_names_stable_extraction_groups() -> None:
         "scenariocraft.tools.layout_adapter",
         "scenariocraft.tools.scenario_builder",
     )
-    assert "scenariocraft.tools.preview_2d" in TOOL_SEMANTIC_GROUPS["presentation"]
-    assert "scenariocraft.tools.timing_metrics" in TOOL_SEMANTIC_GROUPS["metrics"]
+    assert "scenariocraft.presentation.preview_2d" in TOOL_SEMANTIC_GROUPS["presentation"]
+    assert "scenariocraft.presentation.report" in TOOL_SEMANTIC_GROUPS["presentation"]
+    assert "scenariocraft.metrics.timing" in TOOL_SEMANTIC_GROUPS["metrics"]
 
 
 def test_core_boundary_manifest_has_no_missing_current_modules() -> None:
@@ -53,3 +54,20 @@ def test_core_candidates_remain_free_of_delivery_runtime_and_provider_imports() 
                 offenders[str(path)] = matches
 
     assert offenders == {}
+
+
+def test_semantic_packages_preserve_legacy_tool_exports() -> None:
+    from scenariocraft.metrics import compute_timing_metrics
+    from scenariocraft.metrics.timing import time_headway_s
+    from scenariocraft.presentation import generate_2d_preview, generate_validation_report
+    from scenariocraft.presentation.preview_2d import estimate_ttc_s
+    from scenariocraft.tools import compute_timing_metrics as legacy_compute_timing_metrics
+    from scenariocraft.tools import generate_2d_preview as legacy_generate_2d_preview
+    from scenariocraft.tools import generate_validation_report as legacy_generate_validation_report
+    from scenariocraft.tools.timing_metrics import time_headway_s as legacy_time_headway_s
+
+    assert legacy_compute_timing_metrics is compute_timing_metrics
+    assert legacy_generate_2d_preview is generate_2d_preview
+    assert legacy_generate_validation_report is generate_validation_report
+    assert legacy_time_headway_s is time_headway_s
+    assert callable(estimate_ttc_s)

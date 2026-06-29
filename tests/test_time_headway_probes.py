@@ -3,7 +3,7 @@ from dataclasses import replace
 from scenariocraft.generators import MockScenarioGenerator
 from scenariocraft.probes import run_time_headway_probes
 from scenariocraft.schemas import ActorSpec, Pose2D, TriggerConditionSpec, TriggerSpec
-from scenariocraft.tools.timing_metrics import compute_timing_metrics, time_headway_s
+from scenariocraft.metrics import compute_timing_metrics, time_headway_s
 
 
 def test_time_headway_metric_computes_for_same_lane_lead_actor() -> None:

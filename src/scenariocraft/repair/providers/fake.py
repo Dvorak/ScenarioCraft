@@ -7,7 +7,7 @@ from scenariocraft.schemas import (
     SetNamedPointOperation,
     SetTriggerPointByLeadTimeOperation,
 )
-from scenariocraft.tools.timing_metrics import compute_timing_metrics
+from scenariocraft.metrics import compute_timing_metrics
 
 PARKING_PROBE = "parked_van_footprint_in_parking_strip"
 TRIGGER_PROBE = "trigger_point_before_conflict_and_in_ego_lane"

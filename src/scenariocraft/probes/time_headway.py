@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 from scenariocraft.probes.base import run_probes
 from scenariocraft.schemas import ProbeResult, ScenarioSpec
-from scenariocraft.tools.timing_metrics import time_headway_s
+from scenariocraft.metrics import time_headway_s
 
 
 class _TimeHeadwayProbe:
