@@ -9,8 +9,8 @@ from scenariocraft.probes import (
 )
 from scenariocraft.schemas import ProbeResult
 from scenariocraft.tools import build_openscenario, generate_validation_report, validate_semantics
-from scenariocraft.tools.asam_qc_tool import AsamQcResult
-from scenariocraft.tools.esmini_tool import EsminiPlaybackResult, EsminiResult
+from scenariocraft.runtime import AsamQcResult
+from scenariocraft.runtime import EsminiPlaybackResult, EsminiResult
 
 
 def test_report_includes_missing_tool_warnings(tmp_path: Path) -> None:

@@ -13,7 +13,8 @@ from scenariocraft.application import (
     run_external_scenario_workflow,
 )
 from scenariocraft.references import ReferenceScenarioOption, XoscMetadata, discover_external_scenarios, extract_xosc_metadata
-from scenariocraft.tools import AsamQcResult, BuildResult, EsminiResult
+from scenariocraft.build import BuildResult
+from scenariocraft.runtime import AsamQcResult, EsminiResult
 from scenariocraft.web.state import (
     CURATED_REFERENCE_EXAMPLES_PATH,
     RECOMMENDED_EXAMPLE_FILES,

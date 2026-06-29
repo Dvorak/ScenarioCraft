@@ -12,12 +12,9 @@ from scenariocraft.generators import MockScenarioGenerator, ScenarioGenerator
 from scenariocraft.loop import run_bounded_orchestrator
 from scenariocraft.references import XoscMetadata, extract_xosc_metadata
 from scenariocraft.repair.providers import FakeRepairProvider
+from scenariocraft.runtime import EsminiResult, run_esmini
 from scenariocraft.schemas import ScenarioSpec
 from scenariocraft.schemas.scenario_spec import ScenarioSpecError
-from scenariocraft.tools import (
-    EsminiResult,
-    run_esmini,
-)
 
 
 def main(argv: list[str] | None = None) -> int:

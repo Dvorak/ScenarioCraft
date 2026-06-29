@@ -6,6 +6,9 @@ __pycache__/
 .playwright-cli/
 .venv/
 build/
+!src/scenariocraft/build/
+!src/scenariocraft/build/**
+src/scenariocraft/build/__pycache__/
 dist/
 AGENTS.md
 docs/

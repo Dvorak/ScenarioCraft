@@ -13,21 +13,19 @@ from scenariocraft.application.demo_cases import PreparedDemoCase, prepare_demo_
 from scenariocraft.generators import MockScenarioGenerator, ScenarioGenerator
 from scenariocraft.probes import run_artifact_consistency_probes, run_pedestrian_occlusion_probes
 from scenariocraft.probes.runtime_pipeline import run_and_write_runtime_consistency_probes
-from scenariocraft.schemas import ScenarioSpec
-from scenariocraft.tools import (
+from scenariocraft.build import BuildResult, build_openscenario
+from scenariocraft.presentation import generate_2d_preview, generate_validation_report
+from scenariocraft.runtime import (
     AsamQcResult,
-    BuildResult,
+    EsminiPlaybackResult,
     EsminiResult,
-    build_openscenario,
-    generate_2d_preview,
-    generate_validation_report,
     run_asam_qc,
     run_esmini,
     run_esmini_playback,
-    validate_semantics,
 )
-from scenariocraft.tools.esmini_tool import EsminiPlaybackResult
-from scenariocraft.tools.semantic_validator import SemanticValidationResult
+from scenariocraft.schemas import ScenarioSpec
+from scenariocraft.validation import SemanticValidationResult
+from scenariocraft.validation import validate_semantics
 
 
 def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> ScenarioWorkflowResult:

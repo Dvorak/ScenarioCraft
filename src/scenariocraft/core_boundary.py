@@ -30,14 +30,14 @@ DELIVERY_ADAPTER_MODULES = (
 RUNTIME_ADAPTER_MODULES = (
     "scenariocraft.references",
     "scenariocraft.repair.providers.openai",
-    "scenariocraft.tools.asam_qc_tool",
-    "scenariocraft.tools.esmini_tool",
+    "scenariocraft.runtime.asam_qc",
+    "scenariocraft.runtime.esmini",
 )
 
 TOOL_SEMANTIC_GROUPS = {
     "build": (
-        "scenariocraft.tools.layout_adapter",
-        "scenariocraft.tools.scenario_builder",
+        "scenariocraft.build.layout_adapter",
+        "scenariocraft.build.scenario_builder",
     ),
     "metrics": (
         "scenariocraft.metrics.timing",
@@ -47,11 +47,11 @@ TOOL_SEMANTIC_GROUPS = {
         "scenariocraft.presentation.report",
     ),
     "validation": (
-        "scenariocraft.tools.semantic_validator",
+        "scenariocraft.validation.semantic",
     ),
     "runtime": (
-        "scenariocraft.tools.asam_qc_tool",
-        "scenariocraft.tools.esmini_tool",
+        "scenariocraft.runtime.asam_qc",
+        "scenariocraft.runtime.esmini",
     ),
 }
 

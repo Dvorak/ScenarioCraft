@@ -5,7 +5,8 @@ from pathlib import Path
 
 import streamlit as st
 
-from scenariocraft.tools import BuildResult, EsminiPlaybackResult
+from scenariocraft.build import BuildResult
+from scenariocraft.runtime import EsminiPlaybackResult
 
 
 def render_workspace_runtime_media(output_dir: Path, playback_result: object) -> None:

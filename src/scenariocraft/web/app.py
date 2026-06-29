@@ -21,20 +21,19 @@ from scenariocraft.application.demo_cases import (
     prepare_demo_case,
     run_demo_case,
 )
-from scenariocraft.schemas import ScenarioSpec
-from scenariocraft.tools import (
+from scenariocraft.build import BuildResult, build_openscenario
+from scenariocraft.presentation import generate_2d_preview
+from scenariocraft.runtime import (
     AsamQcResult,
-    BuildResult,
     EsminiPlaybackResult,
     EsminiResult,
-    build_openscenario,
-    generate_2d_preview,
     run_asam_qc,
     run_esmini,
     run_esmini_playback,
-    validate_semantics,
 )
-from scenariocraft.tools.semantic_validator import SemanticValidationResult
+from scenariocraft.schemas import ScenarioSpec
+from scenariocraft.validation import SemanticValidationResult
+from scenariocraft.validation import validate_semantics
 from scenariocraft.web.actions import run_runtime_probes_for_generated_scenario, write_generated_validation_report
 from scenariocraft.web.advanced_view import render_advanced_page
 from scenariocraft.web.media_view import (
