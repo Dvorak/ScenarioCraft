@@ -2,18 +2,18 @@ from dataclasses import replace
 
 import pytest
 
-from scenariocraft_core.generators import MockScenarioGenerator
-from scenariocraft_core.roads import URBAN_TWO_WAY_PARKING_FILENAME
-from scenariocraft_core.schemas import Point2D
-from scenariocraft_core.schemas import ScenarioSpec
-from scenariocraft_core.templates import PedestrianOcclusionTemplate, get_template, registered_templates
-from scenariocraft_core.metrics import (
+from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.roads import URBAN_TWO_WAY_PARKING_FILENAME
+from scenariocraft.core.schemas import Point2D
+from scenariocraft.core.schemas import ScenarioSpec
+from scenariocraft.core.templates import PedestrianOcclusionTemplate, get_template, registered_templates
+from scenariocraft.core.metrics import (
     compute_timing_metrics,
     ego_lead_time_to_conflict_s,
     pedestrian_time_to_conflict_s,
     trigger_threshold_time_s,
 )
-from scenariocraft_core.templates.pedestrian_occlusion import (
+from scenariocraft.core.templates.pedestrian_occlusion import (
     PedestrianOcclusionParameters,
     _actor_rectangle,
     _segment_intersects_rect,

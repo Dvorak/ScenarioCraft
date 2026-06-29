@@ -4,8 +4,8 @@ from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
 
-from scenariocraft_core.generators import MockScenarioGenerator
-from scenariocraft_core.repair.providers import FakeRepairProvider
+from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.repair.providers import FakeRepairProvider
 from scenariocraft.runtime import AsamQcResult, EsminiResult
 from scenariocraft.application.demo_cases import (
     DEMO_CASES,
@@ -43,7 +43,7 @@ def test_workspace_navigation_and_media_contract() -> None:
 
 
 def test_workspace_is_default_and_has_one_demo_case_selector() -> None:
-    app = AppTest.from_file("src/scenariocraft/web/app.py", default_timeout=10).run()
+    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=10).run()
 
     assert not app.exception
     assert [item.label for item in app.selectbox] == ["Demo Case"]
@@ -59,7 +59,7 @@ def test_workspace_is_default_and_has_one_demo_case_selector() -> None:
 
 
 def test_web_app_removes_legacy_generated_pipeline_helpers() -> None:
-    source = Path("src/scenariocraft/web/app.py").read_text(encoding="utf-8")
+    source = Path("scenariocraft/web/app.py").read_text(encoding="utf-8")
 
     for helper_name in (
         "_generate_and_run",
@@ -81,7 +81,7 @@ def test_web_app_removes_legacy_generated_pipeline_helpers() -> None:
 
 
 def test_advanced_page_retains_diagnostic_artifact_sections() -> None:
-    app = AppTest.from_file("src/scenariocraft/web/app.py", default_timeout=10).run()
+    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=10).run()
     app.session_state["active_page"] = "Advanced"
     app.run()
 
@@ -98,7 +98,7 @@ def test_advanced_page_retains_diagnostic_artifact_sections() -> None:
 
 
 def test_workspace_repair_appears_only_until_successful_revalidation(tmp_path: Path) -> None:
-    app = AppTest.from_file("src/scenariocraft/web/app.py", default_timeout=20).run()
+    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
     app.selectbox[0].select("geometry_van_in_ego_lane")
     next(button for button in app.button if button.label == "Generate").click().run()
@@ -119,7 +119,7 @@ def test_workspace_repair_appears_only_until_successful_revalidation(tmp_path: P
 
 
 def test_workspace_brief_uses_explicit_timing_metric_labels(tmp_path: Path) -> None:
-    app = AppTest.from_file("src/scenariocraft/web/app.py", default_timeout=20).run()
+    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
     next(button for button in app.button if button.label == "Generate").click().run()
 
@@ -134,7 +134,7 @@ def test_workspace_brief_uses_explicit_timing_metric_labels(tmp_path: Path) -> N
 
 
 def test_artifact_detection_only_does_not_render_repair_action(tmp_path: Path) -> None:
-    app = AppTest.from_file("src/scenariocraft/web/app.py", default_timeout=20).run()
+    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
     app.selectbox[0].select("artifact_xosc_actor_pose_drift")
     next(button for button in app.button if button.label == "Generate").click().run()
@@ -145,7 +145,7 @@ def test_artifact_detection_only_does_not_render_repair_action(tmp_path: Path) -
 
 
 def test_workspace_css_hides_streamlit_chrome_and_scopes_icon_controls() -> None:
-    app = AppTest.from_file("src/scenariocraft/web/app.py", default_timeout=10).run()
+    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=10).run()
     css = "\n".join(item.value for item in app.markdown if "<style>" in item.value)
 
     assert 'header[data-testid="stHeader"] { display: none; }' in css
@@ -169,7 +169,7 @@ def test_workspace_css_hides_streamlit_chrome_and_scopes_icon_controls() -> None
 
 
 def test_workspace_status_is_one_textual_four_stage_grid() -> None:
-    app = AppTest.from_file("src/scenariocraft/web/app.py", default_timeout=10).run()
+    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=10).run()
     status_markup = next(
         item.value
         for item in app.markdown

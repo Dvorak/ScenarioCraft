@@ -5,16 +5,16 @@ from types import SimpleNamespace
 
 import pytest
 
-from scenariocraft_core.generators import MockScenarioGenerator
-from scenariocraft.repair.providers import (
+from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.integrations.openai_repair import (
     OpenAIRepairProvider,
     OpenAIRepairProviderConfigurationError,
 )
-from scenariocraft_core.repair.providers import (
+from scenariocraft.core.repair.providers import (
     RepairProvider,
     RepairRequest,
 )
-from scenariocraft_core.schemas import PatchSpec, ProbeResult, RepositionActorToBandOperation
+from scenariocraft.core.schemas import PatchSpec, ProbeResult, RepositionActorToBandOperation
 
 
 class FakeResponses:
@@ -194,10 +194,10 @@ def test_provider_does_not_mutate_or_call_repair_build_probe_runtime_or_web(monk
     def forbidden(*args, **kwargs):
         raise AssertionError("OpenAI provider crossed its proposal-only boundary.")
 
-    monkeypatch.setattr("scenariocraft_core.repair.apply_patch", forbidden)
-    monkeypatch.setattr("scenariocraft_core.build.build_openscenario", forbidden)
+    monkeypatch.setattr("scenariocraft.core.repair.apply_patch", forbidden)
+    monkeypatch.setattr("scenariocraft.core.build.build_openscenario", forbidden)
     monkeypatch.setattr("scenariocraft.runtime.run_esmini", forbidden)
-    monkeypatch.setattr("scenariocraft_core.probes.run_artifact_consistency_probes", forbidden)
+    monkeypatch.setattr("scenariocraft.core.probes.run_artifact_consistency_probes", forbidden)
     request = _request()
     original = request.scenario_spec.to_json()
 

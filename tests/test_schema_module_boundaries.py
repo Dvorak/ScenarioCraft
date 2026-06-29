@@ -5,11 +5,11 @@ from pathlib import Path
 
 def test_core_candidate_modules_do_not_import_delivery_or_runtime_adapters() -> None:
     checked_paths = [
-        *Path("src/scenariocraft/schemas").glob("*.py"),
-        *Path("src/scenariocraft/templates").glob("*.py"),
-        *Path("src/scenariocraft/probes").glob("*.py"),
-        Path("src/scenariocraft/repair/patcher.py"),
-        Path("src/scenariocraft/repair/providers/fake.py"),
+        *Path("scenariocraft/core/schemas").glob("*.py"),
+        *Path("scenariocraft/core/templates").glob("*.py"),
+        *Path("scenariocraft/core/probes").glob("*.py"),
+        Path("scenariocraft/core/repair/patcher.py"),
+        Path("scenariocraft/core/repair/providers/fake.py"),
     ]
     forbidden = (
         "import streamlit",
@@ -32,7 +32,7 @@ def test_core_candidate_modules_do_not_import_delivery_or_runtime_adapters() -> 
 
 
 def test_schema_public_api_is_backed_by_semantic_submodules() -> None:
-    from scenariocraft_core.schemas import (
+    from scenariocraft.core.schemas import (
         ActorSpec,
         CriticalitySpec,
         LayoutSpec,
@@ -42,14 +42,14 @@ def test_schema_public_api_is_backed_by_semantic_submodules() -> None:
         StoryboardSpec,
         TriggerSpec,
     )
-    from scenariocraft_core.schemas.layout_spec import LayoutSpec as LayoutSpecFromModule
-    from scenariocraft_core.schemas.road_spec import RoadSpec as RoadSpecFromModule
-    from scenariocraft_core.schemas.scenario_core import ActorSpec as ActorSpecFromModule
-    from scenariocraft_core.schemas.scenario_core import ScenarioSpec as ScenarioSpecFromModule
-    from scenariocraft_core.schemas.storyboard_spec import StoryboardSpec as StoryboardSpecFromModule
-    from scenariocraft_core.schemas.timing_spec import ScenarioTimingSpec as ScenarioTimingSpecFromModule
-    from scenariocraft_core.schemas.trigger_spec import CriticalitySpec as CriticalitySpecFromModule
-    from scenariocraft_core.schemas.trigger_spec import TriggerSpec as TriggerSpecFromModule
+    from scenariocraft.core.schemas.layout_spec import LayoutSpec as LayoutSpecFromModule
+    from scenariocraft.core.schemas.road_spec import RoadSpec as RoadSpecFromModule
+    from scenariocraft.core.schemas.scenario_core import ActorSpec as ActorSpecFromModule
+    from scenariocraft.core.schemas.scenario_core import ScenarioSpec as ScenarioSpecFromModule
+    from scenariocraft.core.schemas.storyboard_spec import StoryboardSpec as StoryboardSpecFromModule
+    from scenariocraft.core.schemas.timing_spec import ScenarioTimingSpec as ScenarioTimingSpecFromModule
+    from scenariocraft.core.schemas.trigger_spec import CriticalitySpec as CriticalitySpecFromModule
+    from scenariocraft.core.schemas.trigger_spec import TriggerSpec as TriggerSpecFromModule
 
     assert ActorSpec is ActorSpecFromModule
     assert CriticalitySpec is CriticalitySpecFromModule

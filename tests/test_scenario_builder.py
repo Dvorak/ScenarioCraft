@@ -2,9 +2,9 @@ from dataclasses import replace
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from scenariocraft_core.generators import MockScenarioGenerator
-from scenariocraft_core.roads import URBAN_TWO_WAY_PARKING_FILENAME
-from scenariocraft_core.schemas import (
+from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.roads import URBAN_TWO_WAY_PARKING_FILENAME
+from scenariocraft.core.schemas import (
     PathSpec,
     Point2D,
     Pose2D,
@@ -17,7 +17,7 @@ from scenariocraft_core.schemas import (
     TriggerConditionSpec,
     TriggerSpec,
 )
-from scenariocraft_core.build import FallbackXmlScenarioBuilder, ScenariogenerationBuilder, build_openscenario
+from scenariocraft.core.build import FallbackXmlScenarioBuilder, ScenariogenerationBuilder, build_openscenario
 
 
 DEFAULT_EGO_SPEED_MPS = 35.0 / 3.6

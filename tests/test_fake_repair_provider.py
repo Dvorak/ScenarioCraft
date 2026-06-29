@@ -1,10 +1,10 @@
 from dataclasses import replace
 
-from scenariocraft_core.generators import MockScenarioGenerator
-from scenariocraft_core.probes import run_pedestrian_occlusion_probes, run_pedestrian_occlusion_timing_probes
-from scenariocraft_core.repair import apply_patch
-from scenariocraft_core.repair.providers import FakeRepairProvider, RepairRequest
-from scenariocraft_core.schemas import (
+from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.probes import run_pedestrian_occlusion_probes, run_pedestrian_occlusion_timing_probes
+from scenariocraft.core.repair import apply_patch
+from scenariocraft.core.repair.providers import FakeRepairProvider, RepairRequest
+from scenariocraft.core.schemas import (
     PatchSpec,
     Point2D,
     Pose2D,
@@ -149,10 +149,10 @@ def test_fake_provider_does_not_call_patch_build_runtime_or_artifact_tools(monke
     def forbidden(*args, **kwargs):
         raise AssertionError("Provider crossed its proposal-only boundary.")
 
-    monkeypatch.setattr("scenariocraft_core.repair.apply_patch", forbidden)
-    monkeypatch.setattr("scenariocraft_core.build.build_openscenario", forbidden)
+    monkeypatch.setattr("scenariocraft.core.repair.apply_patch", forbidden)
+    monkeypatch.setattr("scenariocraft.core.build.build_openscenario", forbidden)
     monkeypatch.setattr("scenariocraft.runtime.run_esmini", forbidden)
-    monkeypatch.setattr("scenariocraft_core.probes.run_artifact_consistency_probes", forbidden)
+    monkeypatch.setattr("scenariocraft.core.probes.run_artifact_consistency_probes", forbidden)
     invalid = _van_outside_parking_strip()
     request = RepairRequest(
         None,

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from scenariocraft_core.generators import MockScenarioGenerator
+from scenariocraft.core.generators import MockScenarioGenerator
 from scenariocraft.presentation import estimate_ttc_s, generate_2d_preview
 from scenariocraft.presentation.preview_2d import (
     CLEAN_PREVIEW_ASPECT_RATIO,

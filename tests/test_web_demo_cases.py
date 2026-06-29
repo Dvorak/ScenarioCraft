@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from scenariocraft_core.generators import MockScenarioGenerator
-from scenariocraft_core.probes import run_pedestrian_occlusion_timing_probes
-from scenariocraft_core.repair.providers import FakeRepairProvider
+from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.probes import run_pedestrian_occlusion_timing_probes
+from scenariocraft.core.repair.providers import FakeRepairProvider
 from scenariocraft.application.demo_cases import DEMO_CASES, get_demo_case, prepare_demo_case, run_demo_case
 
 
@@ -202,7 +202,7 @@ def test_demo_cases_do_not_call_runtime_external_or_model_tools(tmp_path: Path, 
     monkeypatch.setattr("scenariocraft.runtime.run_esmini", forbidden)
     monkeypatch.setattr("scenariocraft.runtime.run_esmini_playback", forbidden)
     monkeypatch.setattr("scenariocraft.runtime.run_asam_qc", forbidden)
-    monkeypatch.setattr("scenariocraft.repair.providers.OpenAIRepairProvider", forbidden)
+    monkeypatch.setattr("scenariocraft.integrations.openai_repair.OpenAIRepairProvider", forbidden)
 
     for case in DEMO_CASES:
         result = run_demo_case(case.case_id, _canonical_spec(), tmp_path)

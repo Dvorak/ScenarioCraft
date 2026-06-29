@@ -7,12 +7,12 @@ from unittest.mock import Mock
 
 import pytest
 
-import scenariocraft_core.loop.repair_loop as repair_loop_module
-from scenariocraft_core.generators import MockScenarioGenerator
-from scenariocraft_core.loop import ALLOWED_OPERATION_TYPES, run_bounded_repair_loop
-from scenariocraft_core.probes import run_pedestrian_occlusion_timing_probes
-from scenariocraft_core.repair.providers import FakeRepairProvider
-from scenariocraft_core.schemas import FootprintSpec, Point2D, Pose2D, ProbeResult
+import scenariocraft.core.loop.repair_loop as repair_loop_module
+from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.loop import ALLOWED_OPERATION_TYPES, run_bounded_repair_loop
+from scenariocraft.core.probes import run_pedestrian_occlusion_timing_probes
+from scenariocraft.core.repair.providers import FakeRepairProvider
+from scenariocraft.core.schemas import FootprintSpec, Point2D, Pose2D, ProbeResult
 
 
 def test_canonical_spec_passes_without_requesting_provider_patch(tmp_path: Path) -> None:

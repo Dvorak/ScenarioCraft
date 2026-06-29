@@ -14,7 +14,7 @@ from scenariocraft.application import (
 
 
 def test_application_layer_has_no_delivery_or_process_imports() -> None:
-    application_dir = Path("src/scenariocraft/application")
+    application_dir = Path("scenariocraft/application")
     source = "\n".join(path.read_text(encoding="utf-8") for path in application_dir.glob("*.py"))
 
     assert "import streamlit" not in source
@@ -173,7 +173,7 @@ def test_workflow_request_and_result_contracts_are_json_friendly(tmp_path: Path)
 
 
 def test_workspace_generate_callback_delegates_to_application_workflow() -> None:
-    source = Path("src/scenariocraft/web/app.py").read_text(encoding="utf-8")
+    source = Path("scenariocraft/web/app.py").read_text(encoding="utf-8")
     callback = source[
         source.index("def _generate_selected_case") : source.index("def _apply_workflow_result")
     ]
@@ -230,7 +230,7 @@ def test_external_scenario_workflow_loads_metadata_without_running_optional_tool
 
 
 def test_external_view_delegates_loaded_checks_to_application_workflow() -> None:
-    source = Path("src/scenariocraft/web/external_view.py").read_text(encoding="utf-8")
+    source = Path("scenariocraft/web/external_view.py").read_text(encoding="utf-8")
     check_body = source[
         source.index("def _run_loaded_xosc_checks") : source.index("def _run_loaded_qc_only")
     ]

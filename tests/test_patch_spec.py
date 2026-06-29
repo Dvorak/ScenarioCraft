@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from scenariocraft_core.schemas import (
+from scenariocraft.core.schemas import (
     PatchSpec,
     PatchSpecError,
     Point2D,

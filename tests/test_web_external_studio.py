@@ -353,7 +353,7 @@ def test_external_visual_summary_handles_unpreviewable_metadata():
 
 
 def test_generated_view_model_summarizes_scenario():
-    from scenariocraft_core.generators import MockScenarioGenerator
+    from scenariocraft.core.generators import MockScenarioGenerator
 
     spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
 

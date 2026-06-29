@@ -4,7 +4,7 @@ from dataclasses import replace
 import json
 from xml.etree import ElementTree as ET
 
-from scenariocraft_core.generators import MockScenarioGenerator
+from scenariocraft.core.generators import MockScenarioGenerator
 from scenariocraft.main import main
 
 
@@ -44,7 +44,7 @@ def test_cli_happy_path_with_mock_provider(monkeypatch, tmp_path: Path) -> None:
 
 
 def test_cli_generated_scenario_path_delegates_to_application_workflow() -> None:
-    source = Path("src/scenariocraft/main.py").read_text(encoding="utf-8")
+    source = Path("scenariocraft/main.py").read_text(encoding="utf-8")
     generated_path = source[source.index("def main") : source.index("def _parse_args")]
 
     assert "run_generated_scenario_workflow" in generated_path

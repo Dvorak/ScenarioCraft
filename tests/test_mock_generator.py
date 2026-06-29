@@ -1,4 +1,4 @@
-from scenariocraft_core.generators import MockScenarioGenerator
+from scenariocraft.core.generators import MockScenarioGenerator
 
 
 def test_mock_generator_returns_rainy_pedestrian_occlusion_spec() -> None:

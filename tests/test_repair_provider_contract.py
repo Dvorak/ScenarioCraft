@@ -1,14 +1,14 @@
 import pytest
 
-from scenariocraft_core.generators import MockScenarioGenerator
-from scenariocraft_core.repair.providers import (
+from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.repair.providers import (
     FakeRepairProvider,
     RepairProposal,
     RepairProvider,
     RepairProviderContractError,
     RepairRequest,
 )
-from scenariocraft_core.schemas import (
+from scenariocraft.core.schemas import (
     PatchSpec,
     ProbeResult,
     RepositionActorToBandOperation,

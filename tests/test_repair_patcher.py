@@ -2,9 +2,9 @@ from dataclasses import replace
 
 import pytest
 
-from scenariocraft_core.generators import MockScenarioGenerator
-from scenariocraft_core.repair import PatchApplicationError, apply_patch
-from scenariocraft_core.schemas import (
+from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.repair import PatchApplicationError, apply_patch
+from scenariocraft.core.schemas import (
     FootprintSpec,
     PatchSpec,
     Point2D,

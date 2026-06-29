@@ -11,26 +11,27 @@ def test_core_boundary_manifest_names_stable_extraction_groups() -> None:
         TOOL_SEMANTIC_GROUPS,
     )
 
-    assert "scenariocraft_core.schemas" in CORE_PACKAGE_MODULES
-    assert "scenariocraft_core.templates" in CORE_PACKAGE_MODULES
-    assert "scenariocraft_core.probes" in CORE_PACKAGE_MODULES
-    assert "scenariocraft_core.repair" in CORE_PACKAGE_MODULES
-    assert "scenariocraft_core.loop" in CORE_PACKAGE_MODULES
-    assert "scenariocraft_core.build" in CORE_PACKAGE_MODULES
-    assert "scenariocraft_core.validation" in CORE_PACKAGE_MODULES
+    assert "scenariocraft.core.schemas" in CORE_PACKAGE_MODULES
+    assert "scenariocraft.core.templates" in CORE_PACKAGE_MODULES
+    assert "scenariocraft.core.probes" in CORE_PACKAGE_MODULES
+    assert "scenariocraft.core.repair" in CORE_PACKAGE_MODULES
+    assert "scenariocraft.core.loop" in CORE_PACKAGE_MODULES
+    assert "scenariocraft.core.build" in CORE_PACKAGE_MODULES
+    assert "scenariocraft.core.validation" in CORE_PACKAGE_MODULES
     assert "scenariocraft.web" in DELIVERY_ADAPTER_MODULES
     assert "scenariocraft.application" in DELIVERY_ADAPTER_MODULES
     assert "scenariocraft.orchestration" in DELIVERY_ADAPTER_MODULES
     assert "scenariocraft.runtime" in RUNTIME_ADAPTER_MODULES
     assert "scenariocraft.presentation" in RUNTIME_ADAPTER_MODULES
+    assert "scenariocraft.integrations.openai_repair" in RUNTIME_ADAPTER_MODULES
     assert TOOL_SEMANTIC_GROUPS["build"] == (
-        "scenariocraft_core.build.layout_adapter",
-        "scenariocraft_core.build.scenario_builder",
+        "scenariocraft.core.build.layout_adapter",
+        "scenariocraft.core.build.scenario_builder",
     )
     assert "scenariocraft.presentation.preview_2d" in TOOL_SEMANTIC_GROUPS["presentation"]
     assert "scenariocraft.presentation.report" in TOOL_SEMANTIC_GROUPS["presentation"]
-    assert "scenariocraft_core.metrics.timing" in TOOL_SEMANTIC_GROUPS["metrics"]
-    assert TOOL_SEMANTIC_GROUPS["validation"] == ("scenariocraft_core.validation.semantic",)
+    assert "scenariocraft.core.metrics.timing" in TOOL_SEMANTIC_GROUPS["metrics"]
+    assert TOOL_SEMANTIC_GROUPS["validation"] == ("scenariocraft.core.validation.semantic",)
     assert TOOL_SEMANTIC_GROUPS["runtime"] == (
         "scenariocraft.runtime.asam_qc",
         "scenariocraft.runtime.esmini",
@@ -42,7 +43,7 @@ def test_core_boundary_manifest_has_no_missing_current_modules() -> None:
 
     missing = []
     for module_name in current_boundary_modules():
-        relative = Path("src") / Path(*module_name.split("."))
+        relative = Path(*module_name.split("."))
         if not relative.with_suffix(".py").exists() and not (relative / "__init__.py").exists():
             missing.append(module_name)
 
@@ -54,7 +55,7 @@ def test_core_candidates_remain_free_of_delivery_runtime_and_provider_imports() 
 
     offenders: dict[str, list[str]] = {}
     for module_name in CORE_PACKAGE_MODULES:
-        relative = Path("src") / Path(*module_name.split("."))
+        relative = Path(*module_name.split("."))
         paths = [relative.with_suffix(".py")] if relative.with_suffix(".py").exists() else list(relative.glob("*.py"))
         for path in paths:
             source = path.read_text(encoding="utf-8")
@@ -66,15 +67,15 @@ def test_core_candidates_remain_free_of_delivery_runtime_and_provider_imports() 
 
 
 def test_canonical_semantic_package_imports_are_available() -> None:
-    from scenariocraft_core.build import build_openscenario
-    from scenariocraft_core.build.scenario_builder import BuildResult
-    from scenariocraft_core.metrics import compute_timing_metrics
-    from scenariocraft_core.metrics.timing import time_headway_s
+    from scenariocraft.core.build import build_openscenario
+    from scenariocraft.core.build.scenario_builder import BuildResult
+    from scenariocraft.core.metrics import compute_timing_metrics
+    from scenariocraft.core.metrics.timing import time_headway_s
     from scenariocraft.presentation import generate_2d_preview, generate_validation_report
     from scenariocraft.presentation.preview_2d import estimate_ttc_s
     from scenariocraft.runtime import AsamQcResult, EsminiResult, run_asam_qc, run_esmini
     from scenariocraft.runtime.esmini import run_esmini_playback
-    from scenariocraft_core.validation import validate_semantics
+    from scenariocraft.core.validation import validate_semantics
 
     assert AsamQcResult.__name__ == "AsamQcResult"
     assert BuildResult.__name__ == "BuildResult"
@@ -94,14 +95,15 @@ def test_canonical_semantic_package_imports_are_available() -> None:
 def test_pre_release_compatibility_facades_are_not_used_by_source() -> None:
     checked_paths = [
         path
-        for root in (Path("src/scenariocraft"), Path("src/scenariocraft_core"), Path("tests"))
+        for root in (Path("scenariocraft"), Path("scenariocraft/core"), Path("tests"))
         for path in root.rglob("*.py")
         if "__pycache__" not in path.parts
     ]
     forbidden = (
         "scenariocraft.loop",
+        "scenariocraft.repair",
         "scenariocraft.tools",
-        "scenariocraft_core.schemas.scenario_spec",
+        "scenariocraft.core.schemas.scenario_spec",
         "scenariocraft.web.demo_cases",
     )
 
@@ -122,6 +124,7 @@ def test_scenariocraft_app_no_longer_contains_core_package_directories() -> None
         "loop",
         "metrics",
         "probes",
+        "repair",
         "roads",
         "schemas",
         "templates",
@@ -129,6 +132,6 @@ def test_scenariocraft_app_no_longer_contains_core_package_directories() -> None
         "validation",
     )
 
-    offenders = [name for name in removed_core_dirs if (Path("src/scenariocraft") / name).exists()]
+    offenders = [name for name in removed_core_dirs if (Path("scenariocraft") / name).exists()]
 
     assert offenders == []
