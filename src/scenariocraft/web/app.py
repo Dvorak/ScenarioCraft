@@ -23,13 +23,14 @@ from scenariocraft.tools import (
     EsminiResult,
     build_openscenario,
     generate_2d_preview,
-    generate_validation_report,
     run_asam_qc,
     run_esmini,
     run_esmini_playback,
     validate_semantics,
 )
 from scenariocraft.tools.semantic_validator import SemanticValidationResult
+from scenariocraft.web.actions import run_runtime_probes_for_generated_scenario, write_generated_validation_report
+from scenariocraft.web.advanced_view import render_advanced_page
 from scenariocraft.web.demo_cases import (
     DEMO_CASES,
     DemoCaseExecution,
@@ -38,6 +39,38 @@ from scenariocraft.web.demo_cases import (
     get_demo_case,
     prepare_demo_case,
     run_demo_case,
+)
+from scenariocraft.web.media_view import (
+    _frame_sequence_state,
+    _playback_media_label,
+    _should_render_frame_sequence,
+    _verified_esmini_frame_paths,
+    render_playback_panel,
+    render_workspace_runtime_media,
+)
+from scenariocraft.web.state import (
+    CRITICALITY_MAX_TTC_S,
+    CURATED_REFERENCE_EXAMPLES_PATH,
+    DEFAULT_EXTERNAL_ROOT,
+    DEFAULT_OUTPUT_DIR,
+    DEFAULT_OUTPUT_ROOT,
+    DEFAULT_SCENARIO_TEXT,
+    PREVIEW_VISUAL_CAPTION,
+    RECOMMENDED_EXAMPLE_FILES,
+    REFERENCE_CATEGORIES,
+    REFERENCE_SOURCES,
+    RUNTIME_VISUAL_CAPTION,
+    WEB_PREVIEW_DISPLAY_ORIENTATION,
+    WEB_PREVIEW_PRESENTATION_STYLE,
+    WORKSPACE_DESKTOP_HEIGHT,
+    WORKSPACE_GENERATE_ICON,
+    WORKSPACE_MEDIA_ASPECT_RATIO,
+    WORKSPACE_MEDIA_TITLES,
+    WORKSPACE_PAGES,
+    WORKSPACE_PROVIDER,
+    WORKSPACE_REPAIR_ICON,
+    ensure_session_state,
+    reset_generated_scenario_state,
 )
 from scenariocraft.web.view_models import (
     DemoExperimentTraceViewModel,
@@ -51,37 +84,6 @@ from scenariocraft.web.view_models import (
     build_workspace_repair_view_model,
     build_workspace_status_view_model,
 )
-
-
-DEFAULT_SCENARIO_TEXT = (
-    "A rainy urban pedestrian occlusion scenario where the ego vehicle approaches a parked van "
-    "and a pedestrian suddenly crosses from behind it."
-)
-DEFAULT_OUTPUT_ROOT = Path("outputs/web_demo")
-DEFAULT_OUTPUT_DIR = DEFAULT_OUTPUT_ROOT / "latest"
-DEFAULT_EXTERNAL_ROOT = Path("external")
-REFERENCE_SOURCES = ("All", "OSC-NCAP-scenarios", "ALKS scenarios", "Other external scenarios")
-CURATED_REFERENCE_EXAMPLES_PATH = Path("examples/reference_examples.yaml")
-RECOMMENDED_EXAMPLE_FILES = (
-    Path("outputs/reference_scan/external_esmini_smoke_real_10/recommended_examples.json"),
-    Path("outputs/reference_scan/ncap_qc_esmini_real_20/recommended_examples.json"),
-    Path("outputs/reference_scan/alks_qc_esmini_real_20/recommended_examples.json"),
-    Path("outputs/reference_scan/ncap_esmini_real_20/recommended_examples.json"),
-    Path("outputs/reference_scan/alks_esmini_real_20/recommended_examples.json"),
-)
-REFERENCE_CATEGORIES = ("stable_demo", "qc_fail", "esmini_long_running")
-CRITICALITY_MAX_TTC_S = 3.0
-WEB_PREVIEW_DISPLAY_ORIENTATION = "esmini_top_camera_raw"
-WEB_PREVIEW_PRESENTATION_STYLE = "clean_split"
-PREVIEW_VISUAL_CAPTION = "Renderer-aligned ScenarioSpec layout · world +x → left · world +y → down"
-RUNTIME_VISUAL_CAPTION = "Raw OpenSCENARIO + OpenDRIVE runtime view · world +x → left · world +y → down"
-WORKSPACE_PAGES = ("Workspace", "Advanced")
-WORKSPACE_PROVIDER = "mock"
-WORKSPACE_GENERATE_ICON = ":material/send:"
-WORKSPACE_REPAIR_ICON = ":material/build:"
-WORKSPACE_DESKTOP_HEIGHT = "clamp(720px, calc(100dvh - 6.5rem), 960px)"
-WORKSPACE_MEDIA_TITLES = ("Preview 2D Semantic", "Playback Esmini")
-WORKSPACE_MEDIA_ASPECT_RATIO = "16 / 9"
 
 
 def workspace_case_options() -> tuple[tuple[str, str], ...]:
@@ -267,66 +269,23 @@ def _render_workspace_visuals(output_dir: Path) -> None:
 
 
 def _render_workspace_runtime_media(output_dir: Path) -> None:
-    playback_result = st.session_state.playback_result
-    if not isinstance(playback_result, EsminiPlaybackResult):
-        st.info("Runtime media has not been generated.")
-        return
-    playback_path = Path(playback_result.playback_path) if playback_result.playback_path else None
-    if playback_result.media_quality_status == "corrupt":
-        st.warning("Verified runtime media is unavailable.")
-    elif playback_result.playback_kind == "esmini_gif" and _playback_generated_media_exists(playback_result, playback_path):
-        st.image(str(playback_path), width="stretch")
-    elif _should_render_frame_sequence(playback_result):
-        frames = _verified_esmini_frame_paths(playback_result, output_dir)
-        if frames:
-            selected = st.slider("Frame", 1, len(frames), 1, label_visibility="collapsed")
-            st.image(str(frames[selected - 1]), width="stretch")
-    elif playback_result.playback_kind == "esmini_single_frame":
-        frames = _verified_esmini_frame_paths(playback_result, output_dir)
-        if frames:
-            st.image(str(frames[0]), width="stretch")
-    elif playback_result.playback_kind in {"preview_fallback_gif", "preview_static_image"}:
-        st.info("2D Preview Fallback")
-    else:
-        st.info("Playback unavailable.")
+    render_workspace_runtime_media(output_dir, st.session_state.playback_result)
 
 
 def _render_advanced_page(output_dir: Path) -> None:
-    st.markdown("### Advanced")
-    columns = st.columns(2, gap="large", vertical_alignment="top")
-    with columns[0]:
-        with st.expander("ScenarioSpec JSON", expanded=True):
-            st.session_state.spec_json = st.text_area(
-                "ScenarioSpec JSON", st.session_state.spec_json, height=320, label_visibility="collapsed"
-            )
-        with st.expander("OpenSCENARIO XML", expanded=False):
-            _render_xml_panel(output_dir)
-        with st.expander("Repair / Experiment Trace", expanded=False):
-            trace = st.session_state.demo_experiment_trace
-            if isinstance(trace, DemoExperimentTraceViewModel):
-                _render_demo_experiment_trace(trace)
-            else:
-                st.info("No repair experiment trace.")
-    with columns[1]:
-        with st.expander("Semantic / Geometry Validation", expanded=True):
-            semantic_result = st.session_state.semantic_result
-            if isinstance(semantic_result, SemanticValidationResult):
-                st.json(semantic_result.to_dict())
-            prepared = _prepared_case()
-            if prepared is not None:
-                st.json([probe.to_dict() for probe in prepared.initial_geometry_probe_results])
-        with st.expander("ASAM QC", expanded=False):
-            qc_result = st.session_state.qc_result
-            st.json(qc_result.to_dict()) if isinstance(qc_result, AsamQcResult) else st.info("ASAM QC has not run.")
-        with st.expander("esmini / Media Provenance", expanded=False):
-            playback_result = st.session_state.playback_result
-            if isinstance(playback_result, EsminiPlaybackResult):
-                st.json(playback_result.to_dict())
-            else:
-                st.info("esmini playback has not run.")
-        with st.expander("Artifacts / Report", expanded=False):
-            st.caption(f"Output · `{output_dir}`")
-            st.text_area("validation_report.md", st.session_state.report_text, height=220, label_visibility="collapsed")
+    st.session_state.spec_json = render_advanced_page(
+        output_dir,
+        spec_json=st.session_state.spec_json,
+        semantic_result=st.session_state.semantic_result,
+        prepared_case=_prepared_case(),
+        qc_result=st.session_state.qc_result,
+        playback_result=st.session_state.playback_result,
+        runtime_probe_results=st.session_state.runtime_probe_results,
+        report_text=st.session_state.report_text,
+        render_xml_panel=_render_xml_panel,
+        render_demo_trace=_render_demo_experiment_trace,
+        demo_trace=st.session_state.demo_experiment_trace,
+    )
 
 
 def _render_request_panel() -> None:
@@ -519,221 +478,12 @@ def _render_playback_tabs(output_dir: Path) -> None:
 
 
 def _render_playback_panel(output_dir: Path) -> None:
-    build_result = st.session_state.build_result
-    if not isinstance(build_result, BuildResult):
-        st.info("Generate & Play to build OpenSCENARIO and run esmini playback/check.")
-        return
-    playback_result = st.session_state.playback_result
-    if isinstance(playback_result, EsminiPlaybackResult):
-        playback_path = Path(playback_result.playback_path) if playback_result.playback_path else None
-        st.caption(_playback_media_label(playback_result.playback_kind))
-        if playback_result.media_quality_status == "corrupt":
-            _render_corrupt_capture(playback_result)
-        elif _should_render_frame_sequence(playback_result):
-            _render_esmini_frame_sequence(output_dir, playback_result)
-        elif playback_result.playback_kind == "esmini_single_frame":
-            _render_esmini_single_frame(output_dir, playback_result)
-        elif playback_result.playback_kind == "esmini_gif" and _playback_generated_media_exists(playback_result, playback_path):
-            st.success("esmini Runtime Playback")
-            if playback_path.suffix.lower() in {".gif", ".png", ".jpg", ".jpeg"}:
-                st.image(str(playback_path), width="stretch", caption="esmini Runtime Playback")
-            else:
-                st.video(str(playback_path))
-        elif playback_result.playback_kind in {"preview_fallback_gif", "preview_static_image"}:
-            _render_preview_fallback_media(playback_result, playback_path)
-        elif playback_result.executed:
-            st.warning("Simulation may have completed, but valid esmini visual media is unavailable.")
-        elif playback_result.esmini_available:
-            st.warning("Simulation may have completed, but valid esmini visual media is unavailable.")
-        else:
-            st.warning("esmini was not found. Playback/check was skipped.")
-        if playback_result.playback_fallback_reason:
-            st.caption(playback_result.playback_fallback_reason)
-        _render_playback_details(playback_result)
-    else:
-        st.info("esmini playback/check has not run for this generated scenario.")
-    controls = st.columns(2)
-    with controls[0]:
-        if st.button("Run esmini playback", width="stretch"):
-            _run_playback(output_dir)
-    with controls[1]:
-        st.caption(f"Output: `{output_dir}`")
-
-
-def _playback_generated_media_exists(playback_result: EsminiPlaybackResult, playback_path: Path | None) -> bool:
-    return playback_result.playback_generated and playback_path is not None and playback_path.exists()
-
-
-def _render_corrupt_capture(playback_result: EsminiPlaybackResult) -> None:
-    if playback_result.executed:
-        st.success("esmini Runtime: passed")
-    st.warning("Simulation may have completed, but valid esmini visual media is unavailable.")
-    if playback_result.media_quality_reason:
-        st.caption(f"Reason: {playback_result.media_quality_reason}")
-    st.caption("2D Preview remains available separately.")
-
-
-def _render_esmini_frame_sequence(output_dir: Path, playback_result: EsminiPlaybackResult) -> None:
-    frames = _verified_esmini_frame_paths(playback_result, output_dir)
-    if not frames:
-        st.warning("esmini frame sequence metadata was present, but no normalized PNG frames were available.")
-        return
-    state = _frame_sequence_state(playback_result, output_dir, selected_index=0)
-    frame_count = int(state["frame_count"])
-    st.success("esmini Runtime Frame Sequence")
-    metrics = st.columns(4)
-    metrics[0].metric("Frames", str(frame_count))
-    metrics[1].metric("Frame duration", _format_optional_seconds(state["frame_duration_s"]))
-    metrics[2].metric("Estimated FPS", _format_optional_number(state["estimated_fps"]))
-    metrics[3].metric("Kind", _playback_media_label(playback_result.playback_kind))
-    selected_index = st.slider(
-        "Frame",
-        min_value=1,
-        max_value=frame_count,
-        value=1,
-        step=1,
-        help="Select a normalized PNG frame derived from native esmini capture.",
+    render_playback_panel(
+        output_dir,
+        build_result=st.session_state.build_result,
+        playback_result=st.session_state.playback_result,
+        run_playback=_run_playback,
     )
-    state = _frame_sequence_state(playback_result, output_dir, selected_index=selected_index - 1)
-    selected_frame = Path(str(state["selected_frame_path"]))
-    st.image(str(selected_frame), width="stretch", caption="esmini Runtime Frame Sequence")
-    st.caption(f"Source provenance: `{state['source_provenance']}`")
-    st.caption(f"Selected frame path: `{state['selected_frame_path']}`")
-    st.caption(f"First frame path: `{state['first_frame_path']}`")
-    st.caption(f"Last frame path: `{state['last_frame_path']}`")
-    _render_preview_vs_esmini_comparison(output_dir, selected_frame)
-
-
-def _render_esmini_single_frame(output_dir: Path, playback_result: EsminiPlaybackResult) -> None:
-    frames = _verified_esmini_frame_paths(playback_result, output_dir)
-    frame_path = frames[0] if frames else _resolve_media_path(playback_result.playback_path, output_dir)
-    if frame_path is not None and frame_path.exists():
-        st.success("esmini Runtime Screenshot")
-        st.image(str(frame_path), width="stretch", caption="esmini Runtime Screenshot")
-        st.caption(f"Source: `{playback_result.playback_source_path}`")
-        st.caption("Single esmini screenshot; not animation.")
-        _render_preview_vs_esmini_comparison(output_dir, frame_path)
-    else:
-        st.warning("esmini screenshot metadata was present, but no normalized PNG frame was available.")
-
-
-def _render_preview_fallback_media(playback_result: EsminiPlaybackResult, playback_path: Path | None) -> None:
-    if _playback_generated_media_exists(playback_result, playback_path):
-        st.info(_playback_media_label(playback_result.playback_kind))
-        st.image(str(playback_path), width="stretch")
-    else:
-        st.warning("2D preview fallback media is unavailable.")
-
-
-def _render_preview_vs_esmini_comparison(output_dir: Path, esmini_frame_path: Path) -> None:
-    preview_path = output_dir / "preview_2d.png"
-    if not preview_path.exists():
-        return
-    with st.expander("2D Preview vs esmini Rendered Frame", expanded=False):
-        cols = st.columns(2)
-        with cols[0]:
-            st.caption("2D Preview")
-            st.image(str(preview_path), width="stretch")
-        with cols[1]:
-            st.caption("Real esmini-rendered frame")
-            st.image(str(esmini_frame_path), width="stretch")
-
-
-def _render_playback_details(playback_result: EsminiPlaybackResult) -> None:
-    with st.expander("Advanced playback details", expanded=False):
-        st.caption(f"Frame count: `{playback_result.playback_frame_count}`")
-        st.caption(f"Capture policy: `{playback_result.capture_window_policy}`")
-        st.caption(f"Media quality: `{playback_result.media_quality_status}`")
-        st.caption(f"Semantic orientation: `{playback_result.semantic_visual_orientation}`")
-        st.caption(f"Raw orientation: `{playback_result.raw_visual_orientation}`")
-        st.caption(f"UI orientation: `{playback_result.ui_visual_orientation}`")
-        st.caption(f"Presentation transform: `{playback_result.presentation_transform}`")
-        st.caption("2D preview orientation is aligned to the raw esmini top-camera view; simulation coordinates and runtime media are not transformed.")
-        st.json(playback_result.to_dict())
-
-
-def _should_render_frame_sequence(playback_result: EsminiPlaybackResult) -> bool:
-    if playback_result.media_quality_status == "corrupt":
-        return False
-    if playback_result.playback_kind == "esmini_frame_sequence":
-        return playback_result.media_quality_status in {"valid", "suspicious"}
-    if playback_result.playback_kind in {"esmini_gif", "esmini_single_frame", "preview_fallback_gif", "preview_static_image"}:
-        return False
-    return bool(_verified_esmini_frame_entries(playback_result))
-
-
-def _frame_sequence_state(
-    playback_result: EsminiPlaybackResult,
-    output_dir: Path,
-    selected_index: int,
-) -> dict[str, object]:
-    frames = _verified_esmini_frame_paths(playback_result, output_dir)
-    if not frames:
-        return {
-            "frame_count": 0,
-            "frame_duration_s": playback_result.playback_frame_duration_s,
-            "estimated_fps": None,
-            "source_provenance": playback_result.playback_source_path,
-            "first_frame_path": None,
-            "last_frame_path": None,
-            "selected_frame_path": None,
-        }
-    bounded_index = min(max(selected_index, 0), len(frames) - 1)
-    frame_duration = playback_result.playback_frame_duration_s
-    estimated_fps = (1.0 / frame_duration) if frame_duration and frame_duration > 0 else None
-    return {
-        "frame_count": playback_result.playback_frame_count or len(frames),
-        "frame_duration_s": frame_duration,
-        "estimated_fps": estimated_fps,
-        "source_provenance": playback_result.playback_source_path,
-        "first_frame_path": str(frames[0]),
-        "last_frame_path": str(frames[-1]),
-        "selected_frame_path": str(frames[bounded_index]),
-    }
-
-
-def _verified_esmini_frame_paths(playback_result: EsminiPlaybackResult, output_dir: Path) -> list[Path]:
-    paths: list[Path] = []
-    for frame in _verified_esmini_frame_entries(playback_result):
-        path = _resolve_media_path(frame.get("normalized_frame_path"), output_dir)
-        if path is not None and path.exists():
-            paths.append(path)
-    return paths
-
-
-def _verified_esmini_frame_entries(playback_result: EsminiPlaybackResult) -> list[dict[str, object]]:
-    entries: list[dict[str, object]] = []
-    for frame in playback_result.playback_frames:
-        normalized_path = frame.get("normalized_frame_path")
-        original_path = frame.get("original_source_path")
-        if not normalized_path or not original_path:
-            continue
-        if Path(str(original_path)).name == "preview_2d.png":
-            continue
-        entries.append(frame)
-    return entries
-
-
-def _resolve_media_path(raw_path: object, output_dir: Path) -> Path | None:
-    if not raw_path:
-        return None
-    path = Path(str(raw_path))
-    if path.is_absolute() or path.exists():
-        return path
-    candidate = output_dir / path
-    return candidate
-
-
-def _format_optional_seconds(value: object) -> str:
-    if isinstance(value, (float, int)):
-        return f"{value:.3f}s"
-    return "n/a"
-
-
-def _format_optional_number(value: object) -> str:
-    if isinstance(value, (float, int)):
-        return f"{value:.1f}"
-    return "n/a"
 
 
 def _render_validation_status_panel() -> None:
@@ -1147,54 +897,7 @@ def _render_advanced_artifacts(output_dir: Path) -> None:
 
 
 def _ensure_state() -> None:
-    defaults = {
-        "active_page": "Workspace",
-        "scenario_text": DEFAULT_SCENARIO_TEXT,
-        "spec_json": "",
-        "xosc_text": "",
-        "report_text": "",
-        "spec": None,
-        "build_result": None,
-        "preview_path": "",
-        "semantic_result": None,
-        "qc_result": None,
-        "esmini_result": None,
-        "playback_result": None,
-        "repair_history": [],
-        "selected_demo_case_id": DEMO_CASES[0].case_id,
-        "demo_experiment_trace": None,
-        "workspace_original_spec": None,
-        "workspace_prepared_case": None,
-        "workspace_execution": None,
-        "output_root": str(DEFAULT_OUTPUT_ROOT),
-        "output_dir": str(DEFAULT_OUTPUT_DIR),
-        "external_root": str(DEFAULT_EXTERNAL_ROOT),
-        "reference_options": [],
-        "reference_browser_initialized": False,
-        "reference_source_filter": REFERENCE_SOURCES[0],
-        "selected_reference_label": "",
-        "loaded_xosc_source": "",
-        "loaded_xosc_relative_path": "",
-        "loaded_xosc_working_dir": "",
-        "workflow_mode": "Generate from prompt",
-        "loaded_xosc_path": "",
-        "loaded_xosc_metadata": None,
-        "demo_mode": "Normal good scenario",
-        "run_esmini_check": False,
-        "try_playback_video": True,
-        "playback_mode": "full/playback attempt",
-        "require_esmini": False,
-        "esmini_bin": "",
-        "esmini_timeout": 20.0,
-        "playback_timeout": 30.0,
-        "external_esmini_mode": "smoke",
-        "esmini_sim_duration": 3.0,
-        "last_error": "",
-        "last_info": "",
-    }
-    for key, value in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = value
+    ensure_session_state()
 
 
 def _generator(provider_name: str) -> ScenarioGenerator:
@@ -1690,6 +1393,7 @@ def _run_playback(output_dir: Path) -> None:
             st.session_state.esmini_result = EsminiResult(**json.loads(esmini_json.read_text(encoding="utf-8")))
         except (TypeError, json.JSONDecodeError):
             st.session_state.esmini_result = None
+    _run_runtime_probes(output_dir)
     _info("esmini playback/check completed." if playback_result.esmini_available else "esmini playback/check skipped.")
 
 
@@ -1744,6 +1448,7 @@ def _run_pipeline(
             _run_esmini(output_dir, require_esmini=require_esmini, esmini_bin=esmini_bin, timeout_s=esmini_timeout)
         else:
             st.session_state.esmini_result = _missing_esmini_result(_ensure_build_result(output_dir).xosc_path)
+        _run_runtime_probes(output_dir)
         _write_report(output_dir)
         _write_repair_history(output_dir)
         _info("Pipeline run completed.")
@@ -1765,15 +1470,7 @@ def _current_spec(show_error: bool = True) -> ScenarioSpec | None:
 def _set_spec(spec: ScenarioSpec) -> None:
     st.session_state.spec = spec
     st.session_state.spec_json = spec.to_json()
-    st.session_state.build_result = None
-    st.session_state.xosc_text = ""
-    st.session_state.preview_path = ""
-    st.session_state.semantic_result = None
-    st.session_state.qc_result = None
-    st.session_state.esmini_result = None
-    st.session_state.playback_result = None
-    st.session_state.report_text = ""
-    st.session_state.demo_experiment_trace = None
+    reset_generated_scenario_state()
 
 
 def _prepared_case() -> PreparedDemoCase | None:
@@ -1872,6 +1569,18 @@ def _run_esmini(output_dir: Path, require_esmini: bool, esmini_bin: str | None, 
     _info("esmini completed." if result.executed else "esmini skipped or failed.")
 
 
+def _run_runtime_probes(output_dir: Path) -> None:
+    spec = _current_spec()
+    if spec is None:
+        return
+    build_result = _ensure_build_result(output_dir)
+    st.session_state.runtime_probe_results = run_runtime_probes_for_generated_scenario(
+        spec,
+        build_result=build_result,
+        output_dir=output_dir,
+    )
+
+
 def _render_loaded_playback_panel() -> None:
     preview_tab, esmini_tab = st.tabs(["2D Preview", "Execution Check"])
     with preview_tab:
@@ -1910,17 +1619,18 @@ def _write_report(output_dir: Path) -> None:
     semantic_result = st.session_state.semantic_result or validate_semantics(spec)
     qc_result = st.session_state.qc_result or _missing_qc_result(build_result.xosc_path, output_dir)
     esmini_result = st.session_state.esmini_result or _missing_esmini_result(build_result.xosc_path)
-    report_path = generate_validation_report(
-        st.session_state.scenario_text,
-        spec,
-        build_result,
-        qc_result,
-        esmini_result,
-        semantic_result,
-        output_dir,
+    report_path = write_generated_validation_report(
+        scenario_text=st.session_state.scenario_text,
+        spec=spec,
+        build_result=build_result,
+        qc_result=qc_result,
+        esmini_result=esmini_result,
+        semantic_result=semantic_result,
+        output_dir=output_dir,
         playback_result=st.session_state.playback_result
         if isinstance(st.session_state.playback_result, EsminiPlaybackResult)
         else None,
+        runtime_probe_results=st.session_state.runtime_probe_results,
     )
     st.session_state.semantic_result = semantic_result
     st.session_state.report_text = report_path.read_text(encoding="utf-8")
@@ -2239,18 +1949,6 @@ def _status_label() -> str:
     if st.session_state.last_info:
         return f'<div class="status-ok">{escape(st.session_state.last_info)}</div>'
     return '<div class="status-muted">Ready</div>'
-
-
-def _playback_media_label(playback_kind: str) -> str:
-    labels = {
-        "esmini_gif": "esmini Rendered GIF",
-        "esmini_frame_sequence": "esmini Frame Sequence",
-        "esmini_single_frame": "esmini Screenshot",
-        "preview_fallback_gif": "2D Preview Fallback",
-        "preview_static_image": "2D Preview",
-        "unavailable": "Playback Unavailable",
-    }
-    return labels.get(playback_kind, "Playback Unavailable")
 
 
 def _inject_css() -> None:

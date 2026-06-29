@@ -4,8 +4,14 @@ import argparse
 from pathlib import Path
 
 from scenariocraft.generators import MockScenarioGenerator, ScenarioGenerator
-from scenariocraft.probes import run_artifact_consistency_probes, run_pedestrian_occlusion_probes
+from scenariocraft.loop import run_bounded_orchestrator
+from scenariocraft.probes import (
+    run_and_write_runtime_consistency_probes,
+    run_artifact_consistency_probes,
+    run_pedestrian_occlusion_probes,
+)
 from scenariocraft.references import XoscMetadata, extract_xosc_metadata
+from scenariocraft.repair.providers import FakeRepairProvider
 from scenariocraft.schemas import ProbeResult, ScenarioSpec
 from scenariocraft.schemas.scenario_spec import ScenarioSpecError
 from scenariocraft.tools import (
@@ -39,6 +45,26 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     (output_dir / "scenario_spec.json").write_text(spec.to_json() + "\n", encoding="utf-8")
 
+    if args.use_orchestrator:
+        result = run_bounded_orchestrator(
+            spec,
+            output_dir=output_dir,
+            scenario_text=scenario_text,
+            repair_provider=FakeRepairProvider(),
+            max_repair_rounds=args.max_repair_rounds,
+            run_esmini_check=True,
+            require_esmini=args.require_esmini,
+            esmini_bin=args.esmini_bin,
+            esmini_timeout_s=args.esmini_timeout,
+        )
+        print(f"Wrote orchestrator result: {output_dir / 'orchestrator_result.json'}")
+        if result.report_path is not None:
+            print(f"Wrote validation report: {result.report_path}")
+        if args.require_esmini and result.esmini_result is not None and not result.esmini_result.esmini_available:
+            print("Required esmini binary was not found. Set ESMINI_BIN or add esmini to PATH.")
+            return 2
+        return 0 if result.terminal_status == "passed" else 2
+
     preview_path = generate_2d_preview(spec, output_dir / "preview_2d.png")
     build_result = build_openscenario(spec, output_dir)
     artifact_probe_results = run_artifact_consistency_probes(
@@ -54,6 +80,12 @@ def main(argv: list[str] | None = None) -> int:
         binary=args.esmini_bin,
         timeout_s=args.esmini_timeout,
     )
+    runtime_probe_results = run_and_write_runtime_consistency_probes(
+        spec,
+        output_dir=output_dir,
+        xosc_path=build_result.xosc_path,
+        xodr_path=build_result.xodr_path,
+    )
     semantic_result = validate_semantics(spec)
     probe_results = _run_template_probes(spec)
     report_path = generate_validation_report(
@@ -66,6 +98,7 @@ def main(argv: list[str] | None = None) -> int:
         output_dir,
         probe_results=probe_results,
         artifact_probe_results=artifact_probe_results,
+        runtime_probe_results=runtime_probe_results,
     )
     print(f"Wrote ScenarioSpec: {output_dir / 'scenario_spec.json'}")
     print(f"Wrote 2D preview: {preview_path}")
@@ -130,6 +163,17 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         type=float,
         default=None,
         help="Override mock pedestrian-occlusion preferred trigger window end.",
+    )
+    parser.add_argument(
+        "--use-orchestrator",
+        action="store_true",
+        help="Run the bounded generate-build-probe-repair orchestrator path.",
+    )
+    parser.add_argument(
+        "--max-repair-rounds",
+        type=int,
+        default=2,
+        help="Maximum PatchSpec repair rounds for --use-orchestrator.",
     )
     return parser.parse_args(argv)
 

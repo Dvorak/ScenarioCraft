@@ -8,15 +8,23 @@ from scenariocraft.probes.runtime_consistency import (
     RUNTIME_PROBE_NAMES,
     run_runtime_consistency_probes,
 )
+from scenariocraft.probes.runtime_pipeline import (
+    RUNTIME_PROBE_RESULTS_FILENAME,
+    run_and_write_runtime_consistency_probes,
+    write_runtime_probe_results,
+)
 from scenariocraft.probes.time_headway import run_time_headway_probes
 
 __all__ = [
     "RUNTIME_PROBE_NAMES",
+    "RUNTIME_PROBE_RESULTS_FILENAME",
     "ScenarioProbe",
     "run_artifact_consistency_probes",
+    "run_and_write_runtime_consistency_probes",
     "run_pedestrian_occlusion_probes",
     "run_pedestrian_occlusion_timing_probes",
     "run_runtime_consistency_probes",
     "run_probes",
     "run_time_headway_probes",
+    "write_runtime_probe_results",
 ]

@@ -24,12 +24,20 @@ def test_cli_happy_path_with_mock_provider(monkeypatch, tmp_path: Path) -> None:
     assert (output_dir / "scenario.xosc").exists()
     assert (output_dir / "qc_report.json").exists()
     assert (output_dir / "esmini_log.txt").exists()
+    assert (output_dir / "runtime_probe_results.json").exists()
     assert "Scenario playback/execution check was skipped" in (output_dir / "validation_report.md").read_text(
         encoding="utf-8"
+    )
+    runtime_results = json.loads((output_dir / "runtime_probe_results.json").read_text(encoding="utf-8"))
+    assert any(result["name"] == "runtime_esmini_execution_available" for result in runtime_results)
+    assert any(
+        result["name"] == "runtime_motion_verifiable" and result["severity"] == "warning"
+        for result in runtime_results
     )
     report = (output_dir / "validation_report.md").read_text(encoding="utf-8")
     assert "## Template-Aware Probes" in report
     assert "## Artifact Consistency Probes" in report
+    assert "## Runtime Consistency Probes" in report
     assert "`ego_footprint_in_ego_lane`" in report
     assert "`trigger_point_before_conflict_and_in_ego_lane`" in report
     assert "`xosc_actor_poses_match_layout`" in report

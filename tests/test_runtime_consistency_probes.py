@@ -4,7 +4,11 @@ import json
 from pathlib import Path
 
 from scenariocraft.generators import MockScenarioGenerator
-from scenariocraft.probes import RUNTIME_PROBE_NAMES, run_runtime_consistency_probes
+from scenariocraft.probes import (
+    RUNTIME_PROBE_NAMES,
+    run_and_write_runtime_consistency_probes,
+    run_runtime_consistency_probes,
+)
 
 
 def test_missing_runtime_artifacts_warn_without_hard_failures() -> None:
@@ -116,6 +120,29 @@ def test_motion_requires_event_action_evidence_and_animated_esmini_media(tmp_pat
     assert by_name["runtime_visual_media_provenance_valid"].passed is True
     assert by_name["runtime_motion_verifiable"].passed is False
     assert by_name["runtime_motion_verifiable"].measured["visual_media_animated_esmini"] is False
+
+
+def test_runtime_pipeline_writes_results_from_generated_artifacts(tmp_path: Path) -> None:
+    _write_log(tmp_path, _successful_log())
+    _write_playback(tmp_path, _playback_result("esmini_frame_sequence", frame_count=2, animated=True))
+    xosc_path = tmp_path / "scenario.xosc"
+    xodr_path = tmp_path / "urban_two_way_parking.xodr"
+    xosc_path.write_text("xosc", encoding="utf-8")
+    xodr_path.write_text("xodr", encoding="utf-8")
+
+    results = run_and_write_runtime_consistency_probes(
+        _spec(),
+        output_dir=tmp_path,
+        xosc_path=xosc_path,
+        xodr_path=xodr_path,
+    )
+
+    result_path = tmp_path / "runtime_probe_results.json"
+    assert result_path.exists()
+    assert all(result.passed for result in results)
+    written = json.loads(result_path.read_text(encoding="utf-8"))
+    assert written[0]["name"] == "runtime_esmini_execution_available"
+    assert written[-1]["name"] == "runtime_motion_verifiable"
 
 
 def _spec():
