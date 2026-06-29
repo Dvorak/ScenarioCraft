@@ -5,11 +5,8 @@ __pycache__/
 .pytest_cache/
 .playwright-cli/
 .venv/
-build/
-!src/scenariocraft/build/
-!src/scenariocraft/build/**
-src/scenariocraft/build/__pycache__/
-dist/
+/build/
+/dist/
 AGENTS.md
 docs/
 external/

@@ -6,7 +6,7 @@ from typing import Literal, TypeAlias
 from xml.etree import ElementTree as ET
 
 from scenariocraft_core.loop import RepairRunResult
-from scenariocraft.loop.orchestrator import run_bounded_orchestrator
+from scenariocraft.orchestration.orchestrator import run_bounded_orchestrator
 from scenariocraft_core.probes import run_artifact_consistency_probes, run_pedestrian_occlusion_probes
 from scenariocraft_core.repair import apply_patch
 from scenariocraft_core.repair.providers import FakeRepairProvider

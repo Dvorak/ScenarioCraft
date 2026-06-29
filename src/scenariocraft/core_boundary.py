@@ -24,6 +24,7 @@ CORE_PACKAGE_MODULES = (
 DELIVERY_ADAPTER_MODULES = (
     "scenariocraft.application",
     "scenariocraft.main",
+    "scenariocraft.orchestration",
     "scenariocraft.web",
 )
 

@@ -9,7 +9,7 @@ from scenariocraft.application import (
     run_generated_scenario_workflow,
 )
 from scenariocraft_core.generators import MockScenarioGenerator, ScenarioGenerator
-from scenariocraft.loop import run_bounded_orchestrator
+from scenariocraft.orchestration import run_bounded_orchestrator
 from scenariocraft.references import XoscMetadata, extract_xosc_metadata
 from scenariocraft_core.repair.providers import FakeRepairProvider
 from scenariocraft.runtime import EsminiResult, run_esmini

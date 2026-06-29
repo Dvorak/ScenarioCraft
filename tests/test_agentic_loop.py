@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 from scenariocraft_core.generators import MockScenarioGenerator
-from scenariocraft.loop import run_bounded_orchestrator
+from scenariocraft.orchestration import run_bounded_orchestrator
 from scenariocraft_core.repair.providers import FakeRepairProvider
 from scenariocraft_core.schemas import Point2D, Pose2D
 

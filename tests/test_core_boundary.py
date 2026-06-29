@@ -20,6 +20,7 @@ def test_core_boundary_manifest_names_stable_extraction_groups() -> None:
     assert "scenariocraft_core.validation" in CORE_PACKAGE_MODULES
     assert "scenariocraft.web" in DELIVERY_ADAPTER_MODULES
     assert "scenariocraft.application" in DELIVERY_ADAPTER_MODULES
+    assert "scenariocraft.orchestration" in DELIVERY_ADAPTER_MODULES
     assert "scenariocraft.runtime" in RUNTIME_ADAPTER_MODULES
     assert "scenariocraft.presentation" in RUNTIME_ADAPTER_MODULES
     assert TOOL_SEMANTIC_GROUPS["build"] == (
@@ -98,6 +99,7 @@ def test_pre_release_compatibility_facades_are_not_used_by_source() -> None:
         if "__pycache__" not in path.parts
     ]
     forbidden = (
+        "scenariocraft.loop",
         "scenariocraft.tools",
         "scenariocraft_core.schemas.scenario_spec",
         "scenariocraft.web.demo_cases",
@@ -117,11 +119,13 @@ def test_scenariocraft_app_no_longer_contains_core_package_directories() -> None
     removed_core_dirs = (
         "build",
         "generators",
+        "loop",
         "metrics",
         "probes",
         "roads",
         "schemas",
         "templates",
+        "tools",
         "validation",
     )
 

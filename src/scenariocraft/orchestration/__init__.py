@@ -1,4 +1,4 @@
-from scenariocraft.loop.orchestrator import (
+from scenariocraft.orchestration.orchestrator import (
     ORCHESTRATOR_RESULT_FILENAME,
     OrchestratorRunResult,
     run_bounded_orchestrator,
