@@ -1,8 +1,8 @@
 from dataclasses import replace
 
-from scenariocraft.generators import MockScenarioGenerator
-from scenariocraft.probes import run_pedestrian_occlusion_probes, run_pedestrian_occlusion_timing_probes
-from scenariocraft.schemas import PathSpec, Point2D, Pose2D
+from scenariocraft_core.generators import MockScenarioGenerator
+from scenariocraft_core.probes import run_pedestrian_occlusion_probes, run_pedestrian_occlusion_timing_probes
+from scenariocraft_core.schemas import PathSpec, Point2D, Pose2D
 
 EXPECTED_PROBE_NAMES = [
     "ego_footprint_in_ego_lane",

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import scenariocraft.web.app as web_app
-from scenariocraft.generators import MockScenarioGenerator
+from scenariocraft_core.generators import MockScenarioGenerator
 from scenariocraft.web.app import _run_demo_experiment_if_requested
 from scenariocraft.web.view_models import build_generated_scenario_view_model
 

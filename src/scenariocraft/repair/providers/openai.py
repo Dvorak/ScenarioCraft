@@ -5,8 +5,8 @@ import os
 from collections.abc import Mapping
 from typing import Any
 
-from scenariocraft.repair.providers.types import RepairProposal, RepairRequest
-from scenariocraft.schemas import PatchSpec, PatchSpecError
+from scenariocraft_core.repair.providers.types import RepairProposal, RepairRequest
+from scenariocraft_core.schemas import PatchSpec, PatchSpecError
 
 
 class OpenAIRepairProviderConfigurationError(RuntimeError):

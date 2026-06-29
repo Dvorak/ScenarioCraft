@@ -1,16 +1,16 @@
 from pathlib import Path
 from dataclasses import replace
 
-from scenariocraft.generators import MockScenarioGenerator
-from scenariocraft.probes import (
+from scenariocraft_core.generators import MockScenarioGenerator
+from scenariocraft_core.probes import (
     run_artifact_consistency_probes,
     run_pedestrian_occlusion_probes,
     run_runtime_consistency_probes,
 )
-from scenariocraft.schemas import ProbeResult
-from scenariocraft.build import build_openscenario
+from scenariocraft_core.schemas import ProbeResult
+from scenariocraft_core.build import build_openscenario
 from scenariocraft.presentation import generate_validation_report
-from scenariocraft.validation import validate_semantics
+from scenariocraft_core.validation import validate_semantics
 from scenariocraft.runtime import AsamQcResult
 from scenariocraft.runtime import EsminiPlaybackResult, EsminiResult
 

@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from scenariocraft.generators import MockScenarioGenerator
-from scenariocraft.probes import run_pedestrian_occlusion_timing_probes
-from scenariocraft.repair.providers import FakeRepairProvider
+from scenariocraft_core.generators import MockScenarioGenerator
+from scenariocraft_core.probes import run_pedestrian_occlusion_timing_probes
+from scenariocraft_core.repair.providers import FakeRepairProvider
 from scenariocraft.application.demo_cases import DEMO_CASES, get_demo_case, prepare_demo_case, run_demo_case
 
 

@@ -2,10 +2,10 @@ import json
 
 import pytest
 
-from scenariocraft.generators import MockScenarioGenerator
-from scenariocraft.probes import run_probes
-from scenariocraft.schemas import ProbeResult, ScenarioSpec
-from scenariocraft.schemas.probe_result import ProbeResultError
+from scenariocraft_core.generators import MockScenarioGenerator
+from scenariocraft_core.probes import run_probes
+from scenariocraft_core.schemas import ProbeResult, ScenarioSpec
+from scenariocraft_core.schemas.probe_result import ProbeResultError
 
 
 def test_probe_result_round_trips_through_json_compatible_dict() -> None:

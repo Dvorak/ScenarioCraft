@@ -5,7 +5,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from scenariocraft.build import BuildResult
+from scenariocraft_core.build import BuildResult
 from scenariocraft.runtime import EsminiPlaybackResult
 
 

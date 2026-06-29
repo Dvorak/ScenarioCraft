@@ -1,0 +1,1 @@
+"""Reusable ScenarioCraft core package."""

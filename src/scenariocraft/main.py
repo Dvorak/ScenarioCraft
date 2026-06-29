@@ -8,13 +8,13 @@ from scenariocraft.application import (
     ScenarioWorkflowRequest,
     run_generated_scenario_workflow,
 )
-from scenariocraft.generators import MockScenarioGenerator, ScenarioGenerator
+from scenariocraft_core.generators import MockScenarioGenerator, ScenarioGenerator
 from scenariocraft.loop import run_bounded_orchestrator
 from scenariocraft.references import XoscMetadata, extract_xosc_metadata
-from scenariocraft.repair.providers import FakeRepairProvider
+from scenariocraft_core.repair.providers import FakeRepairProvider
 from scenariocraft.runtime import EsminiResult, run_esmini
-from scenariocraft.schemas import ScenarioSpec
-from scenariocraft.schemas.common import ScenarioSpecError
+from scenariocraft_core.schemas import ScenarioSpec
+from scenariocraft_core.schemas.common import ScenarioSpecError
 
 
 def main(argv: list[str] | None = None) -> int:

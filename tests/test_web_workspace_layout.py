@@ -4,8 +4,8 @@ from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
 
-from scenariocraft.generators import MockScenarioGenerator
-from scenariocraft.repair.providers import FakeRepairProvider
+from scenariocraft_core.generators import MockScenarioGenerator
+from scenariocraft_core.repair.providers import FakeRepairProvider
 from scenariocraft.runtime import AsamQcResult, EsminiResult
 from scenariocraft.application.demo_cases import (
     DEMO_CASES,

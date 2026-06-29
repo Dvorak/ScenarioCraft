@@ -3,12 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from scenariocraft.loop.types import RepairRunResult
+from scenariocraft_core.loop.types import RepairRunResult
 from scenariocraft.references import XoscMetadata
-from scenariocraft.metrics import compute_timing_metrics
+from scenariocraft_core.metrics import compute_timing_metrics
 from scenariocraft.runtime import AsamQcResult, EsminiResult
-from scenariocraft.schemas import PatchSpec, ProbeResult, ScenarioSpec
-from scenariocraft.validation import SemanticValidationResult
+from scenariocraft_core.schemas import PatchSpec, ProbeResult, ScenarioSpec
+from scenariocraft_core.validation import SemanticValidationResult
 from scenariocraft.application.demo_cases import DemoCaseExecution, PreparedDemoCase
 
 

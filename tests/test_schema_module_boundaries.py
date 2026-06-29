@@ -32,7 +32,7 @@ def test_core_candidate_modules_do_not_import_delivery_or_runtime_adapters() -> 
 
 
 def test_schema_public_api_is_backed_by_semantic_submodules() -> None:
-    from scenariocraft.schemas import (
+    from scenariocraft_core.schemas import (
         ActorSpec,
         CriticalitySpec,
         LayoutSpec,
@@ -42,14 +42,14 @@ def test_schema_public_api_is_backed_by_semantic_submodules() -> None:
         StoryboardSpec,
         TriggerSpec,
     )
-    from scenariocraft.schemas.layout_spec import LayoutSpec as LayoutSpecFromModule
-    from scenariocraft.schemas.road_spec import RoadSpec as RoadSpecFromModule
-    from scenariocraft.schemas.scenario_core import ActorSpec as ActorSpecFromModule
-    from scenariocraft.schemas.scenario_core import ScenarioSpec as ScenarioSpecFromModule
-    from scenariocraft.schemas.storyboard_spec import StoryboardSpec as StoryboardSpecFromModule
-    from scenariocraft.schemas.timing_spec import ScenarioTimingSpec as ScenarioTimingSpecFromModule
-    from scenariocraft.schemas.trigger_spec import CriticalitySpec as CriticalitySpecFromModule
-    from scenariocraft.schemas.trigger_spec import TriggerSpec as TriggerSpecFromModule
+    from scenariocraft_core.schemas.layout_spec import LayoutSpec as LayoutSpecFromModule
+    from scenariocraft_core.schemas.road_spec import RoadSpec as RoadSpecFromModule
+    from scenariocraft_core.schemas.scenario_core import ActorSpec as ActorSpecFromModule
+    from scenariocraft_core.schemas.scenario_core import ScenarioSpec as ScenarioSpecFromModule
+    from scenariocraft_core.schemas.storyboard_spec import StoryboardSpec as StoryboardSpecFromModule
+    from scenariocraft_core.schemas.timing_spec import ScenarioTimingSpec as ScenarioTimingSpecFromModule
+    from scenariocraft_core.schemas.trigger_spec import CriticalitySpec as CriticalitySpecFromModule
+    from scenariocraft_core.schemas.trigger_spec import TriggerSpec as TriggerSpecFromModule
 
     assert ActorSpec is ActorSpecFromModule
     assert CriticalitySpec is CriticalitySpecFromModule

@@ -7,10 +7,10 @@ from unittest.mock import Mock
 
 import pytest
 
-from scenariocraft.generators import MockScenarioGenerator
+from scenariocraft_core.generators import MockScenarioGenerator
 from scenariocraft.loop import run_bounded_orchestrator
-from scenariocraft.repair.providers import FakeRepairProvider
-from scenariocraft.schemas import Point2D, Pose2D
+from scenariocraft_core.repair.providers import FakeRepairProvider
+from scenariocraft_core.schemas import Point2D, Pose2D
 
 
 def test_orchestrator_passes_canonical_scenario_and_writes_artifacts(monkeypatch, tmp_path: Path) -> None:

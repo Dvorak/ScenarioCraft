@@ -6,7 +6,7 @@ from pathlib import Path
 import streamlit as st
 
 from scenariocraft.runtime import AsamQcResult, EsminiPlaybackResult
-from scenariocraft.validation import SemanticValidationResult
+from scenariocraft_core.validation import SemanticValidationResult
 from scenariocraft.application.demo_cases import PreparedDemoCase
 from scenariocraft.web.view_models import DemoExperimentTraceViewModel
 

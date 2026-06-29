@@ -4,9 +4,10 @@ import os
 
 import pytest
 
-from scenariocraft.generators import MockScenarioGenerator
-from scenariocraft.repair.providers import OpenAIRepairProvider, RepairProposal, RepairRequest
-from scenariocraft.schemas import ProbeResult
+from scenariocraft_core.generators import MockScenarioGenerator
+from scenariocraft.repair.providers import OpenAIRepairProvider
+from scenariocraft_core.repair.providers import RepairProposal, RepairRequest
+from scenariocraft_core.schemas import ProbeResult
 
 
 LIVE_ENABLED = (

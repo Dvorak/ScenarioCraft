@@ -4,7 +4,7 @@ from dataclasses import replace
 import json
 from xml.etree import ElementTree as ET
 
-from scenariocraft.generators import MockScenarioGenerator
+from scenariocraft_core.generators import MockScenarioGenerator
 from scenariocraft.main import main
 
 

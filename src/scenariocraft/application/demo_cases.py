@@ -5,13 +5,13 @@ from pathlib import Path
 from typing import Literal, TypeAlias
 from xml.etree import ElementTree as ET
 
-from scenariocraft.loop import RepairRunResult
+from scenariocraft_core.loop import RepairRunResult
 from scenariocraft.loop.orchestrator import run_bounded_orchestrator
-from scenariocraft.probes import run_artifact_consistency_probes, run_pedestrian_occlusion_probes
-from scenariocraft.repair import apply_patch
-from scenariocraft.repair.providers import FakeRepairProvider
-from scenariocraft.build import build_openscenario
-from scenariocraft.schemas import (
+from scenariocraft_core.probes import run_artifact_consistency_probes, run_pedestrian_occlusion_probes
+from scenariocraft_core.repair import apply_patch
+from scenariocraft_core.repair.providers import FakeRepairProvider
+from scenariocraft_core.build import build_openscenario
+from scenariocraft_core.schemas import (
     PatchSpec,
     ProbeResult,
     ScenarioSpec,

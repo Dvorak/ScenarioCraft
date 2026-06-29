@@ -1,9 +1,9 @@
 from dataclasses import replace
 
-from scenariocraft.generators import MockScenarioGenerator
-from scenariocraft.probes import run_pedestrian_occlusion_probes
-from scenariocraft.repair import apply_patch
-from scenariocraft.schemas import (
+from scenariocraft_core.generators import MockScenarioGenerator
+from scenariocraft_core.probes import run_pedestrian_occlusion_probes
+from scenariocraft_core.repair import apply_patch
+from scenariocraft_core.schemas import (
     PatchSpec,
     Point2D,
     Pose2D,

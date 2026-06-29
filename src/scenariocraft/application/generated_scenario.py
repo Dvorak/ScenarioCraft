@@ -10,10 +10,10 @@ from scenariocraft.application.contracts import (
     ScenarioWorkflowStatus,
 )
 from scenariocraft.application.demo_cases import PreparedDemoCase, prepare_demo_case
-from scenariocraft.generators import MockScenarioGenerator, ScenarioGenerator
-from scenariocraft.probes import run_artifact_consistency_probes, run_pedestrian_occlusion_probes
-from scenariocraft.probes.runtime_pipeline import run_and_write_runtime_consistency_probes
-from scenariocraft.build import BuildResult, build_openscenario
+from scenariocraft_core.generators import MockScenarioGenerator, ScenarioGenerator
+from scenariocraft_core.probes import run_artifact_consistency_probes, run_pedestrian_occlusion_probes
+from scenariocraft_core.probes.runtime_pipeline import run_and_write_runtime_consistency_probes
+from scenariocraft_core.build import BuildResult, build_openscenario
 from scenariocraft.presentation import generate_2d_preview, generate_validation_report
 from scenariocraft.runtime import (
     AsamQcResult,
@@ -23,9 +23,9 @@ from scenariocraft.runtime import (
     run_esmini,
     run_esmini_playback,
 )
-from scenariocraft.schemas import ScenarioSpec
-from scenariocraft.validation import SemanticValidationResult
-from scenariocraft.validation import validate_semantics
+from scenariocraft_core.schemas import ScenarioSpec
+from scenariocraft_core.validation import SemanticValidationResult
+from scenariocraft_core.validation import validate_semantics
 
 
 def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> ScenarioWorkflowResult:

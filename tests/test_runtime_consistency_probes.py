@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scenariocraft.generators import MockScenarioGenerator
-from scenariocraft.probes import (
+from scenariocraft_core.generators import MockScenarioGenerator
+from scenariocraft_core.probes import (
     RUNTIME_PROBE_NAMES,
     run_and_write_runtime_consistency_probes,
     run_runtime_consistency_probes,

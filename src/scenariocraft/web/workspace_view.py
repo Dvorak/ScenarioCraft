@@ -7,7 +7,7 @@ from pathlib import Path
 import streamlit as st
 
 from scenariocraft.application.demo_cases import DEMO_CASES, PreparedDemoCase, get_demo_case
-from scenariocraft.schemas import ScenarioSpec
+from scenariocraft_core.schemas import ScenarioSpec
 from scenariocraft.web.media_view import render_workspace_runtime_media
 from scenariocraft.web.state import (
     WORKSPACE_GENERATE_ICON,

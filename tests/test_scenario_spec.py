@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from scenariocraft.schemas import (
+from scenariocraft_core.schemas import (
     ActorSpec,
     CriticalitySpec,
     FootprintSpec,
@@ -25,7 +25,7 @@ from scenariocraft.schemas import (
     TriggerSpec,
     WeatherSpec,
 )
-from scenariocraft.schemas.common import ScenarioSpecError
+from scenariocraft_core.schemas.common import ScenarioSpecError
 
 
 def test_scenario_spec_round_trip_json() -> None:

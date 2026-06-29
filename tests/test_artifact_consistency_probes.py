@@ -7,9 +7,9 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
-from scenariocraft.generators import MockScenarioGenerator
-from scenariocraft.probes import run_artifact_consistency_probes
-from scenariocraft.build import BuildResult, build_openscenario
+from scenariocraft_core.generators import MockScenarioGenerator
+from scenariocraft_core.probes import run_artifact_consistency_probes
+from scenariocraft_core.build import BuildResult, build_openscenario
 
 EXPECTED_PROBE_NAMES = [
     "xosc_actor_poses_match_layout",

@@ -1,3 +1,5 @@
-from scenariocraft.repair.patcher import PatchApplicationError, apply_patch
+"""Application repair adapters.
 
-__all__ = ["PatchApplicationError", "apply_patch"]
+Reusable PatchSpec application and deterministic repair contracts live in
+`scenariocraft_core.repair`.
+"""

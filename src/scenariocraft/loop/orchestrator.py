@@ -4,16 +4,16 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from scenariocraft.loop.repair_loop import run_bounded_repair_loop
-from scenariocraft.loop.types import RepairRunResult
-from scenariocraft.probes import (
+from scenariocraft_core.loop.repair_loop import run_bounded_repair_loop
+from scenariocraft_core.loop.types import RepairRunResult
+from scenariocraft_core.probes import (
     run_and_write_runtime_consistency_probes,
     run_artifact_consistency_probes,
     run_pedestrian_occlusion_probes,
     run_pedestrian_occlusion_timing_probes,
 )
-from scenariocraft.repair.providers import RepairProvider
-from scenariocraft.build import BuildResult, build_openscenario
+from scenariocraft_core.repair.providers import RepairProvider
+from scenariocraft_core.build import BuildResult, build_openscenario
 from scenariocraft.presentation import generate_2d_preview, generate_validation_report
 from scenariocraft.runtime import (
     AsamQcResult,
@@ -23,9 +23,9 @@ from scenariocraft.runtime import (
     run_esmini,
     run_esmini_playback,
 )
-from scenariocraft.schemas import ProbeResult, ScenarioSpec
-from scenariocraft.validation import SemanticValidationResult
-from scenariocraft.validation import validate_semantics
+from scenariocraft_core.schemas import ProbeResult, ScenarioSpec
+from scenariocraft_core.validation import SemanticValidationResult
+from scenariocraft_core.validation import validate_semantics
 
 
 ORCHESTRATOR_RESULT_FILENAME = "orchestrator_result.json"

@@ -1,7 +1,7 @@
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from scenariocraft.roads import (
+from scenariocraft_core.roads import (
     URBAN_TWO_WAY_PARKING_FILENAME,
     URBAN_TWO_WAY_PARKING_LANES,
     canonical_urban_two_way_parking_asset_path,

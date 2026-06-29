@@ -1,24 +1,24 @@
-"""Code-level package boundary manifest for future core extraction.
+"""Code-level package boundary manifest for ScenarioCraft.
 
-This module is intentionally descriptive: it records stable extraction
-boundaries without moving directories or changing runtime behavior.
+The reusable domain package is `scenariocraft_core`. The `scenariocraft`
+package contains delivery surfaces and optional external adapters.
 """
 
 from __future__ import annotations
 
 from itertools import chain
 
-CORE_CANDIDATE_MODULES = (
-    "scenariocraft.schemas",
-    "scenariocraft.templates",
-    "scenariocraft.probes",
-    "scenariocraft.repair.patcher",
-    "scenariocraft.repair.providers.base",
-    "scenariocraft.repair.providers.fake",
-    "scenariocraft.repair.providers.types",
-    "scenariocraft.generators.base",
-    "scenariocraft.generators.mock_generator",
-    "scenariocraft.roads",
+CORE_PACKAGE_MODULES = (
+    "scenariocraft_core.build",
+    "scenariocraft_core.generators",
+    "scenariocraft_core.loop",
+    "scenariocraft_core.metrics",
+    "scenariocraft_core.probes",
+    "scenariocraft_core.repair",
+    "scenariocraft_core.roads",
+    "scenariocraft_core.schemas",
+    "scenariocraft_core.templates",
+    "scenariocraft_core.validation",
 )
 
 DELIVERY_ADAPTER_MODULES = (
@@ -29,25 +29,26 @@ DELIVERY_ADAPTER_MODULES = (
 
 RUNTIME_ADAPTER_MODULES = (
     "scenariocraft.references",
+    "scenariocraft.presentation",
+    "scenariocraft.references",
     "scenariocraft.repair.providers.openai",
-    "scenariocraft.runtime.asam_qc",
-    "scenariocraft.runtime.esmini",
+    "scenariocraft.runtime",
 )
 
 TOOL_SEMANTIC_GROUPS = {
     "build": (
-        "scenariocraft.build.layout_adapter",
-        "scenariocraft.build.scenario_builder",
+        "scenariocraft_core.build.layout_adapter",
+        "scenariocraft_core.build.scenario_builder",
     ),
     "metrics": (
-        "scenariocraft.metrics.timing",
+        "scenariocraft_core.metrics.timing",
     ),
     "presentation": (
         "scenariocraft.presentation.preview_2d",
         "scenariocraft.presentation.report",
     ),
     "validation": (
-        "scenariocraft.validation.semantic",
+        "scenariocraft_core.validation.semantic",
     ),
     "runtime": (
         "scenariocraft.runtime.asam_qc",
@@ -74,7 +75,7 @@ def current_boundary_modules() -> tuple[str, ...]:
     return tuple(
         dict.fromkeys(
             chain(
-                CORE_CANDIDATE_MODULES,
+                CORE_PACKAGE_MODULES,
                 DELIVERY_ADAPTER_MODULES,
                 RUNTIME_ADAPTER_MODULES,
                 *TOOL_SEMANTIC_GROUPS.values(),
@@ -84,7 +85,7 @@ def current_boundary_modules() -> tuple[str, ...]:
 
 
 __all__ = [
-    "CORE_CANDIDATE_MODULES",
+    "CORE_PACKAGE_MODULES",
     "DELIVERY_ADAPTER_MODULES",
     "FORBIDDEN_CORE_IMPORT_PATTERNS",
     "RUNTIME_ADAPTER_MODULES",

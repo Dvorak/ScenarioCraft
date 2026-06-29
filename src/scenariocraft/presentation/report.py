@@ -4,12 +4,12 @@ from pathlib import Path
 import json
 from collections.abc import Sequence
 
-from scenariocraft.schemas import ProbeResult, ScenarioSpec
-from scenariocraft.templates.pedestrian_occlusion import assess_pedestrian_occlusion_timing
+from scenariocraft_core.schemas import ProbeResult, ScenarioSpec
+from scenariocraft_core.templates.pedestrian_occlusion import assess_pedestrian_occlusion_timing
 from scenariocraft.runtime import AsamQcResult, EsminiPlaybackResult, EsminiResult
-from scenariocraft.build import BuildResult
-from scenariocraft.validation import SemanticValidationResult
-from scenariocraft.metrics import compute_timing_metrics
+from scenariocraft_core.build import BuildResult
+from scenariocraft_core.validation import SemanticValidationResult
+from scenariocraft_core.metrics import compute_timing_metrics
 
 
 def generate_validation_report(

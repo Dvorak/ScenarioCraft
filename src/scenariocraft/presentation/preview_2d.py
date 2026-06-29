@@ -15,7 +15,7 @@ from matplotlib import pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrow, FancyArrowPatch, Rectangle
 
-from scenariocraft.schemas import FootprintSpec, LayoutSpec, PathSpec, Point2D, Pose2D, RoadBandSpec, ScenarioSpec
+from scenariocraft_core.schemas import FootprintSpec, LayoutSpec, PathSpec, Point2D, Pose2D, RoadBandSpec, ScenarioSpec
 
 PREVIEW_DISPLAY_ORIENTATIONS = {"semantic_canonical", "esmini_top_camera_raw"}
 PREVIEW_PRESENTATION_STYLES = {"annotated", "clean_split"}
