@@ -43,6 +43,16 @@ def test_cli_happy_path_with_mock_provider(monkeypatch, tmp_path: Path) -> None:
     assert "`xosc_actor_poses_match_layout`" in report
 
 
+def test_cli_generated_scenario_path_delegates_to_application_workflow() -> None:
+    source = Path("src/scenariocraft/main.py").read_text(encoding="utf-8")
+    generated_path = source[source.index("def main") : source.index("def _parse_args")]
+
+    assert "run_generated_scenario_workflow" in generated_path
+    assert "ScenarioWorkflowRequest" in generated_path
+    assert "ScenarioWorkflowOptions" in generated_path
+    assert "import streamlit" not in source
+
+
 def test_cli_layout_free_spec_succeeds_without_template_aware_probes(monkeypatch, tmp_path: Path) -> None:
     input_path = tmp_path / "input.txt"
     output_dir = tmp_path / "out"
@@ -55,7 +65,7 @@ def test_cli_layout_free_spec_succeeds_without_template_aware_probes(monkeypatch
             spec = MockScenarioGenerator().generate_spec(scenario_text)
             return replace(spec, layout=None, spatial_relations=())
 
-    monkeypatch.setattr("scenariocraft.main.MockScenarioGenerator", LayoutFreeGenerator)
+    monkeypatch.setattr("scenariocraft.application.generated_scenario.MockScenarioGenerator", LayoutFreeGenerator)
 
     exit_code = main(["--input", str(input_path), "--out", str(output_dir), "--provider", "mock"])
 

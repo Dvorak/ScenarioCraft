@@ -3,25 +3,20 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from scenariocraft.application import (
+    ScenarioWorkflowOptions,
+    ScenarioWorkflowRequest,
+    run_generated_scenario_workflow,
+)
 from scenariocraft.generators import MockScenarioGenerator, ScenarioGenerator
 from scenariocraft.loop import run_bounded_orchestrator
-from scenariocraft.probes import (
-    run_and_write_runtime_consistency_probes,
-    run_artifact_consistency_probes,
-    run_pedestrian_occlusion_probes,
-)
 from scenariocraft.references import XoscMetadata, extract_xosc_metadata
 from scenariocraft.repair.providers import FakeRepairProvider
-from scenariocraft.schemas import ProbeResult, ScenarioSpec
+from scenariocraft.schemas import ScenarioSpec
 from scenariocraft.schemas.scenario_spec import ScenarioSpecError
 from scenariocraft.tools import (
     EsminiResult,
-    build_openscenario,
-    generate_2d_preview,
-    generate_validation_report,
-    run_asam_qc,
     run_esmini,
-    validate_semantics,
 )
 
 
@@ -33,19 +28,17 @@ def main(argv: list[str] | None = None) -> int:
 
     input_path = Path(args.input)
     scenario_text = input_path.read_text(encoding="utf-8")
-    output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "input.txt").write_text(scenario_text, encoding="utf-8")
-
-    generator = _get_generator(args.provider)
-    try:
-        spec = _generate_spec(generator, scenario_text, args)
-    except (ScenarioSpecError, TypeError, ValueError) as exc:
-        (output_dir / "generation_error.txt").write_text(f"{exc}\n", encoding="utf-8")
-        print(f"Scenario generation failed: {exc}")
-        return 2
-    (output_dir / "scenario_spec.json").write_text(spec.to_json() + "\n", encoding="utf-8")
-
     if args.use_orchestrator:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "input.txt").write_text(scenario_text, encoding="utf-8")
+        generator = _get_generator(args.provider)
+        try:
+            spec = _generate_spec(generator, scenario_text, args)
+        except (ScenarioSpecError, TypeError, ValueError) as exc:
+            (output_dir / "generation_error.txt").write_text(f"{exc}\n", encoding="utf-8")
+            print(f"Scenario generation failed: {exc}")
+            return 2
+        (output_dir / "scenario_spec.json").write_text(spec.to_json() + "\n", encoding="utf-8")
         result = run_bounded_orchestrator(
             spec,
             output_dir=output_dir,
@@ -65,49 +58,58 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         return 0 if result.terminal_status == "passed" else 2
 
-    preview_path = generate_2d_preview(spec, output_dir / "preview_2d.png")
-    build_result = build_openscenario(spec, output_dir)
-    artifact_probe_results = run_artifact_consistency_probes(
-        spec,
-        xosc_path=build_result.xosc_path,
-        xodr_path=build_result.xodr_path,
-    )
-    qc_result = run_asam_qc(build_result.xosc_path, output_dir)
-    esmini_result = run_esmini(
-        build_result.xosc_path,
-        output_dir,
-        required=args.require_esmini,
-        binary=args.esmini_bin,
-        timeout_s=args.esmini_timeout,
-    )
-    runtime_probe_results = run_and_write_runtime_consistency_probes(
-        spec,
-        output_dir=output_dir,
-        xosc_path=build_result.xosc_path,
-        xodr_path=build_result.xodr_path,
-    )
-    semantic_result = validate_semantics(spec)
-    probe_results = _run_template_probes(spec)
-    report_path = generate_validation_report(
-        scenario_text,
-        spec,
-        build_result,
-        qc_result,
-        esmini_result,
-        semantic_result,
-        output_dir,
-        probe_results=probe_results,
-        artifact_probe_results=artifact_probe_results,
-        runtime_probe_results=runtime_probe_results,
-    )
-    print(f"Wrote ScenarioSpec: {output_dir / 'scenario_spec.json'}")
-    print(f"Wrote 2D preview: {preview_path}")
-    print(f"Wrote OpenSCENARIO: {build_result.xosc_path}")
-    print(f"Wrote validation report: {report_path}")
-    if args.require_esmini and not esmini_result.esmini_available:
+    try:
+        result = run_generated_scenario_workflow(
+            ScenarioWorkflowRequest(
+                scenario_text=scenario_text,
+                output_dir=output_dir,
+                provider_name=args.provider,
+                template_parameters=_template_parameters(args),
+                options=ScenarioWorkflowOptions(
+                    run_preview=True,
+                    run_semantics=True,
+                    run_geometry_probes=True,
+                    run_artifact_probes=True,
+                    run_runtime_probes=True,
+                    run_report=True,
+                    run_asam_qc=True,
+                    run_esmini=True,
+                    run_playback=False,
+                    require_esmini=args.require_esmini,
+                    esmini_bin=args.esmini_bin,
+                    esmini_timeout_s=args.esmini_timeout,
+                    preview_display_orientation="semantic_canonical",
+                    preview_presentation_style="annotated",
+                    stop_optional_integrations_when_demo_repair_required=False,
+                ),
+            )
+        )
+    except (ScenarioSpecError, TypeError, ValueError) as exc:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "generation_error.txt").write_text(f"{exc}\n", encoding="utf-8")
+        print(f"Scenario generation failed: {exc}")
+        return 2
+
+    print(f"Wrote ScenarioSpec: {result.artifacts.scenario_spec_path}")
+    print(f"Wrote 2D preview: {result.artifacts.preview_path}")
+    print(f"Wrote OpenSCENARIO: {result.artifacts.xosc_path}")
+    print(f"Wrote validation report: {result.artifacts.report_path}")
+    esmini_result = result.esmini_result
+    if args.require_esmini and esmini_result is not None and not esmini_result.esmini_available:
         print("Required esmini binary was not found. Set ESMINI_BIN or add esmini to PATH.")
         return 2
     return 0
+
+
+def _template_parameters(args: argparse.Namespace) -> dict[str, object]:
+    parameters: dict[str, object] = {}
+    if args.duration_s is not None:
+        parameters["total_duration_s"] = args.duration_s
+    if args.trigger_window_earliest_s is not None:
+        parameters["preferred_trigger_earliest_s"] = args.trigger_window_earliest_s
+    if args.trigger_window_latest_s is not None:
+        parameters["preferred_trigger_latest_s"] = args.trigger_window_latest_s
+    return parameters
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -331,12 +333,6 @@ def _generate_spec(generator: ScenarioGenerator, scenario_text: str, args: argpa
     if template_parameters and isinstance(generator, MockScenarioGenerator):
         return generator.generate_spec(scenario_text, **template_parameters)
     return generator.generate_spec(scenario_text)
-
-
-def _run_template_probes(spec: ScenarioSpec) -> tuple[ProbeResult, ...]:
-    if spec.scenario_type == "pedestrian_occlusion" and spec.layout is not None:
-        return run_pedestrian_occlusion_probes(spec)
-    return ()
 
 
 if __name__ == "__main__":
