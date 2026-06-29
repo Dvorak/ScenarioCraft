@@ -8,28 +8,33 @@ from scenariocraft.schemas.patch_spec import (
     SetPathPointsOperation,
     SetTriggerPointByLeadTimeOperation,
 )
-from scenariocraft.schemas.scenario_spec import (
-    ActorSpec,
-    CriticalitySpec,
+from scenariocraft.schemas.layout_spec import (
     FootprintSpec,
     LayoutSpec,
     PathSpec,
     Point2D,
     Pose2D,
     RoadBandSpec,
-    RoadSpec,
-    ScenarioSpec,
-    ScenarioTimingSpec,
     SpatialRelationSpec,
+)
+from scenariocraft.schemas.road_spec import RoadSpec, WeatherSpec
+from scenariocraft.schemas.scenario_core import (
+    ActorSpec,
+    ScenarioSpec,
+)
+from scenariocraft.schemas.storyboard_spec import (
     StoryboardActionSpec,
     StoryboardActSpec,
     StoryboardEventSpec,
     StoryboardManeuverGroupSpec,
     StoryboardSpec,
     StoryboardStorySpec,
+)
+from scenariocraft.schemas.timing_spec import ScenarioTimingSpec
+from scenariocraft.schemas.trigger_spec import (
+    CriticalitySpec,
     TriggerConditionSpec,
     TriggerSpec,
-    WeatherSpec,
 )
 from scenariocraft.schemas.probe_result import ProbeResult
 
