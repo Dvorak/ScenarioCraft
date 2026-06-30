@@ -24,12 +24,15 @@ def main(argv: list[str] | None = None) -> int:
         return _run_loaded_xosc(args, output_dir)
 
     input_path = Path(args.input)
+    _progress(f"Reading request: {input_path}")
     scenario_text = input_path.read_text(encoding="utf-8")
     if args.use_orchestrator:
+        _progress(f"Running bounded orchestrator: output={output_dir}")
         output_dir.mkdir(parents=True, exist_ok=True)
         (output_dir / "input.txt").write_text(scenario_text, encoding="utf-8")
         generator = _get_generator(args.provider)
         try:
+            _progress(f"Generating ScenarioSpec with provider={args.provider}")
             spec = _generate_spec(generator, scenario_text, args)
         except (ScenarioSpecError, TypeError, ValueError) as exc:
             (output_dir / "generation_error.txt").write_text(f"{exc}\n", encoding="utf-8")
@@ -51,11 +54,15 @@ def main(argv: list[str] | None = None) -> int:
         if result.report_path is not None:
             print(f"Wrote validation report: {result.report_path}")
         if args.require_esmini and result.esmini_result is not None and not result.esmini_result.esmini_available:
-            print("Required esmini binary was not found. Set ESMINI_BIN or add esmini to PATH.")
+            _print_esmini_missing_guidance(result.esmini_result.install_hint)
             return 2
         return 0 if result.terminal_status == "passed" else 2
 
     try:
+        _progress(f"Generating ScenarioSpec with provider={args.provider}")
+        _progress(f"Building XOSC/XODR, preview, probes, ASAM QC, esmini check: output={output_dir}")
+        if args.require_esmini:
+            _progress("esmini is required for this run; missing esmini will return exit code 2.")
         result = run_generated_scenario_workflow(
             ScenarioWorkflowRequest(
                 scenario_text=scenario_text,
@@ -92,8 +99,14 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Wrote OpenSCENARIO: {result.artifacts.xosc_path}")
     print(f"Wrote validation report: {result.artifacts.report_path}")
     esmini_result = result.esmini_result
+    if esmini_result is not None:
+        if esmini_result.esmini_available:
+            status = "passed" if esmini_result.executed else "failed"
+            print(f"esmini check: {status} (return_code={esmini_result.return_code})")
+        else:
+            print("esmini check: unavailable")
     if args.require_esmini and esmini_result is not None and not esmini_result.esmini_available:
-        print("Required esmini binary was not found. Set ESMINI_BIN or add esmini to PATH.")
+        _print_esmini_missing_guidance(esmini_result.install_hint)
         return 2
     return 0
 
@@ -185,6 +198,7 @@ def _run_loaded_xosc(args: argparse.Namespace, output_dir: Path) -> int:
         return 2
     working_dir = Path(args.xosc_working_dir).expanduser() if args.xosc_working_dir else None
     if args.run_esmini:
+        _progress(f"Running esmini check for loaded XOSC: {xosc_path}")
         esmini_result = run_esmini(
             xosc_path,
             output_dir,
@@ -218,9 +232,24 @@ def _run_loaded_xosc(args: argparse.Namespace, output_dir: Path) -> int:
     print(f"Wrote esmini log: {output_dir / 'esmini_log.txt'}")
     print(f"Wrote validation report: {report_path}")
     if args.require_esmini and not esmini_result.esmini_available:
-        print("Required esmini binary was not found. Set ESMINI_BIN or add esmini to PATH.")
+        _print_esmini_missing_guidance(esmini_result.install_hint)
         return 2
     return 0
+
+
+def _progress(message: str) -> None:
+    print(f"[ScenarioCraft] {message}", flush=True)
+
+
+def _print_esmini_missing_guidance(install_hint: str | None) -> None:
+    print("Required esmini binary was not found.")
+    print("This CLI path runs an esmini load/execution check; it does not open the visual playback window.")
+    print("Install and export esmini, then rerun:")
+    print("  .venv/bin/python scripts/install_esmini.py --package bin")
+    print('  export ESMINI_BIN="$(cat third_party/esmini/ESMINI_BIN)"')
+    print("  \"$ESMINI_BIN\" --version")
+    if install_hint:
+        print(f"Hint: {install_hint}")
 
 
 def _write_loaded_xosc_report(

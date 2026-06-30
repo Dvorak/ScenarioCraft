@@ -147,7 +147,7 @@ def test_cli_rejects_invalid_trigger_window(monkeypatch, tmp_path: Path) -> None
     assert not (output_dir / "scenario_spec.json").exists()
 
 
-def test_cli_require_esmini_returns_nonzero_when_missing(monkeypatch, tmp_path: Path) -> None:
+def test_cli_require_esmini_returns_nonzero_when_missing(monkeypatch, tmp_path: Path, capsys) -> None:
     input_path = tmp_path / "input.txt"
     output_dir = tmp_path / "out"
     input_path.write_text("rainy pedestrian occlusion", encoding="utf-8")
@@ -166,6 +166,15 @@ def test_cli_require_esmini_returns_nonzero_when_missing(monkeypatch, tmp_path: 
 
     assert exit_code == 2
     assert (output_dir / "validation_report.md").exists()
+    stdout = capsys.readouterr().out
+    assert "[ScenarioCraft] Reading request:" in stdout
+    assert "[ScenarioCraft] Generating ScenarioSpec with provider=mock" in stdout
+    assert "[ScenarioCraft] Building XOSC/XODR, preview, probes, ASAM QC, esmini check:" in stdout
+    assert "[ScenarioCraft] esmini is required for this run" in stdout
+    assert "esmini check: unavailable" in stdout
+    assert "Required esmini binary was not found." in stdout
+    assert "This CLI path runs an esmini load/execution check; it does not open the visual playback window." in stdout
+    assert ".venv/bin/python scripts/install_esmini.py --package bin" in stdout
 
 
 def test_cli_uses_explicit_esmini_binary(monkeypatch, tmp_path: Path) -> None:

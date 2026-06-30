@@ -203,11 +203,24 @@ On macOS, visual capture uses windowed esmini capture. Headless capture is inten
 
 ### ASAM QC
 
+Install and locate the ASAM OpenSCENARIO XML checker:
+
 ```bash
-.venv/bin/uv sync --extra qc
+.venv/bin/python scripts/install_asamqc.py
+export ASAM_QC_OPENSCENARIOXML_BIN="$(cat third_party/asam_qc/ASAM_QC_OPENSCENARIOXML_BIN)"
+"$ASAM_QC_OPENSCENARIOXML_BIN" --help
 ```
 
-If the checker is available, ScenarioCraft records QC output in the artifact directory. If it is missing, runs still complete and the report records that QC was unavailable.
+The script installs the `qc` extra, resolves `qc_openscenario`, and writes the resolved binary path to `third_party/asam_qc/ASAM_QC_OPENSCENARIOXML_BIN`.
+
+If you prefer to install manually:
+
+```bash
+.venv/bin/uv sync --extra qc
+export ASAM_QC_OPENSCENARIOXML_BIN="$(command -v qc_openscenario)"
+```
+
+When the checker is available, ScenarioCraft records `qc_config.xml`, `qc_report.json`, and checker output in the artifact directory. If it is missing, runs still complete and the report records that QC was unavailable.
 
 ### OpenAI Repair Provider
 
@@ -233,3 +246,8 @@ The default demo and tests use deterministic mock/fake providers and do not requ
 - `scenariocraft.presentation`: preview and report rendering.
 
 Generated artifacts go under `outputs/`, which is gitignored.
+
+## References
+
+- [esmini/esmini](https://github.com/esmini/esmini)
+- [asam-ev/qc-framework](https://github.com/asam-ev/qc-framework)
