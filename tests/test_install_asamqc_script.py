@@ -1,18 +1,13 @@
 from __future__ import annotations
 
-import importlib.util
 import subprocess
 from pathlib import Path
 
+from scenariocraft.tooling import install_asamqc
+
 
 def _load_installer():
-    script_path = Path("scripts/install_asamqc.py")
-    spec = importlib.util.spec_from_file_location("install_asamqc", script_path)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return install_asamqc
 
 
 def test_install_asamqc_records_explicit_binary_without_install(tmp_path: Path, capsys) -> None:
@@ -45,9 +40,10 @@ def test_install_asamqc_runs_install_from_project_root(monkeypatch, tmp_path: Pa
     binary.write_text("#!/bin/sh\n", encoding="utf-8")
     captured: dict[str, object] = {}
 
-    def fake_run(command, cwd, check):
+    def fake_run(command, cwd, env, check):
         captured["command"] = command
         captured["cwd"] = cwd
+        captured["env"] = env
         captured["check"] = check
         return subprocess.CompletedProcess(command, 0, "", "")
 
@@ -59,18 +55,28 @@ def test_install_asamqc_runs_install_from_project_root(monkeypatch, tmp_path: Pa
         str(project_root),
         "--marker",
         "third_party/asam_qc/ASAM_QC_OPENSCENARIOXML_BIN",
-        "--installer",
-        "pip",
     ])
 
     marker = project_root / "third_party/asam_qc/ASAM_QC_OPENSCENARIOXML_BIN"
     assert exit_code == 0
     assert captured["cwd"] == project_root
+    assert captured["env"]["UV_CACHE_DIR"] == str(project_root / ".uv-cache")
     assert captured["check"] is False
-    assert captured["command"][:4] == [
-        installer.sys.executable,
-        "-m",
+    assert captured["command"][:3] == [
+        str(Path(installer.sys.executable).with_name("uv")),
         "pip",
         "install",
     ]
+    assert "sync" not in captured["command"]
     assert marker.read_text(encoding="utf-8").strip() == str(binary)
+
+
+def test_install_asamqc_pip_installer_is_additive(tmp_path: Path) -> None:
+    installer = _load_installer()
+
+    command = installer._install_command(tmp_path, installer._parse_args(["--installer", "pip"]))
+
+    assert command[:4] == [installer.sys.executable, "-m", "pip", "install"]
+    assert "-e" in command
+    assert f"{tmp_path}[qc]" in command
+    assert "sync" not in command

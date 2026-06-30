@@ -2358,6 +2358,30 @@ wheels = [
 ]
 
 [[package]]
+name = "rust-just"
+version = "1.55.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/6d/c5/d66507a858442695a80f8399e16db21b080d11972aba37308a8bbae4b0b0/rust_just-1.55.0.tar.gz", hash = "sha256:a3871f85bdff2aefe42b906446566e981c8c683859d9dde8617b8c7727d07c66", size = 1978827, upload-time = "2026-06-30T04:07:38.955Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b1/f4/f7592d80601d2043a21bfc46fffdd7684be1b71302d507f1e9a209ea4a49/rust_just-1.55.0-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:f6ed01d352bebeb125f5566da3eca918644853bc68745583c316b1f9ecb67060", size = 2244111, upload-time = "2026-06-30T04:07:15.457Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/13/f1cc50e281b0e788bc67116d637cd50a381170d584c0f87a04b36b33ca7b/rust_just-1.55.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:65a4c06cd0ae89ac7a9e06045f3a73099cc16b18508e8b06498b1d9bf557c042", size = 2087287, upload-time = "2026-06-30T04:07:17.307Z" },
+    { url = "https://files.pythonhosted.org/packages/39/4e/30095cc3503976b0838e760079ff17ed602fd7821dc1ace1a5171a2bca3e/rust_just-1.55.0-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:4f5648f214b715de7235793b5820eb47d6c0a8602e745a5c1dd21f352f525e5b", size = 2190748, upload-time = "2026-06-30T04:07:18.774Z" },
+    { url = "https://files.pythonhosted.org/packages/f3/20/d8cd91e877795ef73bcabc0c5ad5067fa04f3812e90300542b05a1e47a93/rust_just-1.55.0-py3-none-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:04a24453153c8ff19e53201600ad6b49ff61e7c89ac6e7a22e202ed5ec3db9eb", size = 2156942, upload-time = "2026-06-30T04:07:20.465Z" },
+    { url = "https://files.pythonhosted.org/packages/60/82/8fde7b19051a11a44d6e44a44e5a52b619bade82207dae48bdfd3e7898b9/rust_just-1.55.0-py3-none-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:6d2d38bd684754d5fca9b3a2e73254976d4de9e2f092b67d2fa313d36f0100f5", size = 2360916, upload-time = "2026-06-30T04:07:22.378Z" },
+    { url = "https://files.pythonhosted.org/packages/78/73/cb1dae8fb26e5c7099dd75f4484220d3230b82d141500ff258c21cf33cae/rust_just-1.55.0-py3-none-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:38de13a0303a0235d52e3388bb2135c0281e614e431a5514ea8074525f46b438", size = 2462484, upload-time = "2026-06-30T04:07:23.781Z" },
+    { url = "https://files.pythonhosted.org/packages/aa/47/d55d1482f65f42ed46dc10e01325b6a9e4cb09e36bee0835d469636fcc0a/rust_just-1.55.0-py3-none-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:20d8ef83200cf45673ab1bb9434f1a305e8e9141aa855e3bc195c5739029e9c2", size = 2438446, upload-time = "2026-06-30T04:07:25.285Z" },
+    { url = "https://files.pythonhosted.org/packages/be/e4/4592c9ee594b5a798a8b0aec7a3d1443a2707ac9d42e91a4e61db640e1a6/rust_just-1.55.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:62ba35929122177de6cb0ffca959a9ced1fab779cc8824e5f690861b14b9d27e", size = 2358772, upload-time = "2026-06-30T04:07:26.543Z" },
+    { url = "https://files.pythonhosted.org/packages/ba/ca/6f5adc614120d4cd1b619a2e2101d0a7404352d97b569272eb06aaf141fd/rust_just-1.55.0-py3-none-manylinux_2_31_riscv64.whl", hash = "sha256:f87eae628c24413ae3838c18a84752c4e1e8af6bbb4f5c57cf4f3f32660c626b", size = 2203234, upload-time = "2026-06-30T04:07:27.957Z" },
+    { url = "https://files.pythonhosted.org/packages/ea/a8/86ff63a6e9062a5b793852020131d0b8ab1db4bb33ff17d111886b5c42ce/rust_just-1.55.0-py3-none-musllinux_1_2_aarch64.whl", hash = "sha256:46d52f7bdff169e8ba51eba580a9d46b9b8ae9b469913cd0991bb9646b509474", size = 2194297, upload-time = "2026-06-30T04:07:29.233Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/4b/954d1f4b195fb32fcab1cfab80093da5bd8f87fafbf8f1a4c868df1afdd0/rust_just-1.55.0-py3-none-musllinux_1_2_armv7l.whl", hash = "sha256:df1bd22c19b324fab8c672ace596eb6c22d4af5ef83b929a8cb1f84422f31a4c", size = 2173742, upload-time = "2026-06-30T04:07:30.442Z" },
+    { url = "https://files.pythonhosted.org/packages/dd/3e/d824b61b2f1cdec6fcf4e16f9aa46037377134591acbb9d208fa2a07e3ed/rust_just-1.55.0-py3-none-musllinux_1_2_i686.whl", hash = "sha256:be2d536203e221bf386f5e2eacee5964d5ac1dc29f489f92fc53e10f5bd8e81c", size = 2327296, upload-time = "2026-06-30T04:07:31.691Z" },
+    { url = "https://files.pythonhosted.org/packages/d4/d4/eadc39cb0054e2c8a26c4aaaa9ca2215684503430c5e964baa764228b7d0/rust_just-1.55.0-py3-none-musllinux_1_2_riscv64.whl", hash = "sha256:7202923800751fc3a6dcbc88ce06694f7cfe2a9010facc59a7823f472700a533", size = 2377221, upload-time = "2026-06-30T04:07:33.466Z" },
+    { url = "https://files.pythonhosted.org/packages/18/d5/99848f646f32cff08077600006e6703d8a1906fe45c6ff03fad2218bf1f3/rust_just-1.55.0-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:c8eb83c2533553687e0fc62ad6bc9190e9f84eb639099ea130e4609c621daef9", size = 2429885, upload-time = "2026-06-30T04:07:34.855Z" },
+    { url = "https://files.pythonhosted.org/packages/b4/d7/93418e15887686954712d64aeb33e9d97150e9b332c34c92f72239e1e6e0/rust_just-1.55.0-py3-none-win32.whl", hash = "sha256:e591f0ae235fd1329689b804ebbfe90f65595bb27ad492481685e9c3296e7832", size = 2098969, upload-time = "2026-06-30T04:07:36.362Z" },
+    { url = "https://files.pythonhosted.org/packages/13/d3/e9da539202474a39e247ed522a952cd19b5189024313a0c1aa1a7473c37a/rust_just-1.55.0-py3-none-win_amd64.whl", hash = "sha256:fda19039a10ec6b646141dfab76b430c2a95a0fb5d86305423c9153504990320", size = 2322739, upload-time = "2026-06-30T04:07:37.636Z" },
+]
+
+[[package]]
 name = "scenariocraft-agent"
 version = "0.1.0"
 source = { editable = "." }
@@ -2370,6 +2394,7 @@ dependencies = [
 [package.optional-dependencies]
 dev = [
     { name = "pytest" },
+    { name = "rust-just" },
 ]
 openai = [
     { name = "openai" },
@@ -2389,6 +2414,7 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.8,<4" },
     { name = "openai", marker = "extra == 'openai'", specifier = ">=1.66,<3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4,<9" },
+    { name = "rust-just", marker = "extra == 'dev'", specifier = ">=1.55,<2" },
     { name = "scenariogeneration", specifier = ">=0.16,<0.17" },
     { name = "streamlit", marker = "extra == 'web'", specifier = ">=1.37,<2" },
 ]
