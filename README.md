@@ -6,77 +6,54 @@ ScenarioCraft turns a natural-language scenario request into a typed `ScenarioSp
 
 The current demo centers on a rainy pedestrian-occlusion scenario where an ego vehicle approaches a parked van and a pedestrian crosses from behind it.
 
-```text
-request
--> ScenarioSpec
--> XOSC/XODR
--> preview / probes / report
--> optional ASAM QC / esmini
--> PatchSpec repair when needed
-```
-
 ScenarioCraft is a research prototype, not a production validation suite.
+
+---
+
+## How It Works
+
+![ScenarioCraft architecture](assets/readme/scenariocraft-architecture.png)
+
+ScenarioCraft treats LLMs, RAG, quality checkers, simulators, and builder backends as replaceable adapters around a typed scenario contract. The stable path is: produce structured scenario data, build deterministic OpenSCENARIO/OpenDRIVE artifacts, collect validation evidence, and apply constrained `PatchSpec` repairs only when checks justify them.
 
 ---
 
 ## Quickstart
 
-### 1. Prerequisites
+### 1. Clone
+
+```bash
+git clone https://github.com/Dvorak/ScenarioCraft-Agent.git
+cd ScenarioCraft-Agent
+```
+
+### 2. Prerequisites
 
 - Python 3.11 or 3.12.
 - [`uv`](https://docs.astral.sh/uv/) for package management.
-- [`just`](https://github.com/casey/just) as the command runner.
-- Optional: esmini for runtime checks and visual playback.
-- Optional: ASAM OpenSCENARIO XML checker.
+- [`just`](https://github.com/casey/just) is installed into `.venv` during setup and used as the command runner after that.
 
-### 2. Setup
+### 3. Recommended Setup
 
 From the repo root:
 
 ```bash
 python3.11 -m venv .venv
-.venv/bin/python -m pip install -U pip uv rust-just
-.venv/bin/just setup
-```
-
-`just setup` uses the project-local uv binary and cache:
-
-```bash
+.venv/bin/python -m pip install -U pip uv
 UV_CACHE_DIR=.uv-cache .venv/bin/uv sync --extra dev --extra web --extra openai --extra qc
+.venv/bin/python -m scenariocraft.setup
 ```
 
-If dependency resolution cannot reach PyPI but the environment already has the needed packages:
+This installs the base package, Web UI dependencies, the OpenAI adapter dependency, `just`, esmini, and the ASAM OpenSCENARIO XML checker.
+
+After setup, export the tool paths for the current shell:
 
 ```bash
-.venv/bin/python -m pip install -e . --no-build-isolation
+export ESMINI_BIN="$(cat third_party/esmini/ESMINI_BIN)"
+export ASAM_QC_OPENSCENARIOXML_BIN="$(cat third_party/asam_qc/ASAM_QC_OPENSCENARIOXML_BIN)"
 ```
 
-### 3. Generate a Scenario
-
-```bash
-.venv/bin/just smoke
-```
-
-Equivalent direct command:
-
-```bash
-.venv/bin/python -m scenariocraft.main \
-  --input examples/pedestrian_occlusion.txt \
-  --out outputs/demo \
-  --provider mock
-```
-
-Expected artifacts:
-
-```text
-outputs/demo/
-  input.txt
-  scenario_spec.json
-  preview_2d.png
-  scenario.xosc
-  urban_two_way_parking.xodr
-  validation_report.md
-```
+Set `OPENAI_API_KEY` only when you want to try the OpenAI repair provider. The default demo works without an API key.
 
 ### 4. Open the Web UI
 
@@ -84,67 +61,15 @@ outputs/demo/
 .venv/bin/just web
 ```
 
-Equivalent direct command:
-
-```bash
-.venv/bin/python -m streamlit run scenariocraft/web/app.py
-```
-
-The Workspace page provides:
-
-- scenario request input;
-- controlled demo cases;
-- generate and repair actions;
-- Scenario / Probes / OSC Quality / Simulation status;
-- Scenario Brief timing metrics;
-- `Preview 2D Semantic`;
-- `Playback Esmini`.
-
-If real esmini visual media is unavailable, the playback panel says so and labels preview-derived media as `2D Preview Fallback`.
-
-### 5. Run Tests
-
-```bash
-.venv/bin/just test
-```
-
-Useful focused checks:
-
-```bash
-.venv/bin/python -m pytest tests/test_core_boundary.py -q
-.venv/bin/python -m pytest tests/test_web_workspace_layout.py -q
-.venv/bin/python -m pytest tests/test_esmini_tool.py -q
-```
-
-The default tests do not require real esmini, ASAM QC, OpenAI, CARLA, Docker, or internet access.
-
----
-
-## Project Layout
-
-ScenarioCraft uses a no-`src` Python package layout:
+Then open:
 
 ```text
-scenariocraft/
-  core/             deterministic contracts, templates, probes, repair, build, metrics
-  application/      CLI/Web shared workflows
-  orchestration/    bounded workflow and repair coordination
-  runtime/          esmini and ASAM QC adapters
-  presentation/     preview and report rendering
-  integrations/     optional provider adapters
-  web/              Streamlit UI
-  references/       external OpenSCENARIO reference helpers
-
-examples/           input prompts
-tests/              unit and workflow tests
-outputs/            generated artifacts, gitignored
+http://localhost:8501
 ```
 
-`scenariocraft/core` is deterministic and independent of Streamlit, provider APIs, and local simulator executables.
+The Workspace page is the fastest way to generate the demo scenario, inspect the semantic preview, run repair cases, and view verified runtime media when esmini is configured.
 
----
-
-## CLI
+### 5. Run from the CLI
 
 Generate the default scenario:
 
@@ -178,14 +103,22 @@ When loading an existing `.xosc`, ScenarioCraft runs from the scenario file's pa
 
 ---
 
-## Optional Tools
+## Tool Setup Details
+
+The recommended setup command runs the optional tool installers for you:
+
+```bash
+.venv/bin/python -m scenariocraft.setup
+```
+
+Use the individual commands below only when you want to refresh or troubleshoot one tool.
 
 ### esmini
 
-Install the bundled esmini binary:
+Install or refresh the bundled esmini binary:
 
 ```bash
-.venv/bin/python scripts/install_esmini.py --package bin
+.venv/bin/python -m scenariocraft.tooling.install_esmini --package bin
 export ESMINI_BIN="$(cat third_party/esmini/ESMINI_BIN)"
 ```
 
@@ -206,7 +139,7 @@ On macOS, visual capture uses windowed esmini capture. Headless capture is inten
 Install and locate the ASAM OpenSCENARIO XML checker:
 
 ```bash
-.venv/bin/python scripts/install_asamqc.py
+.venv/bin/python -m scenariocraft.tooling.install_asamqc
 export ASAM_QC_OPENSCENARIOXML_BIN="$(cat third_party/asam_qc/ASAM_QC_OPENSCENARIOXML_BIN)"
 "$ASAM_QC_OPENSCENARIOXML_BIN" --help
 ```
@@ -216,7 +149,7 @@ The script installs the `qc` extra, resolves `qc_openscenario`, and writes the r
 If you prefer to install manually:
 
 ```bash
-.venv/bin/uv sync --extra qc
+.venv/bin/just setup-qc
 export ASAM_QC_OPENSCENARIOXML_BIN="$(command -v qc_openscenario)"
 ```
 
@@ -225,7 +158,7 @@ When the checker is available, ScenarioCraft records `qc_config.xml`, `qc_report
 ### OpenAI Repair Provider
 
 ```bash
-.venv/bin/uv sync --extra openai
+.venv/bin/just setup-openai
 export OPENAI_API_KEY=...
 ```
 
@@ -233,21 +166,55 @@ The OpenAI repair provider is an integration adapter. It proposes structured `Pa
 
 The default demo and tests use deterministic mock/fake providers and do not require an API key.
 
----
+Generated artifacts go under `outputs/`, which is gitignored.
 
-## Core Concepts
+## Platform Notes
+
+ScenarioCraft is currently exercised primarily on macOS. The setup helper selects the esmini release asset for the current operating system when a matching release package exists. CLI generation and Python-based checks are intended to work on macOS, Linux, and Windows, but visual runtime capture is platform-sensitive.
+
+On macOS, esmini visual capture uses a visible renderer window. Headless capture is intentionally avoided for visual media because it produced invalid capture artifacts during local diagnosis.
+
+## Architecture Snapshot
+
+Core objects:
 
 - `ScenarioSpec`: typed scenario contract.
 - `ScenarioTemplate`: deterministic scenario family generator.
 - `ProbeResult`: structured validation evidence.
-- `PatchSpec`: structured scenario repair operation list.
-- `scenariocraft.core.build`: ScenarioSpec to OpenSCENARIO/OpenDRIVE.
-- `scenariocraft.runtime`: optional runtime adapters.
-- `scenariocraft.presentation`: preview and report rendering.
+- `PatchSpec`: structured scenario repair operations.
 
-Generated artifacts go under `outputs/`, which is gitignored.
+Repository shape:
+
+```text
+scenariocraft/
+  core/             deterministic contracts, templates, probes, repair, build, metrics
+  application/      CLI/Web shared workflows
+  orchestration/    bounded workflow and repair coordination
+  runtime/          esmini and ASAM QC adapters
+  presentation/     preview and report rendering
+  integrations/     optional provider adapters
+  web/              Streamlit UI
+  references/       external OpenSCENARIO reference helpers
+
+examples/           input prompts
+tests/              unit and workflow tests
+outputs/            generated artifacts, gitignored
+```
+
+`scenariocraft/core` is deterministic and independent of Streamlit, provider APIs, and local simulator executables.
+
+## Development Checks
+
+For local development:
+
+```bash
+.venv/bin/just test
+```
+
+The test suite uses deterministic fakes by default and does not require real esmini, ASAM QC, OpenAI, CARLA, Docker, or internet access.
 
 ## References
 
 - [esmini/esmini](https://github.com/esmini/esmini)
 - [asam-ev/qc-framework](https://github.com/asam-ev/qc-framework)
+- [pyoscx/scenariogeneration](https://github.com/pyoscx/scenariogeneration)
