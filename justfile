@@ -1,9 +1,10 @@
 set shell := ["bash", "-cu"]
 
 python := ".venv/bin/python"
+uv := ".venv/bin/uv"
 
 setup:
-    uv sync --extra dev --extra web --extra openai --extra qc
+    UV_CACHE_DIR=.uv-cache {{uv}} sync --extra dev --extra web --extra openai --extra qc
 
 test:
     {{python}} -m pytest

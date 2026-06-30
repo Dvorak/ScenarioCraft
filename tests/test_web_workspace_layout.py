@@ -56,6 +56,18 @@ def test_workspace_is_default_and_has_one_demo_case_selector() -> None:
     assert "### Playback Esmini" in markdown
     assert "### 2D Semantic Preview" not in markdown
     assert "### esmini Runtime Playback" not in markdown
+    assert "Playback Esmini has not been generated." in [item.value for item in app.info]
+
+
+def test_workspace_playback_panel_explains_preview_fallback_after_generation(tmp_path: Path) -> None:
+    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app.session_state["output_root"] = str(tmp_path)
+    next(button for button in app.button if button.label == "Generate").click().run()
+
+    markdown = [item.value for item in app.markdown]
+    assert "### Playback Esmini" in markdown
+    assert "Playback Esmini unavailable." in [item.value for item in app.warning]
+    assert "2D Preview Fallback" in [item.value for item in app.info]
 
 
 def test_web_app_removes_legacy_generated_pipeline_helpers() -> None:
