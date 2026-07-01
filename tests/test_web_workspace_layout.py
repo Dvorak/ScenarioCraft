@@ -92,6 +92,23 @@ def test_web_app_removes_legacy_generated_pipeline_helpers() -> None:
         assert legacy_call not in callback
 
 
+def test_workspace_visual_components_are_extracted_from_page_composition() -> None:
+    workspace_source = Path("scenariocraft/web/workspace_view.py").read_text(encoding="utf-8")
+    component_source = Path("scenariocraft/web/workspace_components.py").read_text(encoding="utf-8")
+
+    assert "render_workspace_status_panel" in workspace_source
+    assert "render_workspace_repair_panel" in workspace_source
+    assert "render_workspace_brief_panel" in workspace_source
+    assert "render_workspace_visuals_panel" in workspace_source
+    assert "workspace-status-grid" not in workspace_source
+    assert "repair-failure-list" not in workspace_source
+    assert "render_workspace_runtime_media" not in workspace_source
+
+    assert "workspace-status-grid" in component_source
+    assert "repair-failure-list" in component_source
+    assert "render_workspace_runtime_media" in component_source
+
+
 def test_advanced_page_retains_diagnostic_artifact_sections() -> None:
     app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=10).run()
     app.session_state["active_page"] = "Advanced"
