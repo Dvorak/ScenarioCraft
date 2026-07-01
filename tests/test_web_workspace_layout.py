@@ -160,6 +160,13 @@ def test_workspace_css_hides_streamlit_chrome_and_scopes_icon_controls() -> None
     app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=10).run()
     css = "\n".join(item.value for item in app.markdown if "<style>" in item.value)
 
+    assert "--sc-bg: #ffffff" in css
+    assert "--sc-text: #171717" in css
+    assert "--sc-blue: #006bff" in css
+    assert "--sc-radius-sm: 6px" in css
+    assert "--sc-focus-ring:" in css
+    assert "--sc-font-sans:" in css
+    assert "--sc-purple: #a000f8" in css
     assert 'header[data-testid="stHeader"] { display: none; }' in css
     assert '[data-testid="stDeployButton"] { display: none; }' in css
     assert ".st-key-workspace_toolbar" in css
@@ -174,6 +181,16 @@ def test_workspace_css_hides_streamlit_chrome_and_scopes_icon_controls() -> None
     assert ".st-key-workspace_playback_stage" in css
     assert f"--workspace-media-aspect-ratio: {WORKSPACE_MEDIA_ASPECT_RATIO}" in css
     assert "object-fit: contain" in css
+    assert "max-height: 390px" not in css
+    assert "max-height: 100% !important" in css
+    assert "box-shadow: var(--sc-shadow-raised)" in css
+    assert "background: var(--sc-bg-subtle)" in css
+    assert '[data-testid="stAlert"]' in css
+    assert '[data-testid="stMetricValue"]' in css
+    assert "font-family: var(--sc-font-sans)" in css
+    assert ".advanced-page" in css
+    assert '[data-testid="stExpander"]' in css
+    assert "font-family: var(--sc-font-mono)" in css
     assert "@media (max-width: 900px)" in css
     assert '[data-testid="stHorizontalBlock"]:has(.st-key-workspace_left_normal, .st-key-workspace_left_repair)' in css
     assert '> [data-testid="stColumn"]' in css

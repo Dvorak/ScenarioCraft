@@ -25,6 +25,7 @@ def render_advanced_page(
     render_demo_trace: Callable[[DemoExperimentTraceViewModel], None],
     demo_trace: object,
 ) -> str:
+    st.markdown('<div class="advanced-page">', unsafe_allow_html=True)
     st.markdown("### Advanced")
     updated_spec_json = spec_json
     columns = st.columns(2, gap="large", vertical_alignment="top")
@@ -64,4 +65,5 @@ def render_advanced_page(
         with st.expander("Artifacts / Report", expanded=False):
             st.caption(f"Output · `{output_dir}`")
             st.text_area("validation_report.md", report_text, height=220, label_visibility="collapsed")
+    st.markdown("</div>", unsafe_allow_html=True)
     return updated_spec_json
