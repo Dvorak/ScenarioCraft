@@ -353,21 +353,21 @@ def inject_css() -> None:
         .vehicle-label { fill: var(--sc-white); font-size: 13px; font-weight: 700; }
         .label { fill: var(--sc-text); font-size: 12px; font-weight: 650; }
         .lane-label { fill: var(--sc-bg-subtle); font-size: 13px; font-weight: 650; opacity: 0.92; }
-        .advanced-page {
-            color: var(--sc-text);
+        .advanced-page-marker {
+            display: none;
         }
-        .advanced-page [data-testid="stExpander"] {
+        .stApp:has(.advanced-page-marker) [data-testid="stExpander"] {
             border-color: var(--sc-border);
             border-radius: var(--sc-radius-sm);
             box-shadow: var(--sc-shadow-raised);
         }
-        .advanced-page [data-testid="stExpander"] summary {
+        .stApp:has(.advanced-page-marker) [data-testid="stExpander"] summary {
             font-family: var(--sc-font-sans);
             font-size: 0.875rem;
             font-weight: 500;
             color: var(--sc-text);
         }
-        .advanced-page [data-testid="stTextArea"] textarea {
+        .stApp:has(.advanced-page-marker) [data-testid="stTextArea"] textarea {
             font-family: var(--sc-font-mono);
             font-size: 0.8125rem;
             line-height: 1.35;

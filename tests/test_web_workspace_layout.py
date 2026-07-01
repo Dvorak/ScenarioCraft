@@ -114,6 +114,9 @@ def test_advanced_page_retains_diagnostic_artifact_sections() -> None:
     app.session_state["active_page"] = "Advanced"
     app.run()
 
+    markdown = [item.value for item in app.markdown]
+    assert '<span class="advanced-page-marker" aria-hidden="true"></span>' in markdown
+    assert "</div>" not in markdown
     labels = {item.label for item in app.expander}
     assert {
         "ScenarioSpec JSON",
@@ -205,7 +208,8 @@ def test_workspace_css_hides_streamlit_chrome_and_scopes_icon_controls() -> None
     assert '[data-testid="stAlert"]' in css
     assert '[data-testid="stMetricValue"]' in css
     assert "font-family: var(--sc-font-sans)" in css
-    assert ".advanced-page" in css
+    assert ".advanced-page-marker" in css
+    assert ".stApp:has(.advanced-page-marker)" in css
     assert '[data-testid="stExpander"]' in css
     assert "font-family: var(--sc-font-mono)" in css
     assert "@media (max-width: 900px)" in css
