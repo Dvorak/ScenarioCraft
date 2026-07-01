@@ -208,6 +208,11 @@ def test_workspace_css_hides_streamlit_chrome_and_scopes_icon_controls() -> None
     assert "grid-template-rows: repeat(2, minmax(0, 1fr))" in css
     assert ".st-key-workspace_preview_stage" in css
     assert ".st-key-workspace_playback_stage" in css
+    assert ".st-key-workspace_preview_stage [data-testid=\"stImageContainer\"]" in css
+    assert ".st-key-workspace_playback_stage [data-testid=\"stImageContainer\"]" in css
+    assert ".st-key-workspace_preview_stage [data-testid=\"stFullScreenFrame\"] > div" in css
+    assert "width: 100%" in css
+    assert "justify-content: center" in css
     assert f"--workspace-media-aspect-ratio: {WORKSPACE_MEDIA_ASPECT_RATIO}" in css
     assert "object-fit: contain" in css
     assert "max-height: 390px" not in css

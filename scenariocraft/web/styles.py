@@ -141,6 +141,11 @@ def inject_css() -> None:
             align-items: center;
             justify-content: center;
         }
+        .st-key-workspace_preview_stage [data-testid="stImageContainer"],
+        .st-key-workspace_playback_stage [data-testid="stImageContainer"] {
+            display: flex;
+            justify-content: center;
+        }
         .st-key-workspace_preview_stage [data-testid="stFullScreenFrame"] > div,
         .st-key-workspace_playback_stage [data-testid="stFullScreenFrame"] > div,
         .st-key-workspace_preview_stage [data-testid="stElementContainer"]:has([data-testid="stImage"]),
@@ -152,6 +157,12 @@ def inject_css() -> None:
             height: 100% !important;
             max-height: 100% !important;
             min-height: 0;
+        }
+        .st-key-workspace_preview_stage [data-testid="stFullScreenFrame"] > div,
+        .st-key-workspace_playback_stage [data-testid="stFullScreenFrame"] > div {
+            width: 100%;
+            display: flex;
+            justify-content: center;
         }
         .st-key-workspace_preview_stage [data-testid="stImage"] img,
         .st-key-workspace_playback_stage [data-testid="stImage"] img {
