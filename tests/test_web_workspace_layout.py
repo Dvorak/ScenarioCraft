@@ -42,6 +42,15 @@ def test_workspace_navigation_and_media_contract() -> None:
     assert WEB_PREVIEW_PRESENTATION_STYLE == "clean_split"
 
 
+def test_workspace_media_copy_uses_playback_esmini_naming() -> None:
+    source = Path("scenariocraft/web/media_view.py").read_text(encoding="utf-8")
+
+    assert "Playback Esmini" in source
+    assert "esmini Runtime Playback" not in source
+    assert "esmini Runtime Frame Sequence" not in source
+    assert "esmini Runtime Screenshot" not in source
+
+
 def test_workspace_is_default_and_has_one_demo_case_selector() -> None:
     app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=10).run()
 

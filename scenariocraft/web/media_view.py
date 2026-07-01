@@ -60,9 +60,9 @@ def render_playback_panel(
         elif playback_result.playback_kind == "esmini_single_frame":
             _render_esmini_single_frame(output_dir, playback_result)
         elif playback_result.playback_kind == "esmini_gif" and _playback_generated_media_exists(playback_result, playback_path):
-            st.success("esmini Runtime Playback")
+            st.success("Playback Esmini")
             if playback_path.suffix.lower() in {".gif", ".png", ".jpg", ".jpeg"}:
-                st.image(str(playback_path), width="stretch", caption="esmini Runtime Playback")
+                st.image(str(playback_path), width="stretch", caption="Playback Esmini · esmini Rendered GIF")
             else:
                 st.video(str(playback_path))
         elif playback_result.playback_kind in {"preview_fallback_gif", "preview_static_image"}:
@@ -106,7 +106,7 @@ def _render_esmini_frame_sequence(output_dir: Path, playback_result: EsminiPlayb
         return
     state = _frame_sequence_state(playback_result, output_dir, selected_index=0)
     frame_count = int(state["frame_count"])
-    st.success("esmini Runtime Frame Sequence")
+    st.success("Playback Esmini")
     metrics = st.columns(4)
     metrics[0].metric("Frames", str(frame_count))
     metrics[1].metric("Frame duration", _format_optional_seconds(state["frame_duration_s"]))
@@ -122,7 +122,7 @@ def _render_esmini_frame_sequence(output_dir: Path, playback_result: EsminiPlayb
     )
     state = _frame_sequence_state(playback_result, output_dir, selected_index=selected_index - 1)
     selected_frame = Path(str(state["selected_frame_path"]))
-    st.image(str(selected_frame), width="stretch", caption="esmini Runtime Frame Sequence")
+    st.image(str(selected_frame), width="stretch", caption="Playback Esmini · esmini Frame Sequence")
     st.caption(f"Source provenance: `{state['source_provenance']}`")
     st.caption(f"Selected frame path: `{state['selected_frame_path']}`")
     st.caption(f"First frame path: `{state['first_frame_path']}`")
@@ -134,8 +134,8 @@ def _render_esmini_single_frame(output_dir: Path, playback_result: EsminiPlaybac
     frames = _verified_esmini_frame_paths(playback_result, output_dir)
     frame_path = frames[0] if frames else _resolve_media_path(playback_result.playback_path, output_dir)
     if frame_path is not None and frame_path.exists():
-        st.success("esmini Runtime Screenshot")
-        st.image(str(frame_path), width="stretch", caption="esmini Runtime Screenshot")
+        st.success("Playback Esmini")
+        st.image(str(frame_path), width="stretch", caption="Playback Esmini · esmini Screenshot")
         st.caption(f"Source: `{playback_result.playback_source_path}`")
         st.caption("Single esmini screenshot; not animation.")
         _render_preview_vs_esmini_comparison(output_dir, frame_path)
