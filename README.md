@@ -41,7 +41,7 @@ From the repo root:
 python3.11 -m venv .venv
 .venv/bin/python -m pip install -U pip uv
 UV_CACHE_DIR=.uv-cache .venv/bin/uv sync --extra dev --extra web --extra openai --extra qc
-.venv/bin/python -m scenariocraft.setup
+.venv/bin/python -m scenariocraft.tooling.setup_tools
 ```
 
 This installs the base package, Web UI dependencies, the OpenAI adapter dependency, `just`, esmini, and the ASAM OpenSCENARIO XML checker.
@@ -108,7 +108,7 @@ When loading an existing `.xosc`, ScenarioCraft runs from the scenario file's pa
 The recommended setup command runs the optional tool installers for you:
 
 ```bash
-.venv/bin/python -m scenariocraft.setup
+.venv/bin/python -m scenariocraft.tooling.setup_tools
 ```
 
 Use the individual commands below only when you want to refresh or troubleshoot one tool.
@@ -189,10 +189,10 @@ Repository shape:
 scenariocraft/
   core/             deterministic contracts, templates, probes, repair, build, metrics
   application/      CLI/Web shared workflows
-  orchestration/    bounded workflow and repair coordination
-  runtime/          esmini and ASAM QC adapters
-  presentation/     preview and report rendering
-  integrations/     optional provider adapters
+  external_tools/   esmini and ASAM QC local executable adapters
+  providers/        optional model/provider adapters
+  rendering/        preview and report rendering
+  tooling/          setup and project-maintenance helpers
   web/              Streamlit UI
   references/       external OpenSCENARIO reference helpers
 
