@@ -22,8 +22,8 @@ from scenariocraft.application.demo_cases import (
     run_demo_case,
 )
 from scenariocraft.core.build import BuildResult, build_openscenario
-from scenariocraft.presentation import generate_2d_preview
-from scenariocraft.runtime import (
+from scenariocraft.rendering import generate_2d_preview
+from scenariocraft.external_tools import (
     AsamQcResult,
     EsminiPlaybackResult,
     EsminiResult,

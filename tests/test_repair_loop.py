@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 import scenariocraft.core.loop.repair_loop as repair_loop_module
-from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 from scenariocraft.core.loop import ALLOWED_OPERATION_TYPES, run_bounded_repair_loop
 from scenariocraft.core.probes import run_pedestrian_occlusion_timing_probes
 from scenariocraft.core.repair.providers import FakeRepairProvider
@@ -282,7 +282,7 @@ def test_invalid_max_rounds_is_rejected(max_rounds, tmp_path: Path) -> None:
 
 
 def _canonical_spec():
-    return MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    return generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
 
 
 def _van_outside_parking_strip():

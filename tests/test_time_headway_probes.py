@@ -1,6 +1,6 @@
 from dataclasses import replace
 
-from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 from scenariocraft.core.probes import run_time_headway_probes
 from scenariocraft.core.schemas import ActorSpec, Pose2D, TriggerConditionSpec, TriggerSpec
 from scenariocraft.core.metrics import compute_timing_metrics, time_headway_s
@@ -49,7 +49,7 @@ def test_time_headway_requires_same_lane_positive_lead_gap() -> None:
 
 
 def test_time_headway_probes_are_absent_for_non_thw_trigger_conditions() -> None:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
 
     assert run_time_headway_probes(spec) == ()
 
@@ -70,7 +70,7 @@ def _time_headway_spec(
     rule: str = "greaterThan",
     threshold_s: float = 2.0,
 ):
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     assert spec.layout is not None
     lead_actor = ActorSpec("lead_vehicle", "car", "lead_vehicle", initial_speed_kph=25.0)
     actors = tuple(spec.actors) + (lead_actor,)

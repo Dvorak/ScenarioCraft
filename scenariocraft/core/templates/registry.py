@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from scenariocraft.core.templates.base import ScenarioTemplate
+from scenariocraft.core.templates.lead_vehicle_braking import LeadVehicleBrakingTemplate
 from scenariocraft.core.templates.pedestrian_occlusion import PedestrianOcclusionTemplate
 
 
 _TEMPLATES: dict[str, ScenarioTemplate] = {
     PedestrianOcclusionTemplate.template_id: PedestrianOcclusionTemplate(),
+    LeadVehicleBrakingTemplate.template_id: LeadVehicleBrakingTemplate(),
 }
 
 

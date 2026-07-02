@@ -14,8 +14,8 @@ from scenariocraft.core.probes import (
 )
 from scenariocraft.core.repair.providers import RepairProvider
 from scenariocraft.core.build import BuildResult, build_openscenario
-from scenariocraft.presentation import generate_2d_preview, generate_validation_report
-from scenariocraft.runtime import (
+from scenariocraft.rendering import generate_2d_preview, generate_validation_report
+from scenariocraft.external_tools import (
     AsamQcResult,
     EsminiPlaybackResult,
     EsminiResult,

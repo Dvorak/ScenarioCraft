@@ -1,6 +1,6 @@
 from dataclasses import replace
 
-from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 from scenariocraft.core.probes import run_pedestrian_occlusion_probes
 from scenariocraft.core.repair import apply_patch
 from scenariocraft.core.schemas import (
@@ -13,7 +13,7 @@ from scenariocraft.core.schemas import (
 
 
 def test_reposition_actor_patch_repairs_parking_strip_probe_failure() -> None:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     assert spec.layout is not None
     actor_poses = {
         **spec.layout.actor_poses,
@@ -34,7 +34,7 @@ def test_reposition_actor_patch_repairs_parking_strip_probe_failure() -> None:
 
 
 def test_set_named_point_patch_repairs_trigger_point_probe_failure() -> None:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     assert spec.layout is not None
     conflict = spec.layout.points["conflict_point"]
     invalid_points = {

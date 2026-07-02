@@ -4,9 +4,9 @@ from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
 
-from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 from scenariocraft.core.repair.providers import FakeRepairProvider
-from scenariocraft.runtime import AsamQcResult, EsminiResult
+from scenariocraft.external_tools import AsamQcResult, EsminiResult
 from scenariocraft.application.demo_cases import (
     DEMO_CASES,
     execute_prepared_demo_case,
@@ -267,7 +267,7 @@ def test_case_selection_and_preparation_do_not_execute_provider(
         raise AssertionError("Case preparation executed the repair provider.")
 
     monkeypatch.setattr(FakeRepairProvider, "propose_patch", forbidden_provider)
-    spec = MockScenarioGenerator().generate_spec("pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("pedestrian occlusion")
 
     prepared = prepare_demo_case("geometry_van_in_ego_lane", spec, tmp_path)
 
@@ -276,7 +276,7 @@ def test_case_selection_and_preparation_do_not_execute_provider(
 
 
 def test_normal_workspace_has_no_repair_section(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("pedestrian occlusion")
     prepared = prepare_demo_case("normal_good_scenario", spec, tmp_path)
     repair = build_workspace_repair_view_model(prepared)
 
@@ -285,7 +285,7 @@ def test_normal_workspace_has_no_repair_section(tmp_path: Path) -> None:
 
 
 def test_geometry_failure_exposes_explicit_fake_repair(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("pedestrian occlusion")
     prepared = prepare_demo_case("geometry_trigger_after_conflict", spec, tmp_path)
     repair = build_workspace_repair_view_model(prepared)
 
@@ -302,7 +302,7 @@ def test_geometry_failure_exposes_explicit_fake_repair(tmp_path: Path) -> None:
 
 
 def test_trigger_after_conflict_view_model_shows_negative_lead_time_before_repair(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("pedestrian occlusion")
     prepared = prepare_demo_case("geometry_trigger_after_conflict", spec, tmp_path)
 
     vm = build_generated_scenario_view_model(prepared.experiment_spec)
@@ -313,7 +313,7 @@ def test_trigger_after_conflict_view_model_shows_negative_lead_time_before_repai
 
 
 def test_repaired_trigger_changes_lead_time_not_trigger_threshold_time(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("pedestrian occlusion")
     prepared = prepare_demo_case("geometry_trigger_after_conflict", spec, tmp_path)
     before = build_generated_scenario_view_model(prepared.experiment_spec)
 
@@ -327,7 +327,7 @@ def test_repaired_trigger_changes_lead_time_not_trigger_threshold_time(tmp_path:
 
 
 def test_artifact_failure_is_detection_only_without_patch_provider(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("pedestrian occlusion")
     prepared = prepare_demo_case("artifact_xosc_actor_pose_drift", spec, tmp_path)
     repair = build_workspace_repair_view_model(prepared)
 
@@ -339,7 +339,7 @@ def test_artifact_failure_is_detection_only_without_patch_provider(tmp_path: Pat
 
 
 def test_workspace_status_reports_prepared_probe_failure(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("pedestrian occlusion")
     prepared = prepare_demo_case("geometry_van_in_ego_lane", spec, tmp_path)
 
     status = build_workspace_status_view_model(spec, prepared_case=prepared)
@@ -359,7 +359,7 @@ def test_workspace_status_reports_prepared_probe_failure(tmp_path: Path) -> None
 
 
 def test_workspace_status_keeps_optional_tool_unavailability_explicit() -> None:
-    spec = MockScenarioGenerator().generate_spec("pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("pedestrian occlusion")
     qc_result = AsamQcResult(False, ["qc_openscenario"], None, "", "missing", None)
     esmini_result = EsminiResult(
         False,

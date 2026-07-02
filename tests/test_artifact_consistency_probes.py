@@ -7,7 +7,7 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
-from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 from scenariocraft.core.probes import run_artifact_consistency_probes
 from scenariocraft.core.build import BuildResult, build_openscenario
 
@@ -22,7 +22,7 @@ EXPECTED_PROBE_NAMES = [
 
 @pytest.fixture
 def canonical_artifacts(tmp_path: Path):
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     build_result = build_openscenario(spec, tmp_path / "canonical")
     return spec, build_result
 
@@ -135,7 +135,7 @@ def test_other_logic_file_basename_fails_canonical_road_probe(canonical_artifact
 
 
 def test_layout_free_spec_returns_no_artifact_consistency_probes(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     layout_free_spec = replace(spec, layout=None, spatial_relations=(), timing=None)
 
     results = run_artifact_consistency_probes(

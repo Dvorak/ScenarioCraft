@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""ProbeResult validation-evidence contract.
+
+Probes return measured evidence and optional PatchSpec-compatible suggestions;
+they do not apply repair or call providers.
+"""
+
 import json
 from dataclasses import dataclass, field
 from typing import Any

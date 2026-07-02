@@ -6,7 +6,7 @@ from pathlib import Path
 from scenariocraft.core.loop.types import RepairRunResult
 from scenariocraft.references import XoscMetadata
 from scenariocraft.core.metrics import compute_timing_metrics
-from scenariocraft.runtime import AsamQcResult, EsminiResult
+from scenariocraft.external_tools import AsamQcResult, EsminiResult
 from scenariocraft.core.schemas import PatchSpec, ProbeResult, ScenarioSpec
 from scenariocraft.core.validation import SemanticValidationResult
 from scenariocraft.application.demo_cases import DemoCaseExecution, PreparedDemoCase
@@ -651,7 +651,7 @@ def recommendation_for_external_category(category: str) -> str:
     recommendations = {
         "full_pass": "Use as a stable demo example.",
         "qc_fail": "Use to demonstrate ASAM QC diagnostics.",
-        "esmini_fail": "Use to demonstrate runtime/dependency diagnosis.",
+        "esmini_fail": "Use to demonstrate simulation/dependency diagnosis.",
         "smoke_pass_long_running": "Use as a long-running playback example; avoid full mode for demos.",
         "metadata_fail": "Inspect XML formatting before further checks.",
         "tool_skipped": "Install/configure optional tools or treat this as metadata-only.",

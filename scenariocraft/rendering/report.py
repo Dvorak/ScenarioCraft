@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 from scenariocraft.core.schemas import ProbeResult, ScenarioSpec
 from scenariocraft.core.templates.pedestrian_occlusion import assess_pedestrian_occlusion_timing
-from scenariocraft.runtime import AsamQcResult, EsminiPlaybackResult, EsminiResult
+from scenariocraft.external_tools import AsamQcResult, EsminiPlaybackResult, EsminiResult
 from scenariocraft.core.build import BuildResult
 from scenariocraft.core.validation import SemanticValidationResult
 from scenariocraft.core.metrics import compute_timing_metrics

@@ -1,6 +1,6 @@
 import pytest
 
-from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 from scenariocraft.core.repair.providers import (
     FakeRepairProvider,
     RepairProposal,
@@ -16,7 +16,7 @@ from scenariocraft.core.schemas import (
 
 
 def test_repair_request_stores_structured_spec_and_failed_probe_results() -> None:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     failed = ProbeResult(
         name="parked_van_footprint_in_parking_strip",
         passed=False,
@@ -64,7 +64,7 @@ def test_fake_provider_satisfies_runtime_protocol() -> None:
 
 
 def test_repair_request_rejects_passed_results_and_duplicate_allowed_operations() -> None:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     passed = ProbeResult(name="already_valid", passed=True, severity="note", message="Already valid.")
 
     with pytest.raises(RepairProviderContractError, match="must be a failed result"):

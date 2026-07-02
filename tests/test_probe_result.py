@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 from scenariocraft.core.probes import run_probes
 from scenariocraft.core.schemas import ProbeResult, ScenarioSpec
 from scenariocraft.core.schemas.probe_result import ProbeResultError
@@ -65,7 +65,7 @@ def test_probe_result_rejects_non_json_compatible_values() -> None:
 
 
 def test_run_probes_preserves_order() -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
     probes = [_FakeProbe("first", True), _FakeProbe("second", False)]
 
     results = run_probes(spec, probes)
@@ -75,7 +75,7 @@ def test_run_probes_preserves_order() -> None:
 
 
 def test_run_probes_does_not_swallow_exceptions() -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
 
     with pytest.raises(RuntimeError, match="boom"):
         run_probes(spec, [_ExplodingProbe()])

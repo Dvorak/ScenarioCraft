@@ -2,7 +2,7 @@ from dataclasses import replace
 
 import pytest
 
-from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 from scenariocraft.core.repair import PatchApplicationError, apply_patch
 from scenariocraft.core.schemas import (
     FootprintSpec,
@@ -192,4 +192,4 @@ def test_layout_free_spec_rejects_patch_application() -> None:
 
 
 def _canonical_spec():
-    return MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    return generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")

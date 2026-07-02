@@ -1,6 +1,6 @@
 from dataclasses import replace
 
-from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 from scenariocraft.core.probes import run_pedestrian_occlusion_probes, run_pedestrian_occlusion_timing_probes
 from scenariocraft.core.schemas import PathSpec, Point2D, Pose2D
 
@@ -26,7 +26,7 @@ EXPECTED_TIMING_PROBE_NAMES = [
 
 
 def test_canonical_pedestrian_occlusion_probes_all_pass() -> None:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
 
     results = run_pedestrian_occlusion_probes(spec)
 
@@ -223,7 +223,7 @@ def test_path_start_mismatch_fails_start_probe() -> None:
 
 
 def _canonical_spec():
-    return MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    return generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
 
 
 def _probe_result(spec, name: str):

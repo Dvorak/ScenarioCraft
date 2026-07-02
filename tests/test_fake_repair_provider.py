@@ -1,6 +1,6 @@
 from dataclasses import replace
 
-from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 from scenariocraft.core.probes import run_pedestrian_occlusion_probes, run_pedestrian_occlusion_timing_probes
 from scenariocraft.core.repair import apply_patch
 from scenariocraft.core.repair.providers import FakeRepairProvider, RepairRequest
@@ -151,7 +151,7 @@ def test_fake_provider_does_not_call_patch_build_runtime_or_artifact_tools(monke
 
     monkeypatch.setattr("scenariocraft.core.repair.apply_patch", forbidden)
     monkeypatch.setattr("scenariocraft.core.build.build_openscenario", forbidden)
-    monkeypatch.setattr("scenariocraft.runtime.run_esmini", forbidden)
+    monkeypatch.setattr("scenariocraft.external_tools.run_esmini", forbidden)
     monkeypatch.setattr("scenariocraft.core.probes.run_artifact_consistency_probes", forbidden)
     invalid = _van_outside_parking_strip()
     request = RepairRequest(
@@ -167,7 +167,7 @@ def test_fake_provider_does_not_call_patch_build_runtime_or_artifact_tools(monke
 
 
 def _canonical_spec():
-    return MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    return generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
 
 
 def _van_outside_parking_strip():

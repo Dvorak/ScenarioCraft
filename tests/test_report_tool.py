@@ -1,7 +1,7 @@
 from pathlib import Path
 from dataclasses import replace
 
-from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 from scenariocraft.core.probes import (
     run_artifact_consistency_probes,
     run_pedestrian_occlusion_probes,
@@ -9,14 +9,14 @@ from scenariocraft.core.probes import (
 )
 from scenariocraft.core.schemas import ProbeResult
 from scenariocraft.core.build import build_openscenario
-from scenariocraft.presentation import generate_validation_report
+from scenariocraft.rendering import generate_validation_report
 from scenariocraft.core.validation import validate_semantics
-from scenariocraft.runtime import AsamQcResult
-from scenariocraft.runtime import EsminiPlaybackResult, EsminiResult
+from scenariocraft.external_tools import AsamQcResult
+from scenariocraft.external_tools import EsminiPlaybackResult, EsminiResult
 
 
 def test_report_includes_missing_tool_warnings(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario text")
+    spec = generate_default_pedestrian_occlusion_spec("scenario text")
     build_result = build_openscenario(spec, tmp_path)
     qc_result = AsamQcResult(False, ["asam-qc-openscenarioxml", "scenario.xosc"], None, "", "", None)
     esmini_result = EsminiResult(False, ["esmini", "--osc", "scenario.xosc"], None, None, "", "", None, None, None)
@@ -50,7 +50,7 @@ def test_report_includes_missing_tool_warnings(tmp_path: Path) -> None:
 
 
 def test_report_handles_legacy_layout_free_timing_metrics_gracefully(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario text")
+    spec = generate_default_pedestrian_occlusion_spec("scenario text")
     legacy_spec = replace(spec, layout=None, spatial_relations=(), timing=None)
     build_result = build_openscenario(legacy_spec, tmp_path)
     qc_result = AsamQcResult(False, ["asam-qc-openscenarioxml", "scenario.xosc"], None, "", "", None)
@@ -76,7 +76,7 @@ def test_report_handles_legacy_layout_free_timing_metrics_gracefully(tmp_path: P
 
 
 def test_report_includes_optional_probe_results(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario text")
+    spec = generate_default_pedestrian_occlusion_spec("scenario text")
     build_result = build_openscenario(spec, tmp_path)
     qc_result = AsamQcResult(False, ["asam-qc-openscenarioxml", "scenario.xosc"], None, "", "", None)
     esmini_result = EsminiResult(False, ["esmini", "--osc", "scenario.xosc"], None, None, "", "", None, None, None)
@@ -113,7 +113,7 @@ def test_report_includes_optional_probe_results(tmp_path: Path) -> None:
 
 
 def test_report_includes_canonical_pedestrian_occlusion_probe_results(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario text")
+    spec = generate_default_pedestrian_occlusion_spec("scenario text")
     build_result = build_openscenario(spec, tmp_path)
     qc_result = AsamQcResult(False, ["asam-qc-openscenarioxml", "scenario.xosc"], None, "", "", None)
     esmini_result = EsminiResult(False, ["esmini", "--osc", "scenario.xosc"], None, None, "", "", None, None, None)
@@ -137,7 +137,7 @@ def test_report_includes_canonical_pedestrian_occlusion_probe_results(tmp_path: 
 
 
 def test_report_includes_artifact_consistency_probe_results(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario text")
+    spec = generate_default_pedestrian_occlusion_spec("scenario text")
     build_result = build_openscenario(spec, tmp_path)
     qc_result = AsamQcResult(False, ["asam-qc-openscenarioxml", "scenario.xosc"], None, "", "", None)
     esmini_result = EsminiResult(False, ["esmini", "--osc", "scenario.xosc"], None, None, "", "", None, None, None)
@@ -168,7 +168,7 @@ def test_report_includes_artifact_consistency_probe_results(tmp_path: Path) -> N
 
 
 def test_report_includes_runtime_consistency_probe_results(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario text")
+    spec = generate_default_pedestrian_occlusion_spec("scenario text")
     build_result = build_openscenario(spec, tmp_path)
     qc_result = AsamQcResult(False, ["asam-qc-openscenarioxml", "scenario.xosc"], None, "", "", None)
     esmini_result = EsminiResult(False, ["esmini", "--osc", "scenario.xosc"], None, None, "", "", None, None, None)
@@ -218,7 +218,7 @@ def test_report_includes_runtime_consistency_probe_results(tmp_path: Path) -> No
 
 
 def test_report_includes_playback_provenance_labels(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario text")
+    spec = generate_default_pedestrian_occlusion_spec("scenario text")
     build_result = build_openscenario(spec, tmp_path)
     qc_result = AsamQcResult(False, ["asam-qc-openscenarioxml", "scenario.xosc"], None, "", "", None)
     esmini_result = EsminiResult(

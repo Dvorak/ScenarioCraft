@@ -10,12 +10,12 @@ from scenariocraft.application.contracts import (
     ScenarioWorkflowStatus,
 )
 from scenariocraft.application.demo_cases import PreparedDemoCase, prepare_demo_case
-from scenariocraft.core.generators import MockScenarioGenerator, ScenarioGenerator
 from scenariocraft.core.probes import run_artifact_consistency_probes, run_pedestrian_occlusion_probes
 from scenariocraft.core.probes.runtime_pipeline import run_and_write_runtime_consistency_probes
 from scenariocraft.core.build import BuildResult, build_openscenario
-from scenariocraft.presentation import generate_2d_preview, generate_validation_report
-from scenariocraft.runtime import (
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
+from scenariocraft.rendering import generate_2d_preview, generate_validation_report
+from scenariocraft.external_tools import (
     AsamQcResult,
     EsminiPlaybackResult,
     EsminiResult,
@@ -145,17 +145,13 @@ def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> Scenari
     )
 
 
-def _generator(provider_name: str) -> ScenarioGenerator:
-    if provider_name == "mock":
-        return MockScenarioGenerator()
-    raise ValueError(f"Unsupported provider: {provider_name}")
-
-
 def _generate_spec(request: ScenarioWorkflowRequest) -> ScenarioSpec:
-    generator = _generator(request.provider_name)
-    if request.template_parameters and isinstance(generator, MockScenarioGenerator):
-        return generator.generate_spec(request.scenario_text, **request.template_parameters)
-    return generator.generate_spec(request.scenario_text)
+    if request.provider_name != "mock":
+        raise ValueError(f"Unsupported provider: {request.provider_name}")
+    return generate_default_pedestrian_occlusion_spec(
+        request.scenario_text,
+        **request.template_parameters,
+    )
 
 
 def _prepare_case(

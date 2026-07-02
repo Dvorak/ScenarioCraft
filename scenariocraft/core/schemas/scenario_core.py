@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""Core ScenarioSpec contract after template expansion.
+
+ScenarioSpec is the semantic source of truth consumed by builders, previews,
+probes, reports, and repair loops.
+"""
+
 import json
 from dataclasses import dataclass, field
 from typing import Any

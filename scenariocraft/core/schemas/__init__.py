@@ -22,6 +22,7 @@ from scenariocraft.core.schemas.scenario_core import (
     ActorSpec,
     ScenarioSpec,
 )
+from scenariocraft.core.schemas.scenario_intent import ScenarioIntent, ScenarioIntentError
 from scenariocraft.core.schemas.storyboard_spec import (
     StoryboardActionSpec,
     StoryboardActSpec,
@@ -54,6 +55,8 @@ __all__ = [
     "RoadSpec",
     "RepositionActorToBandOperation",
     "ScenarioSpec",
+    "ScenarioIntent",
+    "ScenarioIntentError",
     "ScenarioTimingSpec",
     "SetActorPoseOperation",
     "SetNamedPointOperation",

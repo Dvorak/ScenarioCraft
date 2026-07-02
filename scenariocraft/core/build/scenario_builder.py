@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""ScenarioSpec to OpenSCENARIO/OpenDRIVE artifact builders.
+
+Builders serialize deterministic ScenarioSpec semantics. They do not choose
+templates, call providers, or decide validation/repair success.
+"""
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path

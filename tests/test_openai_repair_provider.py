@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from scenariocraft.core.generators import MockScenarioGenerator
-from scenariocraft.integrations.openai_repair import (
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
+from scenariocraft.providers.openai_repair import (
     OpenAIRepairProvider,
     OpenAIRepairProviderConfigurationError,
 )
@@ -196,7 +196,7 @@ def test_provider_does_not_mutate_or_call_repair_build_probe_runtime_or_web(monk
 
     monkeypatch.setattr("scenariocraft.core.repair.apply_patch", forbidden)
     monkeypatch.setattr("scenariocraft.core.build.build_openscenario", forbidden)
-    monkeypatch.setattr("scenariocraft.runtime.run_esmini", forbidden)
+    monkeypatch.setattr("scenariocraft.external_tools.run_esmini", forbidden)
     monkeypatch.setattr("scenariocraft.core.probes.run_artifact_consistency_probes", forbidden)
     request = _request()
     original = request.scenario_spec.to_json()
@@ -223,7 +223,7 @@ def test_provider_does_not_mutate_or_call_repair_build_probe_runtime_or_web(monk
 
 
 def _request() -> RepairRequest:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     failed = ProbeResult(
         name="parked_van_footprint_in_parking_strip",
         passed=False,

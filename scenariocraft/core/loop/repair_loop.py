@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""Bounded deterministic repair loop orchestration.
+
+The loop runs probes, asks a repair provider for PatchSpec proposals, applies
+patches, rebuilds artifacts, and revalidates within a fixed round limit.
+"""
+
 from pathlib import Path
 
 from scenariocraft.core.loop.types import RepairRoundTrace, RepairRunResult, TerminalStatus

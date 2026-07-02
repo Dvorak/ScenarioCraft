@@ -8,13 +8,13 @@ from scenariocraft.application import (
     ScenarioWorkflowRequest,
     run_generated_scenario_workflow,
 )
-from scenariocraft.core.generators import MockScenarioGenerator, ScenarioGenerator
-from scenariocraft.orchestration import run_bounded_orchestrator
+from scenariocraft.application.orchestrator import run_bounded_orchestrator
 from scenariocraft.references import XoscMetadata, extract_xosc_metadata
 from scenariocraft.core.repair.providers import FakeRepairProvider
-from scenariocraft.runtime import EsminiResult, run_esmini
+from scenariocraft.external_tools import EsminiResult, run_esmini
 from scenariocraft.core.schemas import ScenarioSpec
 from scenariocraft.core.schemas.common import ScenarioSpecError
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -30,10 +30,9 @@ def main(argv: list[str] | None = None) -> int:
         _progress(f"Running bounded orchestrator: output={output_dir}")
         output_dir.mkdir(parents=True, exist_ok=True)
         (output_dir / "input.txt").write_text(scenario_text, encoding="utf-8")
-        generator = _get_generator(args.provider)
         try:
             _progress(f"Generating ScenarioSpec with provider={args.provider}")
-            spec = _generate_spec(generator, scenario_text, args)
+            spec = _generate_spec(args.provider, scenario_text, _template_parameters(args))
         except (ScenarioSpecError, TypeError, ValueError) as exc:
             (output_dir / "generation_error.txt").write_text(f"{exc}\n", encoding="utf-8")
             print(f"Scenario generation failed: {exc}")
@@ -342,23 +341,10 @@ def _display_path(path: Path) -> str:
         return str(path)
 
 
-def _get_generator(provider: str) -> ScenarioGenerator:
-    if provider == "mock":
-        return MockScenarioGenerator()
-    raise ValueError(f"Unsupported provider: {provider}")
-
-
-def _generate_spec(generator: ScenarioGenerator, scenario_text: str, args: argparse.Namespace) -> ScenarioSpec:
-    template_parameters: dict[str, object] = {}
-    if args.duration_s is not None:
-        template_parameters["total_duration_s"] = args.duration_s
-    if args.trigger_window_earliest_s is not None:
-        template_parameters["preferred_trigger_earliest_s"] = args.trigger_window_earliest_s
-    if args.trigger_window_latest_s is not None:
-        template_parameters["preferred_trigger_latest_s"] = args.trigger_window_latest_s
-    if template_parameters and isinstance(generator, MockScenarioGenerator):
-        return generator.generate_spec(scenario_text, **template_parameters)
-    return generator.generate_spec(scenario_text)
+def _generate_spec(provider: str, scenario_text: str, template_parameters: dict[str, object]) -> ScenarioSpec:
+    if provider != "mock":
+        raise ValueError(f"Unsupported provider: {provider}")
+    return generate_default_pedestrian_occlusion_spec(scenario_text, **template_parameters)
 
 
 if __name__ == "__main__":

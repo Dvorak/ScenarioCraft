@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""PatchSpec repair contract for deterministic ScenarioSpec mutation.
+
+Repair providers may propose these operations, but the patcher validates and
+applies them; raw XML repair is outside this contract.
+"""
+
 import json
 import math
 from dataclasses import dataclass

@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""Pure timing metrics derived from ScenarioSpec.
+
+These helpers distinguish design intent, trigger thresholds, lead time, THW,
+and runtime TTC placeholders without running simulation.
+"""
+
 from dataclasses import dataclass
 from math import hypot
 

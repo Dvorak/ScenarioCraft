@@ -4,8 +4,8 @@ import os
 
 import pytest
 
-from scenariocraft.core.generators import MockScenarioGenerator
-from scenariocraft.integrations.openai_repair import OpenAIRepairProvider
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
+from scenariocraft.providers.openai_repair import OpenAIRepairProvider
 from scenariocraft.core.repair.providers import RepairProposal, RepairRequest
 from scenariocraft.core.schemas import ProbeResult
 
@@ -23,7 +23,7 @@ pytestmark = pytest.mark.skipif(
 
 def test_openai_repair_provider_live_returns_safe_proposal_metadata() -> None:
     pytest.importorskip("openai")
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     failed = ProbeResult(
         name="parked_van_footprint_in_parking_strip",
         passed=False,

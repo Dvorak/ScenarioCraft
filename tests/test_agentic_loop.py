@@ -7,8 +7,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from scenariocraft.core.generators import MockScenarioGenerator
-from scenariocraft.orchestration import run_bounded_orchestrator
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
+from scenariocraft.application.orchestrator import run_bounded_orchestrator
 from scenariocraft.core.repair.providers import FakeRepairProvider
 from scenariocraft.core.schemas import Point2D, Pose2D
 
@@ -143,7 +143,7 @@ def _disable_external_tools(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
 
 
 def _canonical_spec():
-    return MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    return generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
 
 
 def _van_outside_parking_strip():

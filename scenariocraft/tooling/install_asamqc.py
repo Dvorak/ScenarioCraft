@@ -1,3 +1,5 @@
+"""Install or locate ASAM QC and write a local marker for runtime adapters."""
+
 from __future__ import annotations
 
 import argparse

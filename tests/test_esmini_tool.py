@@ -2,8 +2,8 @@ import json
 import subprocess
 from pathlib import Path
 
-import scenariocraft.runtime.esmini as esmini_tool
-from scenariocraft.runtime.esmini import (
+import scenariocraft.external_tools.esmini as esmini_tool
+from scenariocraft.external_tools.esmini import (
     _build_playback_media,
     _build_presentation_frames,
     _build_capture_command,

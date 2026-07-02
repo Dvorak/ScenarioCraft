@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from scenariocraft.core.generators import MockScenarioGenerator
-from scenariocraft.presentation import estimate_ttc_s, generate_2d_preview
-from scenariocraft.presentation.preview_2d import (
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
+from scenariocraft.rendering import estimate_ttc_s, generate_2d_preview
+from scenariocraft.rendering.preview_2d import (
     CLEAN_PREVIEW_ASPECT_RATIO,
     _apply_display_orientation,
     _clean_legend_groups,
@@ -20,7 +20,7 @@ from scenariocraft.presentation.preview_2d import (
 
 
 def test_generate_2d_preview_writes_non_empty_png(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     preview_path = generate_2d_preview(spec, tmp_path / "preview_2d.png")
 
     assert preview_path.exists()
@@ -31,7 +31,7 @@ def test_generate_2d_preview_writes_non_empty_png(tmp_path: Path) -> None:
 def test_clean_split_preview_has_separate_unannotated_scene_and_grouped_legend() -> None:
     from matplotlib import pyplot as plt
 
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     fig, scene_ax, legend_ax = _render_preview_figure(
         spec,
         display_orientation="esmini_top_camera_raw",
@@ -60,7 +60,7 @@ def test_clean_split_preview_has_separate_unannotated_scene_and_grouped_legend()
 
 
 def test_clean_split_legend_contract_has_three_groups_and_distinct_geometry_symbols() -> None:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
 
     groups = _clean_legend_groups(spec, "esmini_top_camera_raw")
 
@@ -74,7 +74,7 @@ def test_clean_split_legend_contract_has_three_groups_and_distinct_geometry_symb
 
 
 def test_clean_split_preview_does_not_repeat_summary_or_scene_labels(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     before = spec.to_json()
 
     preview_path = generate_2d_preview(
@@ -96,7 +96,7 @@ def test_clean_split_preview_does_not_repeat_summary_or_scene_labels(tmp_path: P
 def test_clean_split_legend_groups_are_spatially_isolated() -> None:
     from matplotlib import pyplot as plt
 
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     fig, _scene_ax, legend_ax = _render_preview_figure(
         spec,
         display_orientation="esmini_top_camera_raw",
@@ -122,7 +122,7 @@ def test_clean_split_scene_uses_plain_vehicle_silhouettes_and_layered_geometry()
     from matplotlib import pyplot as plt
     from matplotlib.patches import FancyArrowPatch
 
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     fig, scene_ax, _legend_ax = _render_preview_figure(
         spec,
         display_orientation="esmini_top_camera_raw",
@@ -139,7 +139,7 @@ def test_clean_split_scene_uses_plain_vehicle_silhouettes_and_layered_geometry()
 
 
 def test_clean_split_preview_supports_layout_free_and_road_band_free_specs(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     assert spec.layout is not None
     variants = (
         replace(spec, layout=None, spatial_relations=()),
@@ -157,7 +157,7 @@ def test_clean_split_preview_supports_layout_free_and_road_band_free_specs(tmp_p
 
 
 def test_preview_rejects_unknown_presentation_style(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
 
     with pytest.raises(ValueError, match="presentation style"):
         generate_2d_preview(spec, tmp_path / "invalid.png", presentation_style="unknown")
@@ -166,7 +166,7 @@ def test_preview_rejects_unknown_presentation_style(tmp_path: Path) -> None:
 def test_annotated_preview_remains_the_default_presentation() -> None:
     from matplotlib import pyplot as plt
 
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     fig, scene_ax, legend_ax = _render_preview_figure(
         spec,
         display_orientation="semantic_canonical",
@@ -181,7 +181,7 @@ def test_annotated_preview_remains_the_default_presentation() -> None:
 
 
 def test_generate_2d_preview_writes_non_empty_png_for_legacy_spec(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     legacy_spec = replace(spec, layout=None, spatial_relations=())
 
     preview_path = generate_2d_preview(legacy_spec, tmp_path / "legacy_preview_2d.png")
@@ -192,7 +192,7 @@ def test_generate_2d_preview_writes_non_empty_png_for_legacy_spec(tmp_path: Path
 
 
 def test_preview_supports_esmini_top_camera_raw_orientation_without_mutating_spec(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     assert spec.layout is not None
     before_pose = spec.layout.actor_poses["parked_van"]
     semantic_path = generate_2d_preview(
@@ -213,9 +213,9 @@ def test_preview_supports_esmini_top_camera_raw_orientation_without_mutating_spe
 
 
 def test_renderer_aligned_preview_suppresses_in_road_band_labels(monkeypatch, tmp_path: Path) -> None:
-    import scenariocraft.presentation.preview_2d as preview_2d
+    import scenariocraft.rendering.preview_2d as preview_2d
 
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     calls = []
 
     def record_road_bands(ax, layout, *, show_labels=True):
@@ -230,7 +230,7 @@ def test_renderer_aligned_preview_suppresses_in_road_band_labels(monkeypatch, tm
 
 
 def test_road_context_legend_items_follow_raw_display_order() -> None:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     assert spec.layout is not None
 
     labels = [label for label, _color in _road_context_items(spec.layout, "esmini_top_camera_raw")]
@@ -246,7 +246,7 @@ def test_road_context_legend_items_follow_raw_display_order() -> None:
 
 
 def test_road_context_legend_uses_band_colors() -> None:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     assert spec.layout is not None
 
     items = _road_context_items(spec.layout, "esmini_top_camera_raw")
@@ -256,9 +256,9 @@ def test_road_context_legend_uses_band_colors() -> None:
 
 
 def test_actor_legend_is_still_drawn(monkeypatch, tmp_path: Path) -> None:
-    import scenariocraft.presentation.preview_2d as preview_2d
+    import scenariocraft.rendering.preview_2d as preview_2d
 
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     called = {"actor_legend": False}
 
     def record_actor_legend(ax):
@@ -291,7 +291,7 @@ def test_preview_orientation_helper_reverses_axes_for_raw_esmini_mode() -> None:
 
 
 def test_preview_uses_layout_backed_geometry_helpers() -> None:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     assert spec.layout is not None
 
     assert _layout_pose(spec.layout, "parked_van").x_m == spec.layout.actor_poses["parked_van"].x_m
@@ -305,7 +305,7 @@ def test_preview_uses_layout_backed_geometry_helpers() -> None:
 
 
 def test_road_band_free_preview_fallback_writes_non_empty_png(tmp_path: Path) -> None:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     assert spec.layout is not None
     road_band_free_spec = replace(spec, layout=replace(spec.layout, road_bands=()))
 
@@ -317,6 +317,6 @@ def test_road_band_free_preview_fallback_writes_non_empty_png(tmp_path: Path) ->
 
 
 def test_estimate_ttc_from_trigger_distance_and_ego_speed() -> None:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
 
     assert estimate_ttc_s(spec) == spec.trigger.distance_m / (35 / 3.6)

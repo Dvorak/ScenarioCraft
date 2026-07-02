@@ -1,7 +1,8 @@
 """Code-level package boundary manifest for ScenarioCraft.
 
 The reusable domain package is `scenariocraft.core`. The `scenariocraft`
-package contains delivery surfaces and optional external adapters.
+package contains delivery surfaces, rendering, providers, and optional
+external-tool adapters.
 """
 
 from __future__ import annotations
@@ -10,7 +11,6 @@ from itertools import chain
 
 CORE_PACKAGE_MODULES = (
     "scenariocraft.core.build",
-    "scenariocraft.core.generators",
     "scenariocraft.core.loop",
     "scenariocraft.core.metrics",
     "scenariocraft.core.probes",
@@ -24,16 +24,16 @@ CORE_PACKAGE_MODULES = (
 DELIVERY_ADAPTER_MODULES = (
     "scenariocraft.application",
     "scenariocraft.main",
-    "scenariocraft.orchestration",
+    "scenariocraft.application.orchestrator",
     "scenariocraft.web",
 )
 
-RUNTIME_ADAPTER_MODULES = (
-    "scenariocraft.integrations",
-    "scenariocraft.integrations.openai_repair",
+EXTERNAL_TOOL_MODULES = (
+    "scenariocraft.providers",
+    "scenariocraft.providers.openai_repair",
     "scenariocraft.references",
-    "scenariocraft.presentation",
-    "scenariocraft.runtime",
+    "scenariocraft.rendering",
+    "scenariocraft.external_tools",
 )
 
 TOOL_SEMANTIC_GROUPS = {
@@ -44,16 +44,16 @@ TOOL_SEMANTIC_GROUPS = {
     "metrics": (
         "scenariocraft.core.metrics.timing",
     ),
-    "presentation": (
-        "scenariocraft.presentation.preview_2d",
-        "scenariocraft.presentation.report",
+    "rendering": (
+        "scenariocraft.rendering.preview_2d",
+        "scenariocraft.rendering.report",
     ),
     "validation": (
         "scenariocraft.core.validation.semantic",
     ),
-    "runtime": (
-        "scenariocraft.runtime.asam_qc",
-        "scenariocraft.runtime.esmini",
+    "external_tools": (
+        "scenariocraft.external_tools.asam_qc",
+        "scenariocraft.external_tools.esmini",
     ),
 }
 
@@ -62,8 +62,8 @@ FORBIDDEN_CORE_IMPORT_PATTERNS = (
     "from streamlit",
     "scenariocraft.web",
     "scenariocraft.application",
-    "scenariocraft.integrations",
-    "scenariocraft.runtime",
+    "scenariocraft.providers",
+    "scenariocraft.external_tools",
     "from openai import",
     "import openai",
     "import subprocess",
@@ -80,7 +80,7 @@ def current_boundary_modules() -> tuple[str, ...]:
             chain(
                 CORE_PACKAGE_MODULES,
                 DELIVERY_ADAPTER_MODULES,
-                RUNTIME_ADAPTER_MODULES,
+                EXTERNAL_TOOL_MODULES,
                 *TOOL_SEMANTIC_GROUPS.values(),
             )
         )
@@ -91,7 +91,7 @@ __all__ = [
     "CORE_PACKAGE_MODULES",
     "DELIVERY_ADAPTER_MODULES",
     "FORBIDDEN_CORE_IMPORT_PATTERNS",
-    "RUNTIME_ADAPTER_MODULES",
+    "EXTERNAL_TOOL_MODULES",
     "TOOL_SEMANTIC_GROUPS",
     "current_boundary_modules",
 ]

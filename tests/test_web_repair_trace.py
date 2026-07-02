@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import scenariocraft.web.app as web_app
-from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 from scenariocraft.web.app import _run_demo_experiment_if_requested
 from scenariocraft.web.view_models import build_generated_scenario_view_model
 
@@ -104,4 +104,4 @@ def test_demo_experiment_preserves_normal_generated_scenario_view(tmp_path: Path
 
 
 def _canonical_spec():
-    return MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    return generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")

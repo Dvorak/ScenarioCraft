@@ -4,7 +4,7 @@ from dataclasses import replace
 import json
 from xml.etree import ElementTree as ET
 
-from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 from scenariocraft.main import main
 
 
@@ -60,12 +60,14 @@ def test_cli_layout_free_spec_succeeds_without_template_aware_probes(monkeypatch
     monkeypatch.setenv("ESMINI_BIN", str(tmp_path / "missing-esmini"))
     monkeypatch.setattr("shutil.which", lambda _binary: None)
 
-    class LayoutFreeGenerator:
-        def generate_spec(self, scenario_text: str):
-            spec = MockScenarioGenerator().generate_spec(scenario_text)
-            return replace(spec, layout=None, spatial_relations=())
+    def layout_free_default_spec(scenario_text: str, **template_parameters: object):
+        spec = generate_default_pedestrian_occlusion_spec(scenario_text, **template_parameters)
+        return replace(spec, layout=None, spatial_relations=())
 
-    monkeypatch.setattr("scenariocraft.application.generated_scenario.MockScenarioGenerator", LayoutFreeGenerator)
+    monkeypatch.setattr(
+        "scenariocraft.application.generated_scenario.generate_default_pedestrian_occlusion_spec",
+        layout_free_default_spec,
+    )
 
     exit_code = main(["--input", str(input_path), "--out", str(output_dir), "--provider", "mock"])
 

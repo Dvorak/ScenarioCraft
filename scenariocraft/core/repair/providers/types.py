@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""Repair provider request/proposal contracts.
+
+Providers receive failed ProbeResult evidence and may propose PatchSpec JSON;
+deterministic patching and revalidation decide success.
+"""
+
 from dataclasses import dataclass
 
 from scenariocraft.core.schemas import PatchSpec, ProbeResult, ScenarioSpec

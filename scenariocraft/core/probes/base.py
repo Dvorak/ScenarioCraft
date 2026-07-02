@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""Base protocol for deterministic ScenarioSpec probes.
+
+Probe runners collect evidence only; mutation and provider calls belong to
+repair loops and repair providers.
+"""
+
 from typing import Protocol, Sequence
 
 from scenariocraft.core.schemas import ProbeResult, ScenarioSpec

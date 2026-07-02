@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Literal, TypeAlias
 
 from scenariocraft.core.build import BuildResult
-from scenariocraft.runtime import AsamQcResult, EsminiPlaybackResult, EsminiResult
+from scenariocraft.external_tools import AsamQcResult, EsminiPlaybackResult, EsminiResult
 from scenariocraft.core.schemas import ProbeResult, ScenarioSpec
 from scenariocraft.core.validation import SemanticValidationResult
 

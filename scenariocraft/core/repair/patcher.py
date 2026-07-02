@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""Deterministic PatchSpec application to ScenarioSpec.
+
+This module applies already-validated repair operations. It does not propose
+patches, call LLMs, or edit generated XOSC/XODR artifacts.
+"""
+
 from dataclasses import replace
 
 from scenariocraft.core.schemas import (

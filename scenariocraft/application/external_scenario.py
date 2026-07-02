@@ -9,7 +9,7 @@ from scenariocraft.application.contracts import (
 )
 from scenariocraft.references import XoscMetadata, extract_xosc_metadata
 from scenariocraft.core.build import BuildResult
-from scenariocraft.runtime import AsamQcResult, EsminiResult, run_asam_qc, run_esmini
+from scenariocraft.external_tools import AsamQcResult, EsminiResult, run_asam_qc, run_esmini
 
 
 def run_external_scenario_workflow(request: ExternalScenarioWorkflowRequest) -> ExternalScenarioWorkflowResult:

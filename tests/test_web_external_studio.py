@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from scenariocraft.references.metadata_extractor import XoscMetadata
-from scenariocraft.runtime import AsamQcResult, EsminiPlaybackResult, EsminiResult
+from scenariocraft.external_tools import AsamQcResult, EsminiPlaybackResult, EsminiResult
 from scenariocraft.web.app import (
     PREVIEW_VISUAL_CAPTION,
     RUNTIME_VISUAL_CAPTION,
@@ -353,9 +353,9 @@ def test_external_visual_summary_handles_unpreviewable_metadata():
 
 
 def test_generated_view_model_summarizes_scenario():
-    from scenariocraft.core.generators import MockScenarioGenerator
+    from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
 
     view_model = build_generated_scenario_view_model(spec)
 

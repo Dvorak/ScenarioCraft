@@ -2,7 +2,7 @@ from dataclasses import replace
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 from scenariocraft.core.roads import URBAN_TWO_WAY_PARKING_FILENAME
 from scenariocraft.core.schemas import (
     PathSpec,
@@ -28,7 +28,7 @@ DEFAULT_CONFLICT_X_M = DEFAULT_VAN_X_M + 5.0
 
 
 def test_scenario_builder_creates_xosc_file(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
 
     result = build_openscenario(spec, tmp_path)
 
@@ -41,7 +41,7 @@ def test_scenario_builder_creates_xosc_file(tmp_path) -> None:
 
 
 def test_canonical_layout_backed_builder_binds_portable_opendrive_logic_file(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
 
     result = build_openscenario(spec, tmp_path)
     root = ET.parse(result.xosc_path).getroot()
@@ -58,7 +58,7 @@ def test_canonical_layout_backed_builder_binds_portable_opendrive_logic_file(tmp
 
 
 def test_fallback_xml_builder_binds_same_portable_opendrive_logic_file(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
 
     result = build_openscenario(spec, tmp_path, builder=FallbackXmlScenarioBuilder())
     root = ET.parse(result.xosc_path).getroot()
@@ -73,7 +73,7 @@ def test_fallback_xml_builder_binds_same_portable_opendrive_logic_file(tmp_path)
 
 
 def test_layout_backed_builder_uses_layout_initial_poses(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
     assert spec.layout is not None
 
     result = build_openscenario(spec, tmp_path)
@@ -87,7 +87,7 @@ def test_layout_backed_builder_uses_layout_initial_poses(tmp_path) -> None:
 
 
 def test_changing_layout_pose_changes_generated_xosc_pose(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
     assert spec.layout is not None
     layout = replace(
         spec.layout,
@@ -105,7 +105,7 @@ def test_changing_layout_pose_changes_generated_xosc_pose(tmp_path) -> None:
 
 
 def test_layout_backed_builder_preserves_relative_arrangement(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
     assert spec.layout is not None
 
     result = build_openscenario(spec, tmp_path)
@@ -117,7 +117,7 @@ def test_layout_backed_builder_preserves_relative_arrangement(tmp_path) -> None:
 
 
 def test_layout_free_builder_keeps_legacy_initial_pose_fallback(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
     legacy_spec = replace(spec, layout=None, spatial_relations=(), timing=None)
 
     result = build_openscenario(legacy_spec, tmp_path)
@@ -136,7 +136,7 @@ def test_layout_free_builder_keeps_legacy_initial_pose_fallback(tmp_path) -> Non
 
 
 def test_fallback_scenario_builder_creates_xosc_file(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
 
     result = build_openscenario(spec, tmp_path, builder=FallbackXmlScenarioBuilder())
 
@@ -147,7 +147,7 @@ def test_fallback_scenario_builder_creates_xosc_file(tmp_path) -> None:
 
 
 def test_fallback_xml_builder_uses_layout_initial_poses(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
 
     result = build_openscenario(spec, tmp_path, builder=FallbackXmlScenarioBuilder())
     poses = _world_positions_by_entity(result.xosc_path)
@@ -158,7 +158,7 @@ def test_fallback_xml_builder_uses_layout_initial_poses(tmp_path) -> None:
 
 
 def test_layout_backed_builder_serializes_pedestrian_crossing_trajectory(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
     assert spec.layout is not None
 
     result = build_openscenario(spec, tmp_path)
@@ -179,7 +179,7 @@ def test_layout_backed_builder_serializes_pedestrian_crossing_trajectory(tmp_pat
 
 
 def test_layout_backed_builder_serializes_ego_driving_trajectory(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
     assert spec.layout is not None
 
     result = build_openscenario(spec, tmp_path)
@@ -197,7 +197,7 @@ def test_layout_backed_builder_serializes_ego_driving_trajectory(tmp_path) -> No
 
 
 def test_canonical_pedestrian_event_start_trigger_references_expected_actors_and_distance(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
 
     result = build_openscenario(spec, tmp_path)
     root = ET.parse(result.xosc_path).getroot()
@@ -221,7 +221,7 @@ def test_canonical_pedestrian_event_start_trigger_references_expected_actors_and
 
 
 def test_canonical_pedestrian_start_trigger_uses_separate_or_condition_groups(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
 
     result = build_openscenario(spec, tmp_path)
     root = ET.parse(result.xosc_path).getroot()
@@ -237,7 +237,7 @@ def test_canonical_pedestrian_start_trigger_uses_separate_or_condition_groups(tm
 
 
 def test_physical_trigger_diagnostic_variant_omits_timing_alignment_condition(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
 
     result = build_openscenario(
         spec,
@@ -255,7 +255,7 @@ def test_physical_trigger_diagnostic_variant_omits_timing_alignment_condition(tm
 
 
 def test_expected_physical_relative_distance_crossing_time_uses_actual_geometry(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
     assert spec.layout is not None
     ego = spec.actor_by_id(spec.trigger.source)
     assert ego is not None and ego.initial_speed_kph is not None
@@ -271,7 +271,7 @@ def test_expected_physical_relative_distance_crossing_time_uses_actual_geometry(
 
 
 def test_canonical_pedestrian_event_start_condition_is_reachable_before_stop(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
     assert spec.layout is not None
     assert spec.timing is not None
 
@@ -289,7 +289,7 @@ def test_canonical_pedestrian_event_start_condition_is_reachable_before_stop(tmp
 
 
 def test_changing_trigger_distance_changes_generated_xosc_trigger_condition(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
     changed_spec = replace(
         spec,
         trigger=TriggerSpec(
@@ -314,7 +314,7 @@ def test_changing_trigger_distance_changes_generated_xosc_trigger_condition(tmp_
 
 
 def test_ttc_trigger_condition_builds_xosc_time_to_collision_condition(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
     changed_spec = replace(
         spec,
         trigger=TriggerSpec(
@@ -356,7 +356,7 @@ def test_ttc_trigger_condition_builds_xosc_time_to_collision_condition(tmp_path)
 
 
 def test_fallback_builder_builds_ttc_condition_with_entity_target(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
     changed_spec = replace(
         spec,
         trigger=TriggerSpec(
@@ -390,7 +390,7 @@ def test_fallback_builder_builds_ttc_condition_with_entity_target(tmp_path) -> N
 
 
 def test_timing_policy_changes_generated_stop_and_nominal_alignment_condition(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec(
+    spec = generate_default_pedestrian_occlusion_spec(
         "scenario",
         total_duration_s=10.0,
         preferred_trigger_earliest_s=2.0,
@@ -414,7 +414,7 @@ def test_timing_policy_changes_generated_stop_and_nominal_alignment_condition(tm
 
 
 def test_changing_layout_path_endpoint_changes_generated_trajectory_endpoint(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
     assert spec.layout is not None
     original_path = spec.layout.paths["pedestrian_crossing_path"]
     changed_path = PathSpec(
@@ -434,7 +434,7 @@ def test_changing_layout_path_endpoint_changes_generated_trajectory_endpoint(tmp
 
 
 def test_layout_path_point_order_is_preserved_in_generated_trajectory(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
     assert spec.layout is not None
     path = PathSpec(
         "pedestrian_crossing_path",
@@ -458,7 +458,7 @@ def test_layout_path_point_order_is_preserved_in_generated_trajectory(tmp_path) 
 
 
 def test_path_free_builder_keeps_speed_action_only_fallback(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
     assert spec.layout is not None
     path_free_layout = replace(
         spec.layout,
@@ -473,7 +473,7 @@ def test_path_free_builder_keeps_speed_action_only_fallback(tmp_path) -> None:
 
 
 def test_fallback_xml_builder_serializes_pedestrian_crossing_trajectory(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
 
     result = build_openscenario(spec, tmp_path, builder=FallbackXmlScenarioBuilder())
     vertices = _pedestrian_trajectory_vertices(result.xosc_path)
@@ -482,7 +482,7 @@ def test_fallback_xml_builder_serializes_pedestrian_crossing_trajectory(tmp_path
 
 
 def test_fallback_xml_builder_serializes_ego_driving_trajectory(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
 
     result = build_openscenario(spec, tmp_path, builder=FallbackXmlScenarioBuilder())
     vertices = _trajectory_vertices(result.xosc_path, "ego_follow_ego_path")
@@ -509,7 +509,7 @@ def test_builder_consumes_storyboard_ids_for_xosc_hierarchy(tmp_path) -> None:
 
 
 def test_builder_consumes_storyboard_action_path_ref(tmp_path) -> None:
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
     assert spec.layout is not None
     alt_path = PathSpec(
         "alternate_crossing_path",
@@ -608,7 +608,7 @@ def _pedestrian_relative_distance_condition(xosc_path) -> ET.Element:
 
 
 def _storyboard_renamed_spec():
-    spec = MockScenarioGenerator().generate_spec("scenario")
+    spec = generate_default_pedestrian_occlusion_spec("scenario")
     storyboard = StoryboardSpec(
         stories=(StoryboardStorySpec("story_from_spec", ("act_from_spec",)),),
         acts=(StoryboardActSpec("act_from_spec", ("ego_group_from_spec", "ped_group_from_spec"), "stop_from_spec"),),

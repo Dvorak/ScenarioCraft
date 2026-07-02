@@ -1,3 +1,5 @@
+"""Runtime adapter for invoking an already-configured esmini executable."""
+
 from __future__ import annotations
 
 import json

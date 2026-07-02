@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""ScenarioTemplate protocol for deterministic scenario-family generators.
+
+Templates expand typed intent or parameters into ScenarioSpec objects. They do
+not parse natural language or generate XOSC/XODR artifacts.
+"""
+
 from typing import Mapping, Protocol
 
 from scenariocraft.core.schemas import ScenarioSpec

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 from scenariocraft.core.probes import (
     RUNTIME_PROBE_NAMES,
     run_and_write_runtime_consistency_probes,
@@ -146,7 +146,7 @@ def test_runtime_pipeline_writes_results_from_generated_artifacts(tmp_path: Path
 
 
 def _spec():
-    return MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    return generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
 
 
 def _successful_log() -> str:

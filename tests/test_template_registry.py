@@ -2,7 +2,7 @@ from dataclasses import replace
 
 import pytest
 
-from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 from scenariocraft.core.roads import URBAN_TWO_WAY_PARKING_FILENAME
 from scenariocraft.core.schemas import Point2D
 from scenariocraft.core.schemas import ScenarioSpec
@@ -37,6 +37,13 @@ def test_registry_contains_pedestrian_occlusion_template() -> None:
 
     assert "pedestrian_occlusion" in templates
     assert isinstance(get_template("pedestrian_occlusion"), PedestrianOcclusionTemplate)
+
+
+def test_registry_contains_lead_vehicle_braking_template() -> None:
+    templates = registered_templates()
+
+    assert "lead_vehicle_braking" in templates
+    assert get_template("lead_vehicle_braking").template_id == "lead_vehicle_braking"
 
 
 def test_pedestrian_occlusion_template_exposes_minimal_metadata() -> None:
@@ -343,7 +350,7 @@ def _vertical_segment_intersects_band(start: Point2D, end: Point2D, band: object
 
 
 def test_mock_generation_preserves_normal_pedestrian_occlusion_spec() -> None:
-    spec = MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
 
     assert spec.scenario_name == "rainy_pedestrian_occlusion"
     assert spec.scenario_type == "pedestrian_occlusion"

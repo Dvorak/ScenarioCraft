@@ -10,7 +10,7 @@ from xml.etree import ElementTree as ET
 
 from scenariocraft.references.browser import classify_reference_source
 from scenariocraft.references.metadata_extractor import XoscMetadata, extract_xosc_metadata
-from scenariocraft.runtime import run_asam_qc, run_esmini
+from scenariocraft.external_tools import run_asam_qc, run_esmini
 
 
 def scan_xosc_files(root: Path) -> list[Path]:

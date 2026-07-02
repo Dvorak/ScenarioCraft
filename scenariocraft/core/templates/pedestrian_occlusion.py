@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""Deterministic pedestrian-occlusion golden template.
+
+This template remains the canonical baseline for layout, probes, repair, build,
+and playback validation while broader intent/template coverage grows.
+"""
+
 from dataclasses import dataclass, replace
 from math import hypot
 from typing import Mapping

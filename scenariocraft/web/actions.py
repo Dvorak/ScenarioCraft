@@ -5,8 +5,8 @@ from pathlib import Path
 
 from scenariocraft.core.probes import run_and_write_runtime_consistency_probes
 from scenariocraft.core.build import BuildResult
-from scenariocraft.presentation import generate_validation_report
-from scenariocraft.runtime import AsamQcResult, EsminiPlaybackResult, EsminiResult
+from scenariocraft.rendering import generate_validation_report
+from scenariocraft.external_tools import AsamQcResult, EsminiPlaybackResult, EsminiResult
 from scenariocraft.core.schemas import ProbeResult, ScenarioSpec
 from scenariocraft.core.validation import SemanticValidationResult
 

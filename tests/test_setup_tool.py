@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scenariocraft import setup as setup_tool
+from scenariocraft.tooling import setup_tools as setup_tool
 
 
 def test_setup_tool_runs_optional_tool_installers(monkeypatch, tmp_path: Path, capsys) -> None:

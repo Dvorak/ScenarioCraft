@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from scenariocraft.core.generators import MockScenarioGenerator
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 from scenariocraft.core.probes import run_pedestrian_occlusion_timing_probes
 from scenariocraft.core.repair.providers import FakeRepairProvider
 from scenariocraft.application.demo_cases import DEMO_CASES, get_demo_case, prepare_demo_case, run_demo_case
@@ -199,10 +199,10 @@ def test_demo_cases_do_not_call_runtime_external_or_model_tools(tmp_path: Path, 
     def forbidden(*args, **kwargs):
         raise AssertionError("Demo case called a forbidden runtime, external, or model tool.")
 
-    monkeypatch.setattr("scenariocraft.runtime.run_esmini", forbidden)
-    monkeypatch.setattr("scenariocraft.runtime.run_esmini_playback", forbidden)
-    monkeypatch.setattr("scenariocraft.runtime.run_asam_qc", forbidden)
-    monkeypatch.setattr("scenariocraft.integrations.openai_repair.OpenAIRepairProvider", forbidden)
+    monkeypatch.setattr("scenariocraft.external_tools.run_esmini", forbidden)
+    monkeypatch.setattr("scenariocraft.external_tools.run_esmini_playback", forbidden)
+    monkeypatch.setattr("scenariocraft.external_tools.run_asam_qc", forbidden)
+    monkeypatch.setattr("scenariocraft.providers.openai_repair.OpenAIRepairProvider", forbidden)
 
     for case in DEMO_CASES:
         result = run_demo_case(case.case_id, _canonical_spec(), tmp_path)
@@ -210,4 +210,4 @@ def test_demo_cases_do_not_call_runtime_external_or_model_tools(tmp_path: Path, 
 
 
 def _canonical_spec():
-    return MockScenarioGenerator().generate_spec("rainy pedestrian occlusion")
+    return generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
