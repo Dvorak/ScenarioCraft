@@ -7,7 +7,7 @@ def test_core_candidate_modules_do_not_import_delivery_or_runtime_adapters() -> 
     checked_paths = [
         *Path("scenariocraft/core/schemas").glob("*.py"),
         *Path("scenariocraft/core/templates").glob("*.py"),
-        *Path("scenariocraft/core/probes").glob("*.py"),
+        *Path("scenariocraft/core/checks").glob("*.py"),
         Path("scenariocraft/core/repair/patcher.py"),
         Path("scenariocraft/core/repair/providers/fake.py"),
     ]

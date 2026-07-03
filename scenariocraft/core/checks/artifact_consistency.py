@@ -5,7 +5,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from scenariocraft.core.roads import URBAN_TWO_WAY_PARKING_FILENAME
-from scenariocraft.core.schemas import ProbeResult, ScenarioSpec
+from scenariocraft.core.schemas import CheckResult, ScenarioSpec
 
 POSITION_TOLERANCE_M = 1e-6
 HEADING_TOLERANCE_RAD = 1e-6
@@ -13,23 +13,23 @@ PATH_TOLERANCE_M = 1e-6
 CANONICAL_ACTOR_IDS = ("ego", "parked_van", "pedestrian")
 
 
-def run_artifact_consistency_probes(
+def run_artifact_consistency_checks(
     spec: ScenarioSpec,
     *,
     xosc_path: Path,
     xodr_path: Path | None,
-) -> tuple[ProbeResult, ...]:
+) -> tuple[CheckResult, ...]:
     if spec.scenario_type != "pedestrian_occlusion" or spec.layout is None:
         return ()
 
     root, parse_error = _parse_xosc(xosc_path)
     logic_file_path = _logic_file_path(root)
     return (
-        _actor_poses_probe(spec, root, parse_error),
-        _pedestrian_trajectory_probe(spec, root, parse_error),
-        _logic_file_relative_probe(logic_file_path, parse_error),
-        _logic_file_target_exists_probe(xosc_path, xodr_path, logic_file_path, parse_error),
-        _logic_file_canonical_probe(logic_file_path, parse_error),
+        _actor_poses_check(spec, root, parse_error),
+        _pedestrian_trajectory_check(spec, root, parse_error),
+        _logic_file_relative_check(logic_file_path, parse_error),
+        _logic_file_target_exists_check(xosc_path, xodr_path, logic_file_path, parse_error),
+        _logic_file_canonical_check(logic_file_path, parse_error),
     )
 
 
@@ -40,11 +40,11 @@ def _parse_xosc(xosc_path: Path) -> tuple[ET.Element | None, str | None]:
         return None, str(exc)
 
 
-def _actor_poses_probe(
+def _actor_poses_check(
     spec: ScenarioSpec,
     root: ET.Element | None,
     parse_error: str | None,
-) -> ProbeResult:
+) -> CheckResult:
     observed = _initial_world_positions(root)
     actor_ids = list(CANONICAL_ACTOR_IDS)
     expected_x: dict[str, float] = {}
@@ -109,11 +109,11 @@ def _actor_poses_probe(
     )
 
 
-def _pedestrian_trajectory_probe(
+def _pedestrian_trajectory_check(
     spec: ScenarioSpec,
     root: ET.Element | None,
     parse_error: str | None,
-) -> ProbeResult:
+) -> CheckResult:
     path_id = "pedestrian_crossing_path"
     expected_points = spec.layout.paths[path_id].points
     expected_vertices = [{"x_m": point.x_m, "y_m": point.y_m} for point in expected_points]
@@ -159,7 +159,7 @@ def _pedestrian_trajectory_probe(
     )
 
 
-def _logic_file_relative_probe(logic_file_path: str | None, parse_error: str | None) -> ProbeResult:
+def _logic_file_relative_check(logic_file_path: str | None, parse_error: str | None) -> CheckResult:
     user_home = str(Path.home())
     is_relative = bool(
         logic_file_path
@@ -185,12 +185,12 @@ def _logic_file_relative_probe(logic_file_path: str | None, parse_error: str | N
     )
 
 
-def _logic_file_target_exists_probe(
+def _logic_file_target_exists_check(
     xosc_path: Path,
     xodr_path: Path | None,
     logic_file_path: str | None,
     parse_error: str | None,
-) -> ProbeResult:
+) -> CheckResult:
     xosc_directory = xosc_path.parent.resolve()
     relative = bool(logic_file_path and not Path(logic_file_path).is_absolute())
     resolved = (xosc_directory / logic_file_path).resolve() if relative and logic_file_path else None
@@ -220,7 +220,7 @@ def _logic_file_target_exists_probe(
     )
 
 
-def _logic_file_canonical_probe(logic_file_path: str | None, parse_error: str | None) -> ProbeResult:
+def _logic_file_canonical_check(logic_file_path: str | None, parse_error: str | None) -> CheckResult:
     observed_basename = Path(logic_file_path).name if logic_file_path else None
     passed = parse_error is None and observed_basename == URBAN_TWO_WAY_PARKING_FILENAME
     measured: dict[str, object] = {
@@ -306,12 +306,15 @@ def _result(
     failure_message: str,
     measured: dict[str, object],
     suggested_operations: tuple[dict[str, object], ...],
-) -> ProbeResult:
-    return ProbeResult(
+) -> CheckResult:
+    return CheckResult(
         name=name,
         passed=passed,
-        severity="note" if passed else "failure",
+        severity="note" if passed else "repairable",
         message=pass_message if passed else failure_message,
+        category="artifact_consistency",
+        intent_relation="not_applicable",
+        repair_action="none",
         measured=measured,
         suggested_operations=() if passed else suggested_operations,
     )

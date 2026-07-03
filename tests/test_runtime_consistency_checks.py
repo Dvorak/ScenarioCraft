@@ -4,20 +4,22 @@ import json
 from pathlib import Path
 
 from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
-from scenariocraft.core.probes import (
-    RUNTIME_PROBE_NAMES,
-    run_and_write_runtime_consistency_probes,
-    run_runtime_consistency_probes,
+from scenariocraft.core.checks import (
+    RUNTIME_CHECK_NAMES,
+    run_and_write_runtime_consistency_checks,
+    run_runtime_consistency_checks,
 )
 
 
 def test_missing_runtime_artifacts_warn_without_hard_failures() -> None:
     spec = _spec()
 
-    results = run_runtime_consistency_probes(spec)
+    results = run_runtime_consistency_checks(spec)
     by_name = _by_name(results)
 
-    assert [result.name for result in results] == list(RUNTIME_PROBE_NAMES)
+    assert [result.name for result in results] == list(RUNTIME_CHECK_NAMES)
+    assert {result.category for result in results} == {"runtime_behavior"}
+    assert {result.intent_relation for result in results} == {"not_applicable"}
     assert by_name["runtime_esmini_execution_available"].severity == "warning"
     assert by_name["runtime_xodr_loaded"].severity == "note"
     assert by_name["runtime_pedestrian_event_reached_running_state"].severity == "warning"
@@ -25,13 +27,13 @@ def test_missing_runtime_artifacts_warn_without_hard_failures() -> None:
     assert by_name["runtime_motion_verifiable"].severity == "warning"
 
 
-def test_successful_synthetic_esmini_log_and_media_pass_runtime_probes(tmp_path: Path) -> None:
+def test_successful_synthetic_esmini_log_and_media_pass_runtime_checks(tmp_path: Path) -> None:
     log_path = _write_log(tmp_path, _successful_log())
     playback_path = _write_playback(tmp_path, _playback_result("esmini_gif", frame_count=3, animated=True))
     xodr_path = tmp_path / "urban_two_way_parking.xodr"
     xodr_path.write_text("xodr", encoding="utf-8")
 
-    results = run_runtime_consistency_probes(
+    results = run_runtime_consistency_checks(
         _spec(),
         xosc_path=tmp_path / "scenario.xosc",
         xodr_path=xodr_path,
@@ -45,7 +47,7 @@ def test_successful_synthetic_esmini_log_and_media_pass_runtime_probes(tmp_path:
     assert by_name["runtime_motion_verifiable"].measured["runtime_motion_verifiable"] is True
 
 
-def test_standby_complete_without_running_does_not_pass_running_state_probe(tmp_path: Path) -> None:
+def test_standby_complete_without_running_does_not_pass_running_state_check(tmp_path: Path) -> None:
     log_path = _write_log(
         tmp_path,
         "\n".join([
@@ -58,7 +60,7 @@ def test_standby_complete_without_running_does_not_pass_running_state_probe(tmp_
     playback_path = _write_playback(tmp_path, _playback_result("esmini_gif", frame_count=3, animated=True))
 
     by_name = _by_name(
-        run_runtime_consistency_probes(
+        run_runtime_consistency_checks(
             _spec(),
             xodr_path=tmp_path / "urban_two_way_parking.xodr",
             esmini_log_path=log_path,
@@ -77,7 +79,7 @@ def test_standby_complete_without_running_does_not_pass_running_state_probe(tmp_
 def test_esmini_gif_with_valid_quality_passes_visual_media_provenance(tmp_path: Path) -> None:
     playback_path = _write_playback(tmp_path, _playback_result("esmini_gif", frame_count=4, animated=True))
 
-    by_name = _by_name(run_runtime_consistency_probes(_spec(), playback_result_path=playback_path))
+    by_name = _by_name(run_runtime_consistency_checks(_spec(), playback_result_path=playback_path))
 
     assert by_name["runtime_visual_media_provenance_valid"].passed is True
     assert by_name["runtime_visual_media_provenance_valid"].measured["playback_kind"] == "esmini_gif"
@@ -89,7 +91,7 @@ def test_preview_fallback_does_not_pass_as_valid_esmini_runtime_media(tmp_path: 
         _playback_result("preview_fallback_gif", frame_count=1, animated=False, quality="valid"),
     )
 
-    by_name = _by_name(run_runtime_consistency_probes(_spec(), playback_result_path=playback_path))
+    by_name = _by_name(run_runtime_consistency_checks(_spec(), playback_result_path=playback_path))
 
     assert by_name["runtime_visual_media_provenance_valid"].passed is False
     assert by_name["runtime_visual_media_provenance_valid"].severity == "failure"
@@ -102,7 +104,7 @@ def test_corrupt_capture_quality_does_not_pass_visual_media_provenance(tmp_path:
         _playback_result("unavailable", frame_count=0, animated=False, quality="corrupt"),
     )
 
-    by_name = _by_name(run_runtime_consistency_probes(_spec(), playback_result_path=playback_path))
+    by_name = _by_name(run_runtime_consistency_checks(_spec(), playback_result_path=playback_path))
 
     assert by_name["runtime_visual_media_provenance_valid"].passed is False
     assert by_name["runtime_visual_media_provenance_valid"].severity == "failure"
@@ -113,7 +115,7 @@ def test_motion_requires_event_action_evidence_and_animated_esmini_media(tmp_pat
     log_path = _write_log(tmp_path, _successful_log())
     single_frame = _write_playback(tmp_path, _playback_result("esmini_single_frame", frame_count=1, animated=False))
 
-    by_name = _by_name(run_runtime_consistency_probes(_spec(), esmini_log_path=log_path, playback_result_path=single_frame))
+    by_name = _by_name(run_runtime_consistency_checks(_spec(), esmini_log_path=log_path, playback_result_path=single_frame))
 
     assert by_name["runtime_pedestrian_event_reached_running_state"].passed is True
     assert by_name["runtime_trajectory_action_started"].passed is True
@@ -130,14 +132,14 @@ def test_runtime_pipeline_writes_results_from_generated_artifacts(tmp_path: Path
     xosc_path.write_text("xosc", encoding="utf-8")
     xodr_path.write_text("xodr", encoding="utf-8")
 
-    results = run_and_write_runtime_consistency_probes(
+    results = run_and_write_runtime_consistency_checks(
         _spec(),
         output_dir=tmp_path,
         xosc_path=xosc_path,
         xodr_path=xodr_path,
     )
 
-    result_path = tmp_path / "runtime_probe_results.json"
+    result_path = tmp_path / "runtime_check_results.json"
     assert result_path.exists()
     assert all(result.passed for result in results)
     written = json.loads(result_path.read_text(encoding="utf-8"))

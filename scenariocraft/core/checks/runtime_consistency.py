@@ -5,10 +5,10 @@ import re
 from pathlib import Path
 from typing import Any
 
-from scenariocraft.core.schemas import ProbeResult, ScenarioSpec
+from scenariocraft.core.schemas import CheckResult, ScenarioSpec
 
 
-RUNTIME_PROBE_NAMES = (
+RUNTIME_CHECK_NAMES = (
     "runtime_esmini_execution_available",
     "runtime_xodr_loaded",
     "runtime_pedestrian_event_started",
@@ -24,14 +24,14 @@ ANIMATED_ESMINI_MEDIA_KINDS = {"esmini_gif", "esmini_frame_sequence"}
 USABLE_MEDIA_QUALITY_STATUSES = {"valid", "suspicious"}
 
 
-def run_runtime_consistency_probes(
+def run_runtime_consistency_checks(
     spec: ScenarioSpec,
     *,
     xosc_path: Path | None = None,
     xodr_path: Path | None = None,
     esmini_log_path: Path | None = None,
     playback_result_path: Path | None = None,
-) -> tuple[ProbeResult, ...]:
+) -> tuple[CheckResult, ...]:
     """Evaluate optional esmini runtime evidence without requiring esmini execution."""
     log_text, log_error = _read_text(esmini_log_path)
     playback_result, playback_error = _read_json(playback_result_path)
@@ -47,18 +47,18 @@ def run_runtime_consistency_probes(
         playback_error=playback_error,
     )
     return (
-        _execution_available_probe(evidence),
-        _xodr_loaded_probe(evidence),
-        _event_started_probe(evidence),
-        _event_running_probe(evidence),
-        _event_completed_probe(evidence),
-        _trajectory_action_started_probe(evidence),
-        _visual_media_probe(evidence),
-        _runtime_motion_verifiable_probe(evidence),
+        _execution_available_check(evidence),
+        _xodr_loaded_check(evidence),
+        _event_started_check(evidence),
+        _event_running_check(evidence),
+        _event_completed_check(evidence),
+        _trajectory_action_started_check(evidence),
+        _visual_media_check(evidence),
+        _runtime_motion_verifiable_check(evidence),
     )
 
 
-def _execution_available_probe(evidence: dict[str, object]) -> ProbeResult:
+def _execution_available_check(evidence: dict[str, object]) -> CheckResult:
     playback_result = evidence["playback_result"]
     log_available = bool(evidence["log_available"])
     esmini_available = _bool_or_none(playback_result.get("esmini_available")) if isinstance(playback_result, dict) else None
@@ -83,13 +83,13 @@ def _execution_available_probe(evidence: dict[str, object]) -> ProbeResult:
     )
 
 
-def _xodr_loaded_probe(evidence: dict[str, object]) -> ProbeResult:
+def _xodr_loaded_check(evidence: dict[str, object]) -> CheckResult:
     if not evidence["xodr_expected"]:
         return _result(
             name="runtime_xodr_loaded",
             passed=True,
             severity="note",
-            message="No XODR artifact was expected for this runtime probe input.",
+            message="No XODR artifact was expected for this runtime check input.",
             measured=evidence,
         )
     if not evidence["log_available"]:
@@ -114,8 +114,8 @@ def _xodr_loaded_probe(evidence: dict[str, object]) -> ProbeResult:
     )
 
 
-def _event_started_probe(evidence: dict[str, object]) -> ProbeResult:
-    return _event_probe(
+def _event_started_check(evidence: dict[str, object]) -> CheckResult:
+    return _event_check(
         evidence,
         name="runtime_pedestrian_event_started",
         evidence_key="pedestrian_event_started",
@@ -125,8 +125,8 @@ def _event_started_probe(evidence: dict[str, object]) -> ProbeResult:
     )
 
 
-def _event_running_probe(evidence: dict[str, object]) -> ProbeResult:
-    return _event_probe(
+def _event_running_check(evidence: dict[str, object]) -> CheckResult:
+    return _event_check(
         evidence,
         name="runtime_pedestrian_event_reached_running_state",
         evidence_key="pedestrian_event_running",
@@ -136,8 +136,8 @@ def _event_running_probe(evidence: dict[str, object]) -> ProbeResult:
     )
 
 
-def _event_completed_probe(evidence: dict[str, object]) -> ProbeResult:
-    return _event_probe(
+def _event_completed_check(evidence: dict[str, object]) -> CheckResult:
+    return _event_check(
         evidence,
         name="runtime_pedestrian_event_completed",
         evidence_key="pedestrian_event_completed",
@@ -147,7 +147,7 @@ def _event_completed_probe(evidence: dict[str, object]) -> ProbeResult:
     )
 
 
-def _trajectory_action_started_probe(evidence: dict[str, object]) -> ProbeResult:
+def _trajectory_action_started_check(evidence: dict[str, object]) -> CheckResult:
     if not evidence["log_available"]:
         return _result(
             name="runtime_trajectory_action_started",
@@ -171,7 +171,7 @@ def _trajectory_action_started_probe(evidence: dict[str, object]) -> ProbeResult
     )
 
 
-def _visual_media_probe(evidence: dict[str, object]) -> ProbeResult:
+def _visual_media_check(evidence: dict[str, object]) -> CheckResult:
     playback_result = evidence["playback_result"]
     if not isinstance(playback_result, dict):
         return _result(
@@ -201,7 +201,7 @@ def _visual_media_probe(evidence: dict[str, object]) -> ProbeResult:
     )
 
 
-def _runtime_motion_verifiable_probe(evidence: dict[str, object]) -> ProbeResult:
+def _runtime_motion_verifiable_check(evidence: dict[str, object]) -> CheckResult:
     passed = bool(evidence["runtime_motion_verifiable"])
     if passed:
         return _result(
@@ -222,7 +222,7 @@ def _runtime_motion_verifiable_probe(evidence: dict[str, object]) -> ProbeResult
     )
 
 
-def _event_probe(
+def _event_check(
     evidence: dict[str, object],
     *,
     name: str,
@@ -230,7 +230,7 @@ def _event_probe(
     pass_message: str,
     missing_message: str,
     failure_message: str,
-) -> ProbeResult:
+) -> CheckResult:
     if not evidence["log_available"]:
         return _result(name=name, passed=False, severity="warning", message=missing_message, measured=evidence)
     passed = bool(evidence[evidence_key])
@@ -379,11 +379,14 @@ def _result(
     severity: str,
     message: str,
     measured: dict[str, object],
-) -> ProbeResult:
-    return ProbeResult(
+) -> CheckResult:
+    return CheckResult(
         name=name,
         passed=passed,
         severity=severity,
         message=message,
+        category="runtime_behavior",
+        intent_relation="not_applicable",
+        repair_action="none",
         measured=measured,
     )

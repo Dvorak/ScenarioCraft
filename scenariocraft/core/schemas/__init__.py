@@ -37,7 +37,7 @@ from scenariocraft.core.schemas.trigger_spec import (
     TriggerConditionSpec,
     TriggerSpec,
 )
-from scenariocraft.core.schemas.probe_result import ProbeResult
+from scenariocraft.core.schemas.check_result import CheckResult
 
 __all__ = [
     "ActorSpec",
@@ -50,7 +50,7 @@ __all__ = [
     "PatchSpecError",
     "Point2D",
     "Pose2D",
-    "ProbeResult",
+    "CheckResult",
     "RoadBandSpec",
     "RoadSpec",
     "RepositionActorToBandOperation",

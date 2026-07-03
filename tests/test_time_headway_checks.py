@@ -1,7 +1,7 @@
 from dataclasses import replace
 
 from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
-from scenariocraft.core.probes import run_time_headway_probes
+from scenariocraft.core.checks import run_time_headway_checks
 from scenariocraft.core.schemas import ActorSpec, Pose2D, TriggerConditionSpec, TriggerSpec
 from scenariocraft.core.metrics import compute_timing_metrics, time_headway_s
 
@@ -10,7 +10,7 @@ def test_time_headway_metric_computes_for_same_lane_lead_actor() -> None:
     spec = _time_headway_spec(lead_x_m=25.0, lead_y_m=0.0, rule="greaterThan", threshold_s=2.0)
 
     metrics = compute_timing_metrics(spec)
-    results = run_time_headway_probes(spec)
+    results = run_time_headway_checks(spec)
 
     assert metrics.time_headway_s == 25.0 / (35.0 / 3.6)
     assert time_headway_s(spec) == metrics.time_headway_s
@@ -24,10 +24,10 @@ def test_time_headway_metric_computes_for_same_lane_lead_actor() -> None:
     assert results[0].measured["target_actor_id"] == "lead_vehicle"
 
 
-def test_time_headway_probe_reports_condition_rule_mismatch() -> None:
+def test_time_headway_check_reports_condition_rule_mismatch() -> None:
     spec = _time_headway_spec(lead_x_m=25.0, lead_y_m=0.0, rule="lessThan", threshold_s=2.0)
 
-    by_name = {result.name: result for result in run_time_headway_probes(spec)}
+    by_name = {result.name: result for result in run_time_headway_checks(spec)}
 
     assert by_name["time_headway_computable"].passed is True
     assert by_name["time_headway_condition_matches_rule"].passed is False
@@ -39,8 +39,8 @@ def test_time_headway_requires_same_lane_positive_lead_gap() -> None:
     lateral_spec = _time_headway_spec(lead_x_m=25.0, lead_y_m=3.25, rule="greaterThan", threshold_s=2.0)
     behind_spec = _time_headway_spec(lead_x_m=-5.0, lead_y_m=0.0, rule="greaterThan", threshold_s=2.0)
 
-    lateral = {result.name: result for result in run_time_headway_probes(lateral_spec)}
-    behind = {result.name: result for result in run_time_headway_probes(behind_spec)}
+    lateral = {result.name: result for result in run_time_headway_checks(lateral_spec)}
+    behind = {result.name: result for result in run_time_headway_checks(behind_spec)}
 
     assert lateral["time_headway_computable"].passed is False
     assert lateral["time_headway_computable"].measured["lateral_offset_m"] == 3.25
@@ -48,16 +48,16 @@ def test_time_headway_requires_same_lane_positive_lead_gap() -> None:
     assert behind["time_headway_computable"].measured["longitudinal_gap_m"] == -5.0
 
 
-def test_time_headway_probes_are_absent_for_non_thw_trigger_conditions() -> None:
+def test_time_headway_checks_are_absent_for_non_thw_trigger_conditions() -> None:
     spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
 
-    assert run_time_headway_probes(spec) == ()
+    assert run_time_headway_checks(spec) == ()
 
 
 def test_time_headway_layout_free_spec_reports_unavailable_without_crashing() -> None:
     spec = replace(_time_headway_spec(lead_x_m=25.0, lead_y_m=0.0), layout=None, spatial_relations=())
 
-    by_name = {result.name: result for result in run_time_headway_probes(spec)}
+    by_name = {result.name: result for result in run_time_headway_checks(spec)}
 
     assert by_name["time_headway_computable"].passed is False
     assert by_name["time_headway_computable"].measured["time_headway_s"] is None

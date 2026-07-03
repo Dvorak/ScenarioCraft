@@ -3,7 +3,7 @@ from __future__ import annotations
 """Resolve ScenarioIntent into ScenarioSpec through registered templates.
 
 This module selects deterministic templates. It does not call providers,
-generate XML, run probes, or validate repair success.
+generate XML, run checks, or validate repair success.
 """
 
 from typing import Any

@@ -11,14 +11,13 @@ from itertools import chain
 
 CORE_PACKAGE_MODULES = (
     "scenariocraft.core.build",
+    "scenariocraft.core.checks",
     "scenariocraft.core.loop",
     "scenariocraft.core.metrics",
-    "scenariocraft.core.probes",
     "scenariocraft.core.repair",
     "scenariocraft.core.roads",
     "scenariocraft.core.schemas",
     "scenariocraft.core.templates",
-    "scenariocraft.core.validation",
 )
 
 DELIVERY_ADAPTER_MODULES = (
@@ -48,8 +47,8 @@ TOOL_SEMANTIC_GROUPS = {
         "scenariocraft.rendering.preview_2d",
         "scenariocraft.rendering.report",
     ),
-    "validation": (
-        "scenariocraft.core.validation.semantic",
+    "checks": (
+        "scenariocraft.core.checks.structural",
     ),
     "external_tools": (
         "scenariocraft.external_tools.asam_qc",

@@ -3,13 +3,13 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 
-from scenariocraft.core.probes.base import run_probes
+from scenariocraft.core.checks.runner import run_checks
 from scenariocraft.core.schemas import (
     FootprintSpec,
     LayoutSpec,
     Point2D,
     Pose2D,
-    ProbeResult,
+    CheckResult,
     RoadBandSpec,
     ScenarioSpec,
 )
@@ -21,46 +21,46 @@ PATH_TOLERANCE_M = 1e-6
 REQUIRED_PATH_CLEARANCE_M = 0.5
 
 
-class _PedestrianOcclusionProbe:
-    def __init__(self, name: str, check: Callable[[ScenarioSpec], ProbeResult]) -> None:
+class _PedestrianOcclusionCheck:
+    def __init__(self, name: str, check: Callable[[ScenarioSpec], CheckResult]) -> None:
         self.name = name
         self._check = check
 
-    def run(self, spec: ScenarioSpec) -> ProbeResult:
+    def run(self, spec: ScenarioSpec) -> CheckResult:
         return self._check(spec)
 
 
-def run_pedestrian_occlusion_probes(spec: ScenarioSpec) -> tuple[ProbeResult, ...]:
+def run_pedestrian_occlusion_checks(spec: ScenarioSpec) -> tuple[CheckResult, ...]:
     if spec.scenario_type != "pedestrian_occlusion" or spec.layout is None:
         return ()
-    probes = (
-        _PedestrianOcclusionProbe("ego_footprint_in_ego_lane", _ego_footprint_in_ego_lane),
-        _PedestrianOcclusionProbe("parked_van_footprint_in_parking_strip", _parked_van_footprint_in_parking_strip),
-        _PedestrianOcclusionProbe("pedestrian_initial_footprint_in_sidewalk", _pedestrian_initial_footprint_in_sidewalk),
-        _PedestrianOcclusionProbe("pedestrian_path_starts_at_pedestrian_pose", _pedestrian_path_starts_at_pedestrian_pose),
-        _PedestrianOcclusionProbe("pedestrian_path_crosses_ego_lane", _pedestrian_path_crosses_ego_lane),
-        _PedestrianOcclusionProbe("pedestrian_path_clear_of_occluder", _pedestrian_path_clear_of_occluder),
-        _PedestrianOcclusionProbe("pedestrian_line_of_sight_occluded_by_van", _pedestrian_line_of_sight_occluded_by_van),
-        _PedestrianOcclusionProbe("conflict_point_on_path_and_in_ego_lane", _conflict_point_on_path_and_in_ego_lane),
-        _PedestrianOcclusionProbe("trigger_point_before_conflict_and_in_ego_lane", _trigger_point_before_conflict_and_in_ego_lane),
+    checks = (
+        _PedestrianOcclusionCheck("ego_footprint_in_ego_lane", _ego_footprint_in_ego_lane),
+        _PedestrianOcclusionCheck("parked_van_footprint_in_parking_strip", _parked_van_footprint_in_parking_strip),
+        _PedestrianOcclusionCheck("pedestrian_initial_footprint_in_sidewalk", _pedestrian_initial_footprint_in_sidewalk),
+        _PedestrianOcclusionCheck("pedestrian_path_starts_at_pedestrian_pose", _pedestrian_path_starts_at_pedestrian_pose),
+        _PedestrianOcclusionCheck("pedestrian_path_crosses_ego_lane", _pedestrian_path_crosses_ego_lane),
+        _PedestrianOcclusionCheck("pedestrian_path_clear_of_occluder", _pedestrian_path_clear_of_occluder),
+        _PedestrianOcclusionCheck("pedestrian_line_of_sight_occluded_by_van", _pedestrian_line_of_sight_occluded_by_van),
+        _PedestrianOcclusionCheck("conflict_point_on_path_and_in_ego_lane", _conflict_point_on_path_and_in_ego_lane),
+        _PedestrianOcclusionCheck("trigger_point_before_conflict_and_in_ego_lane", _trigger_point_before_conflict_and_in_ego_lane),
     )
-    return run_probes(spec, probes)
+    return run_checks(spec, checks)
 
 
-def run_pedestrian_occlusion_timing_probes(spec: ScenarioSpec) -> tuple[ProbeResult, ...]:
+def run_pedestrian_occlusion_timing_checks(spec: ScenarioSpec) -> tuple[CheckResult, ...]:
     if spec.scenario_type != "pedestrian_occlusion":
         return ()
-    probes = (
-        _PedestrianOcclusionProbe("ego_lead_time_to_conflict_positive", _ego_lead_time_to_conflict_positive),
-        _PedestrianOcclusionProbe("ego_lead_time_within_timing_policy", _ego_lead_time_within_timing_policy),
-        _PedestrianOcclusionProbe("pedestrian_time_to_conflict_computable", _pedestrian_time_to_conflict_computable),
-        _PedestrianOcclusionProbe("pedestrian_conflict_timing_alignment", _pedestrian_conflict_timing_alignment),
-        _PedestrianOcclusionProbe("trigger_threshold_time_not_ttc", _trigger_threshold_time_not_ttc),
+    checks = (
+        _PedestrianOcclusionCheck("ego_lead_time_to_conflict_positive", _ego_lead_time_to_conflict_positive),
+        _PedestrianOcclusionCheck("ego_lead_time_within_timing_policy", _ego_lead_time_within_timing_policy),
+        _PedestrianOcclusionCheck("pedestrian_time_to_conflict_computable", _pedestrian_time_to_conflict_computable),
+        _PedestrianOcclusionCheck("pedestrian_conflict_timing_alignment", _pedestrian_conflict_timing_alignment),
+        _PedestrianOcclusionCheck("trigger_threshold_time_not_ttc", _trigger_threshold_time_not_ttc),
     )
-    return run_probes(spec, probes)
+    return run_checks(spec, checks)
 
 
-def _ego_lead_time_to_conflict_positive(spec: ScenarioSpec) -> ProbeResult:
+def _ego_lead_time_to_conflict_positive(spec: ScenarioSpec) -> CheckResult:
     metrics = compute_timing_metrics(spec)
     lead_time_s = metrics.ego_lead_time_to_conflict_s
     passed = lead_time_s is not None and lead_time_s > 0.0
@@ -78,7 +78,7 @@ def _ego_lead_time_to_conflict_positive(spec: ScenarioSpec) -> ProbeResult:
     )
 
 
-def _ego_lead_time_within_timing_policy(spec: ScenarioSpec) -> ProbeResult:
+def _ego_lead_time_within_timing_policy(spec: ScenarioSpec) -> CheckResult:
     metrics = compute_timing_metrics(spec)
     lead_time_s = metrics.ego_lead_time_to_conflict_s
     required_lead_s = _minimum_required_lead_time_s(spec)
@@ -97,7 +97,7 @@ def _ego_lead_time_within_timing_policy(spec: ScenarioSpec) -> ProbeResult:
     )
 
 
-def _pedestrian_time_to_conflict_computable(spec: ScenarioSpec) -> ProbeResult:
+def _pedestrian_time_to_conflict_computable(spec: ScenarioSpec) -> CheckResult:
     metrics = compute_timing_metrics(spec)
     passed = metrics.pedestrian_time_to_conflict_s is not None and metrics.pedestrian_time_to_conflict_s >= 0.0
     return _result(
@@ -109,7 +109,7 @@ def _pedestrian_time_to_conflict_computable(spec: ScenarioSpec) -> ProbeResult:
     )
 
 
-def _pedestrian_conflict_timing_alignment(spec: ScenarioSpec) -> ProbeResult:
+def _pedestrian_conflict_timing_alignment(spec: ScenarioSpec) -> CheckResult:
     metrics = compute_timing_metrics(spec)
     lead_time_s = metrics.ego_lead_time_to_conflict_s
     pedestrian_time_s = metrics.pedestrian_time_to_conflict_s
@@ -135,7 +135,7 @@ def _pedestrian_conflict_timing_alignment(spec: ScenarioSpec) -> ProbeResult:
     )
 
 
-def _trigger_threshold_time_not_ttc(spec: ScenarioSpec) -> ProbeResult:
+def _trigger_threshold_time_not_ttc(spec: ScenarioSpec) -> CheckResult:
     metrics = compute_timing_metrics(spec)
     passed = metrics.trigger_threshold_time_s is not None and metrics.target_ttc_s is not None
     return _result(
@@ -151,8 +151,8 @@ def _trigger_threshold_time_not_ttc(spec: ScenarioSpec) -> ProbeResult:
     )
 
 
-def _ego_footprint_in_ego_lane(spec: ScenarioSpec) -> ProbeResult:
-    return _footprint_in_band_probe(
+def _ego_footprint_in_ego_lane(spec: ScenarioSpec) -> CheckResult:
+    return _footprint_in_band_check(
         spec,
         name="ego_footprint_in_ego_lane",
         actor_id="ego",
@@ -161,8 +161,8 @@ def _ego_footprint_in_ego_lane(spec: ScenarioSpec) -> ProbeResult:
     )
 
 
-def _parked_van_footprint_in_parking_strip(spec: ScenarioSpec) -> ProbeResult:
-    return _footprint_in_band_probe(
+def _parked_van_footprint_in_parking_strip(spec: ScenarioSpec) -> CheckResult:
+    return _footprint_in_band_check(
         spec,
         name="parked_van_footprint_in_parking_strip",
         actor_id="parked_van",
@@ -174,8 +174,8 @@ def _parked_van_footprint_in_parking_strip(spec: ScenarioSpec) -> ProbeResult:
     )
 
 
-def _pedestrian_initial_footprint_in_sidewalk(spec: ScenarioSpec) -> ProbeResult:
-    return _footprint_in_band_probe(
+def _pedestrian_initial_footprint_in_sidewalk(spec: ScenarioSpec) -> CheckResult:
+    return _footprint_in_band_check(
         spec,
         name="pedestrian_initial_footprint_in_sidewalk",
         actor_id="pedestrian",
@@ -187,7 +187,7 @@ def _pedestrian_initial_footprint_in_sidewalk(spec: ScenarioSpec) -> ProbeResult
     )
 
 
-def _pedestrian_path_starts_at_pedestrian_pose(spec: ScenarioSpec) -> ProbeResult:
+def _pedestrian_path_starts_at_pedestrian_pose(spec: ScenarioSpec) -> CheckResult:
     layout = _require_layout(spec)
     path = _path_points(layout, "pedestrian_crossing_path")
     pose = _pose(layout, "pedestrian")
@@ -211,7 +211,7 @@ def _pedestrian_path_starts_at_pedestrian_pose(spec: ScenarioSpec) -> ProbeResul
     )
 
 
-def _pedestrian_path_crosses_ego_lane(spec: ScenarioSpec) -> ProbeResult:
+def _pedestrian_path_crosses_ego_lane(spec: ScenarioSpec) -> CheckResult:
     layout = _require_layout(spec)
     path = _path_points(layout, "pedestrian_crossing_path")
     lane = _band(layout, "ego_driving_lane")
@@ -233,7 +233,7 @@ def _pedestrian_path_crosses_ego_lane(spec: ScenarioSpec) -> ProbeResult:
     )
 
 
-def _pedestrian_path_clear_of_occluder(spec: ScenarioSpec) -> ProbeResult:
+def _pedestrian_path_clear_of_occluder(spec: ScenarioSpec) -> CheckResult:
     layout = _require_layout(spec)
     path = _path_points(layout, "pedestrian_crossing_path")
     van_rect = _actor_rect(layout, "parked_van")
@@ -254,7 +254,7 @@ def _pedestrian_path_clear_of_occluder(spec: ScenarioSpec) -> ProbeResult:
     )
 
 
-def _pedestrian_line_of_sight_occluded_by_van(spec: ScenarioSpec) -> ProbeResult:
+def _pedestrian_line_of_sight_occluded_by_van(spec: ScenarioSpec) -> CheckResult:
     layout = _require_layout(spec)
     ego = _pose(layout, "ego")
     pedestrian = _pose(layout, "pedestrian")
@@ -276,7 +276,7 @@ def _pedestrian_line_of_sight_occluded_by_van(spec: ScenarioSpec) -> ProbeResult
     )
 
 
-def _conflict_point_on_path_and_in_ego_lane(spec: ScenarioSpec) -> ProbeResult:
+def _conflict_point_on_path_and_in_ego_lane(spec: ScenarioSpec) -> CheckResult:
     layout = _require_layout(spec)
     conflict = _point(layout, "conflict_point")
     path = _path_points(layout, "pedestrian_crossing_path")
@@ -302,7 +302,7 @@ def _conflict_point_on_path_and_in_ego_lane(spec: ScenarioSpec) -> ProbeResult:
     )
 
 
-def _trigger_point_before_conflict_and_in_ego_lane(spec: ScenarioSpec) -> ProbeResult:
+def _trigger_point_before_conflict_and_in_ego_lane(spec: ScenarioSpec) -> CheckResult:
     layout = _require_layout(spec)
     trigger = _point(layout, "trigger_point")
     conflict = _point(layout, "conflict_point")
@@ -325,7 +325,7 @@ def _trigger_point_before_conflict_and_in_ego_lane(spec: ScenarioSpec) -> ProbeR
     )
 
 
-def _footprint_in_band_probe(
+def _footprint_in_band_check(
     spec: ScenarioSpec,
     *,
     name: str,
@@ -333,7 +333,7 @@ def _footprint_in_band_probe(
     band_id: str,
     failure_message: str,
     suggested_operations: tuple[dict[str, object], ...] = (),
-) -> ProbeResult:
+) -> CheckResult:
     layout = _require_layout(spec)
     rect = _actor_rect(layout, actor_id)
     band = _band(layout, band_id)
@@ -364,12 +364,15 @@ def _result(
     failure_message: str,
     measured: dict[str, object],
     suggested_operations: tuple[dict[str, object], ...] = (),
-) -> ProbeResult:
-    return ProbeResult(
+) -> CheckResult:
+    return CheckResult(
         name=name,
         passed=passed,
-        severity="note" if passed else "failure",
+        severity="note" if passed else "repairable",
         message=pass_message if passed else failure_message,
+        category="intent_alignment",
+        intent_relation="matches_intent" if passed else "mismatches_intent",
+        repair_action=None if passed else ("repair" if suggested_operations else "none"),
         measured=measured,
         suggested_operations=() if passed else suggested_operations,
     )
@@ -429,7 +432,7 @@ def _ego_speed_mps(spec: ScenarioSpec) -> float | None:
 
 def _require_layout(spec: ScenarioSpec) -> LayoutSpec:
     if spec.layout is None:
-        raise ValueError("pedestrian_occlusion probes require ScenarioSpec.layout.")
+        raise ValueError("pedestrian_occlusion checks require ScenarioSpec.layout.")
     return spec.layout
 
 

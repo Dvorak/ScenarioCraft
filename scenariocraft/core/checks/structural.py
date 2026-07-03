@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 
-from scenariocraft.core.schemas import ScenarioSpec
+from scenariocraft.core.schemas import CheckResult, ScenarioSpec
 
 
 @dataclass(frozen=True)
@@ -69,3 +69,21 @@ def validate_semantics(spec: ScenarioSpec) -> SemanticValidationResult:
         ),
     ]
     return SemanticValidationResult(passed=all(check.passed for check in checks), checks=checks)
+
+
+def run_structural_validity_checks(spec: ScenarioSpec) -> tuple[CheckResult, ...]:
+    """Return semantic validation as CheckResult-compatible structural evidence."""
+
+    result = validate_semantics(spec)
+    return tuple(
+        CheckResult(
+            name=check.name,
+            passed=check.passed,
+            severity="note" if check.passed else "blocking",
+            message=check.message,
+            category="structural_validity",
+            intent_relation="not_applicable",
+            repair_action="none",
+        )
+        for check in result.checks
+    )

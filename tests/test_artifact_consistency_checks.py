@@ -8,10 +8,10 @@ from xml.etree import ElementTree as ET
 import pytest
 
 from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
-from scenariocraft.core.probes import run_artifact_consistency_probes
+from scenariocraft.core.checks import run_artifact_consistency_checks
 from scenariocraft.core.build import BuildResult, build_openscenario
 
-EXPECTED_PROBE_NAMES = [
+EXPECTED_CHECK_NAMES = [
     "xosc_actor_poses_match_layout",
     "xosc_pedestrian_trajectory_matches_layout_path",
     "xosc_logic_file_is_relative",
@@ -27,22 +27,24 @@ def canonical_artifacts(tmp_path: Path):
     return spec, build_result
 
 
-def test_canonical_artifact_consistency_probes_all_pass(canonical_artifacts) -> None:
+def test_canonical_artifact_consistency_checks_all_pass(canonical_artifacts) -> None:
     spec, build_result = canonical_artifacts
 
-    results = run_artifact_consistency_probes(
+    results = run_artifact_consistency_checks(
         spec,
         xosc_path=build_result.xosc_path,
         xodr_path=build_result.xodr_path,
     )
 
-    assert [result.name for result in results] == EXPECTED_PROBE_NAMES
+    assert [result.name for result in results] == EXPECTED_CHECK_NAMES
     assert len(results) == 5
     assert all(result.passed for result in results)
     assert {result.severity for result in results} == {"note"}
+    assert {result.category for result in results} == {"artifact_consistency"}
+    assert {result.intent_relation for result in results} == {"not_applicable"}
 
 
-def test_mutated_actor_world_position_fails_pose_probe(canonical_artifacts, tmp_path: Path) -> None:
+def test_mutated_actor_world_position_fails_pose_check(canonical_artifacts, tmp_path: Path) -> None:
     spec, build_result = canonical_artifacts
     copied = _copy_artifacts(build_result, tmp_path / "mutated_pose")
     root = ET.parse(copied.xosc_path).getroot()
@@ -54,13 +56,16 @@ def test_mutated_actor_world_position_fails_pose_probe(canonical_artifacts, tmp_
     result = _result(spec, copied, "xosc_actor_poses_match_layout")
 
     assert result.passed is False
-    assert result.severity == "failure"
+    assert result.severity == "repairable"
+    assert result.category == "artifact_consistency"
+    assert result.intent_relation == "not_applicable"
+    assert result.repair_action == "none"
     assert result.measured["actor_id"] == ["ego", "parked_van", "pedestrian"]
     assert result.measured["position_error_m"]["ego"] == 1.0
     assert result.suggested_operations[0]["op"] == "rebuild_artifacts"
 
 
-def test_mutated_pedestrian_vertex_fails_trajectory_probe(canonical_artifacts, tmp_path: Path) -> None:
+def test_mutated_pedestrian_vertex_fails_trajectory_check(canonical_artifacts, tmp_path: Path) -> None:
     spec, build_result = canonical_artifacts
     copied = _copy_artifacts(build_result, tmp_path / "mutated_trajectory")
     root = ET.parse(copied.xosc_path).getroot()
@@ -81,7 +86,7 @@ def test_mutated_pedestrian_vertex_fails_trajectory_probe(canonical_artifacts, t
     assert result.measured["time_attributes_parseable"] is True
 
 
-def test_absolute_logic_file_path_fails_relative_probe(canonical_artifacts, tmp_path: Path) -> None:
+def test_absolute_logic_file_path_fails_relative_check(canonical_artifacts, tmp_path: Path) -> None:
     spec, build_result = canonical_artifacts
     copied = _copy_artifacts(build_result, tmp_path / "absolute_logic_file")
     root = ET.parse(copied.xosc_path).getroot()
@@ -97,7 +102,7 @@ def test_absolute_logic_file_path_fails_relative_probe(canonical_artifacts, tmp_
     assert Path(result.measured["logic_file_path"]).is_absolute()
 
 
-def test_missing_logic_file_target_fails_exists_probe(canonical_artifacts, tmp_path: Path) -> None:
+def test_missing_logic_file_target_fails_exists_check(canonical_artifacts, tmp_path: Path) -> None:
     spec, build_result = canonical_artifacts
     copied = _copy_artifacts(build_result, tmp_path / "missing_logic_file")
     root = ET.parse(copied.xosc_path).getroot()
@@ -114,7 +119,7 @@ def test_missing_logic_file_target_fails_exists_probe(canonical_artifacts, tmp_p
     assert result.suggested_operations[0]["op"] == "materialize_canonical_road_asset"
 
 
-def test_other_logic_file_basename_fails_canonical_road_probe(canonical_artifacts, tmp_path: Path) -> None:
+def test_other_logic_file_basename_fails_canonical_road_check(canonical_artifacts, tmp_path: Path) -> None:
     spec, build_result = canonical_artifacts
     copied = _copy_artifacts(build_result, tmp_path / "other_logic_file")
     assert copied.xodr_path is not None
@@ -134,11 +139,11 @@ def test_other_logic_file_basename_fails_canonical_road_probe(canonical_artifact
     assert result.measured["observed_basename"] == "other_road.xodr"
 
 
-def test_layout_free_spec_returns_no_artifact_consistency_probes(tmp_path: Path) -> None:
+def test_layout_free_spec_returns_no_artifact_consistency_checks(tmp_path: Path) -> None:
     spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
     layout_free_spec = replace(spec, layout=None, spatial_relations=(), timing=None)
 
-    results = run_artifact_consistency_probes(
+    results = run_artifact_consistency_checks(
         layout_free_spec,
         xosc_path=tmp_path / "not_built.xosc",
         xodr_path=None,
@@ -159,7 +164,7 @@ def _copy_artifacts(build_result: BuildResult, destination: Path) -> BuildResult
 
 
 def _result(spec, build_result: BuildResult, name: str):
-    results = run_artifact_consistency_probes(
+    results = run_artifact_consistency_checks(
         spec,
         xosc_path=build_result.xosc_path,
         xodr_path=build_result.xodr_path,

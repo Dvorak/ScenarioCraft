@@ -2,33 +2,33 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from scenariocraft.core.probes.base import run_probes
-from scenariocraft.core.schemas import ProbeResult, ScenarioSpec
+from scenariocraft.core.checks.runner import run_checks
+from scenariocraft.core.schemas import CheckResult, ScenarioSpec
 from scenariocraft.core.metrics import time_headway_s
 
 
-class _TimeHeadwayProbe:
-    def __init__(self, name: str, check: Callable[[ScenarioSpec], ProbeResult]) -> None:
+class _TimeHeadwayCheck:
+    def __init__(self, name: str, check: Callable[[ScenarioSpec], CheckResult]) -> None:
         self.name = name
         self._check = check
 
-    def run(self, spec: ScenarioSpec) -> ProbeResult:
+    def run(self, spec: ScenarioSpec) -> CheckResult:
         return self._check(spec)
 
 
-def run_time_headway_probes(spec: ScenarioSpec) -> tuple[ProbeResult, ...]:
+def run_time_headway_checks(spec: ScenarioSpec) -> tuple[CheckResult, ...]:
     condition = spec.trigger.condition
     if condition is None or condition.metric != "time_headway":
         return ()
-    probes = (
-        _TimeHeadwayProbe("time_headway_computable", _time_headway_computable),
-        _TimeHeadwayProbe("time_headway_condition_matches_rule", _time_headway_condition_matches_rule),
-        _TimeHeadwayProbe("time_headway_metric_not_ttc", _time_headway_metric_not_ttc),
+    checks = (
+        _TimeHeadwayCheck("time_headway_computable", _time_headway_computable),
+        _TimeHeadwayCheck("time_headway_condition_matches_rule", _time_headway_condition_matches_rule),
+        _TimeHeadwayCheck("time_headway_metric_not_ttc", _time_headway_metric_not_ttc),
     )
-    return run_probes(spec, probes)
+    return run_checks(spec, checks)
 
 
-def _time_headway_computable(spec: ScenarioSpec) -> ProbeResult:
+def _time_headway_computable(spec: ScenarioSpec) -> CheckResult:
     thw_s = time_headway_s(spec)
     return _result(
         name="time_headway_computable",
@@ -39,7 +39,7 @@ def _time_headway_computable(spec: ScenarioSpec) -> ProbeResult:
     )
 
 
-def _time_headway_condition_matches_rule(spec: ScenarioSpec) -> ProbeResult:
+def _time_headway_condition_matches_rule(spec: ScenarioSpec) -> CheckResult:
     condition = spec.trigger.condition
     thw_s = time_headway_s(spec)
     passed = condition is not None and thw_s is not None and _matches_rule(thw_s, condition.rule, condition.value)
@@ -52,7 +52,7 @@ def _time_headway_condition_matches_rule(spec: ScenarioSpec) -> ProbeResult:
     )
 
 
-def _time_headway_metric_not_ttc(spec: ScenarioSpec) -> ProbeResult:
+def _time_headway_metric_not_ttc(spec: ScenarioSpec) -> CheckResult:
     condition = spec.trigger.condition
     return _result(
         name="time_headway_metric_not_ttc",
@@ -106,11 +106,14 @@ def _result(
     pass_message: str,
     failure_message: str,
     measured: dict[str, object],
-) -> ProbeResult:
-    return ProbeResult(
+) -> CheckResult:
+    return CheckResult(
         name=name,
         passed=passed,
         severity="note" if passed else "warning",
         message=pass_message if passed else failure_message,
+        category="intent_alignment",
+        intent_relation="matches_intent" if passed else "mismatches_intent",
+        repair_action="none",
         measured=measured,
     )

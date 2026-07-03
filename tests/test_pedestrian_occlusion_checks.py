@@ -1,10 +1,10 @@
 from dataclasses import replace
 
 from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
-from scenariocraft.core.probes import run_pedestrian_occlusion_probes, run_pedestrian_occlusion_timing_probes
+from scenariocraft.core.checks import run_pedestrian_occlusion_checks, run_pedestrian_occlusion_timing_checks
 from scenariocraft.core.schemas import PathSpec, Point2D, Pose2D
 
-EXPECTED_PROBE_NAMES = [
+EXPECTED_CHECK_NAMES = [
     "ego_footprint_in_ego_lane",
     "parked_van_footprint_in_parking_strip",
     "pedestrian_initial_footprint_in_sidewalk",
@@ -16,7 +16,7 @@ EXPECTED_PROBE_NAMES = [
     "trigger_point_before_conflict_and_in_ego_lane",
 ]
 
-EXPECTED_TIMING_PROBE_NAMES = [
+EXPECTED_TIMING_CHECK_NAMES = [
     "ego_lead_time_to_conflict_positive",
     "ego_lead_time_within_timing_policy",
     "pedestrian_time_to_conflict_computable",
@@ -25,28 +25,30 @@ EXPECTED_TIMING_PROBE_NAMES = [
 ]
 
 
-def test_canonical_pedestrian_occlusion_probes_all_pass() -> None:
+def test_canonical_pedestrian_occlusion_checks_all_pass() -> None:
     spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
 
-    results = run_pedestrian_occlusion_probes(spec)
+    results = run_pedestrian_occlusion_checks(spec)
 
-    assert [result.name for result in results] == EXPECTED_PROBE_NAMES
+    assert [result.name for result in results] == EXPECTED_CHECK_NAMES
     assert all(result.passed for result in results)
     assert {result.severity for result in results} == {"note"}
+    assert {result.category for result in results} == {"intent_alignment"}
+    assert {result.intent_relation for result in results} == {"matches_intent"}
 
 
-def test_layout_free_spec_returns_no_template_aware_probes() -> None:
+def test_layout_free_spec_returns_no_template_aware_checks() -> None:
     spec = replace(_canonical_spec(), layout=None, spatial_relations=())
 
-    assert run_pedestrian_occlusion_probes(spec) == ()
+    assert run_pedestrian_occlusion_checks(spec) == ()
 
 
 def test_layout_free_spec_returns_timing_unavailable_evidence_without_crashing() -> None:
     spec = replace(_canonical_spec(), layout=None, spatial_relations=())
 
-    results = run_pedestrian_occlusion_timing_probes(spec)
+    results = run_pedestrian_occlusion_timing_checks(spec)
 
-    assert [result.name for result in results] == EXPECTED_TIMING_PROBE_NAMES
+    assert [result.name for result in results] == EXPECTED_TIMING_CHECK_NAMES
     assert not next(result for result in results if result.name == "ego_lead_time_to_conflict_positive").passed
     assert not next(result for result in results if result.name == "pedestrian_time_to_conflict_computable").passed
     threshold = next(result for result in results if result.name == "trigger_threshold_time_not_ttc")
@@ -55,35 +57,38 @@ def test_layout_free_spec_returns_timing_unavailable_evidence_without_crashing()
     assert threshold.measured["pedestrian_time_to_conflict_s"] is None
 
 
-def test_unsupported_scenario_type_returns_no_template_aware_probes() -> None:
+def test_unsupported_scenario_type_returns_no_template_aware_checks() -> None:
     spec = replace(_canonical_spec(), scenario_type="cut_in")
 
-    assert run_pedestrian_occlusion_probes(spec) == ()
-    assert run_pedestrian_occlusion_timing_probes(spec) == ()
+    assert run_pedestrian_occlusion_checks(spec) == ()
+    assert run_pedestrian_occlusion_timing_checks(spec) == ()
 
 
-def test_canonical_pedestrian_occlusion_timing_probes_all_pass() -> None:
+def test_canonical_pedestrian_occlusion_timing_checks_all_pass() -> None:
     spec = _canonical_spec()
 
-    results = run_pedestrian_occlusion_timing_probes(spec)
+    results = run_pedestrian_occlusion_timing_checks(spec)
 
-    assert [result.name for result in results] == EXPECTED_TIMING_PROBE_NAMES
+    assert [result.name for result in results] == EXPECTED_TIMING_CHECK_NAMES
     assert all(result.passed for result in results)
-    lead_probe = next(result for result in results if result.name == "ego_lead_time_within_timing_policy")
-    assert lead_probe.measured["target_ttc_s"] == 1.5
-    assert lead_probe.measured["trigger_threshold_time_s"] > 0
-    assert lead_probe.measured["ego_lead_time_to_conflict_s"] > 0
-    assert lead_probe.measured["pedestrian_time_to_conflict_s"] > 0
-    assert lead_probe.suggested_operations == ()
+    lead_check = next(result for result in results if result.name == "ego_lead_time_within_timing_policy")
+    assert lead_check.measured["target_ttc_s"] == 1.5
+    assert lead_check.measured["trigger_threshold_time_s"] > 0
+    assert lead_check.measured["ego_lead_time_to_conflict_s"] > 0
+    assert lead_check.measured["pedestrian_time_to_conflict_s"] > 0
+    assert lead_check.suggested_operations == ()
 
 
-def test_van_shifted_outside_parking_strip_fails_parking_probe() -> None:
+def test_van_shifted_outside_parking_strip_fails_parking_check() -> None:
     spec = _with_pose("parked_van", Pose2D(20.0, 0.0, 0.0))
 
-    result = _probe_result(spec, "parked_van_footprint_in_parking_strip")
+    result = _check_result(spec, "parked_van_footprint_in_parking_strip")
 
     assert result.passed is False
-    assert result.severity == "failure"
+    assert result.severity == "repairable"
+    assert result.category == "intent_alignment"
+    assert result.intent_relation == "mismatches_intent"
+    assert result.repair_action == "repair"
     assert result.measured["actor_id"] == "parked_van"
     assert result.measured["band_id"] == "ego_side_parking_strip"
     assert "actor_y_min_m" in result.measured
@@ -91,55 +96,55 @@ def test_van_shifted_outside_parking_strip_fails_parking_probe() -> None:
     assert result.suggested_operations[0]["op"] == "reposition_actor"
 
 
-def test_pedestrian_shifted_outside_sidewalk_fails_sidewalk_probe() -> None:
+def test_pedestrian_shifted_outside_sidewalk_fails_sidewalk_check() -> None:
     spec = _with_pose("pedestrian", Pose2D(25.0, 3.0, 0.0))
 
-    result = _probe_result(spec, "pedestrian_initial_footprint_in_sidewalk")
+    result = _check_result(spec, "pedestrian_initial_footprint_in_sidewalk")
 
     assert result.passed is False
-    assert result.severity == "failure"
+    assert result.severity == "repairable"
     assert result.measured["actor_id"] == "pedestrian"
     assert result.measured["band_id"] == "ego_side_sidewalk"
     assert result.suggested_operations[0]["target_band_id"] == "ego_side_sidewalk"
 
 
-def test_path_moved_through_van_footprint_fails_clearance_probe() -> None:
+def test_path_moved_through_van_footprint_fails_clearance_check() -> None:
     canonical = _canonical_spec()
     assert canonical.layout is not None
     van_x = canonical.layout.actor_poses["parked_van"].x_m
     spec = _with_pose("pedestrian", Pose2D(van_x, 4.6, 0.0))
     spec = _with_crossing_path(spec, (Point2D(van_x, 4.6), Point2D(van_x, -1.0)))
 
-    result = _probe_result(spec, "pedestrian_path_clear_of_occluder")
+    result = _check_result(spec, "pedestrian_path_clear_of_occluder")
 
     assert result.passed is False
-    assert result.severity == "failure"
+    assert result.severity == "repairable"
     assert result.measured["path_intersects_van_footprint"] is True
     assert result.measured["minimum_clearance_m"] == 0.0
     assert result.measured["required_clearance_m"] == 0.5
     assert result.suggested_operations[0]["op"] == "reposition_path_or_actor"
 
 
-def test_path_that_misses_ego_lane_fails_crosses_ego_lane_probe() -> None:
+def test_path_that_misses_ego_lane_fails_crosses_ego_lane_check() -> None:
     spec = _with_crossing_path(_canonical_spec(), (Point2D(25.0, 4.6), Point2D(25.0, 3.0)))
 
-    result = _probe_result(spec, "pedestrian_path_crosses_ego_lane")
+    result = _check_result(spec, "pedestrian_path_crosses_ego_lane")
 
     assert result.passed is False
-    assert result.severity == "failure"
+    assert result.severity == "repairable"
     assert result.measured["path_y_min_m"] == 3.0
     assert result.measured["ego_lane_y_max_m"] == 1.75
     assert result.suggested_operations[0]["target_band_id"] == "ego_driving_lane"
 
 
-def test_pedestrian_start_without_van_occlusion_fails_line_of_sight_probe() -> None:
+def test_pedestrian_start_without_van_occlusion_fails_line_of_sight_check() -> None:
     spec = _with_pose("pedestrian", Pose2D(25.0, 8.0, 0.0))
     spec = _with_crossing_path(spec, (Point2D(25.0, 8.0), Point2D(25.0, -1.0)))
 
-    result = _probe_result(spec, "pedestrian_line_of_sight_occluded_by_van")
+    result = _check_result(spec, "pedestrian_line_of_sight_occluded_by_van")
 
     assert result.passed is False
-    assert result.severity == "failure"
+    assert result.severity == "repairable"
     assert result.measured["line_of_sight_intersects_footprint"] is False
     assert result.measured["occluder_id"] == "parked_van"
     assert "ego_position" in result.measured
@@ -147,28 +152,28 @@ def test_pedestrian_start_without_van_occlusion_fails_line_of_sight_probe() -> N
     assert result.suggested_operations[0]["op"] == "reposition_occluder_or_pedestrian"
 
 
-def test_conflict_point_off_path_fails_conflict_probe() -> None:
+def test_conflict_point_off_path_fails_conflict_check() -> None:
     spec = _with_point("conflict_point", Point2D(24.0, 0.0))
 
-    result = _probe_result(spec, "conflict_point_on_path_and_in_ego_lane")
+    result = _check_result(spec, "conflict_point_on_path_and_in_ego_lane")
 
     assert result.passed is False
-    assert result.severity == "failure"
+    assert result.severity == "repairable"
     assert result.measured["point_on_path"] is False
     assert result.measured["point_to_path_distance_m"] > result.measured["path_tolerance_m"]
     assert result.suggested_operations[0]["point_id"] == "conflict_point"
 
 
-def test_trigger_after_conflict_fails_trigger_probe() -> None:
+def test_trigger_after_conflict_fails_trigger_check() -> None:
     canonical = _canonical_spec()
     assert canonical.layout is not None
     conflict_x = canonical.layout.points["conflict_point"].x_m
     spec = _with_point("trigger_point", Point2D(conflict_x + 5.0, 0.0))
 
-    result = _probe_result(spec, "trigger_point_before_conflict_and_in_ego_lane")
+    result = _check_result(spec, "trigger_point_before_conflict_and_in_ego_lane")
 
     assert result.passed is False
-    assert result.severity == "failure"
+    assert result.severity == "repairable"
     assert result.measured["trigger_x_m"] == conflict_x + 5.0
     assert result.measured["conflict_x_m"] == conflict_x
     assert result.measured["longitudinal_gap_m"] == -5.0
@@ -176,13 +181,13 @@ def test_trigger_after_conflict_fails_trigger_probe() -> None:
     assert result.suggested_operations[0]["point_id"] == "trigger_point"
 
 
-def test_trigger_after_conflict_fails_timing_probes_with_patch_hints() -> None:
+def test_trigger_after_conflict_fails_timing_checks_with_patch_hints() -> None:
     canonical = _canonical_spec()
     assert canonical.layout is not None
     conflict_x = canonical.layout.points["conflict_point"].x_m
     spec = _with_point("trigger_point", Point2D(conflict_x + 5.0, 0.0))
 
-    results = run_pedestrian_occlusion_timing_probes(spec)
+    results = run_pedestrian_occlusion_timing_checks(spec)
     failures = {result.name: result for result in results if not result.passed}
 
     assert "ego_lead_time_to_conflict_positive" in failures
@@ -201,7 +206,7 @@ def test_too_short_positive_lead_time_fails_timing_policy_and_alignment() -> Non
     conflict = canonical.layout.points["conflict_point"]
     spec = _with_point("trigger_point", Point2D(conflict.x_m - 0.5, conflict.y_m))
 
-    results = run_pedestrian_occlusion_timing_probes(spec)
+    results = run_pedestrian_occlusion_timing_checks(spec)
     by_name = {result.name: result for result in results}
 
     assert by_name["ego_lead_time_to_conflict_positive"].passed is True
@@ -211,13 +216,13 @@ def test_too_short_positive_lead_time_fails_timing_policy_and_alignment() -> Non
     assert by_name["ego_lead_time_within_timing_policy"].suggested_operations[0]["op"] == "set_named_point"
 
 
-def test_path_start_mismatch_fails_start_probe() -> None:
+def test_path_start_mismatch_fails_start_check() -> None:
     spec = _with_crossing_path(_canonical_spec(), (Point2D(26.0, 4.6), Point2D(25.0, -1.0)))
 
-    result = _probe_result(spec, "pedestrian_path_starts_at_pedestrian_pose")
+    result = _check_result(spec, "pedestrian_path_starts_at_pedestrian_pose")
 
     assert result.passed is False
-    assert result.severity == "failure"
+    assert result.severity == "repairable"
     assert result.measured["position_error_m"] > result.measured["tolerance_m"]
     assert result.suggested_operations[0]["op"] == "align_path_start_to_actor"
 
@@ -226,8 +231,8 @@ def _canonical_spec():
     return generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
 
 
-def _probe_result(spec, name: str):
-    results = run_pedestrian_occlusion_probes(spec)
+def _check_result(spec, name: str):
+    results = run_pedestrian_occlusion_checks(spec)
     return next(result for result in results if result.name == name)
 
 

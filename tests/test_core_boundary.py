@@ -13,11 +13,11 @@ def test_core_boundary_manifest_names_stable_extraction_groups() -> None:
 
     assert "scenariocraft.core.schemas" in CORE_PACKAGE_MODULES
     assert "scenariocraft.core.templates" in CORE_PACKAGE_MODULES
-    assert "scenariocraft.core.probes" in CORE_PACKAGE_MODULES
+    assert "scenariocraft.core.checks" in CORE_PACKAGE_MODULES
     assert "scenariocraft.core.repair" in CORE_PACKAGE_MODULES
     assert "scenariocraft.core.loop" in CORE_PACKAGE_MODULES
     assert "scenariocraft.core.build" in CORE_PACKAGE_MODULES
-    assert "scenariocraft.core.validation" in CORE_PACKAGE_MODULES
+    assert "scenariocraft.core.checks" in CORE_PACKAGE_MODULES
     assert "scenariocraft.web" in DELIVERY_ADAPTER_MODULES
     assert "scenariocraft.application" in DELIVERY_ADAPTER_MODULES
     assert "scenariocraft.application.orchestrator" in DELIVERY_ADAPTER_MODULES
@@ -31,7 +31,7 @@ def test_core_boundary_manifest_names_stable_extraction_groups() -> None:
     assert "scenariocraft.rendering.preview_2d" in TOOL_SEMANTIC_GROUPS["rendering"]
     assert "scenariocraft.rendering.report" in TOOL_SEMANTIC_GROUPS["rendering"]
     assert "scenariocraft.core.metrics.timing" in TOOL_SEMANTIC_GROUPS["metrics"]
-    assert TOOL_SEMANTIC_GROUPS["validation"] == ("scenariocraft.core.validation.semantic",)
+    assert TOOL_SEMANTIC_GROUPS["checks"] == ("scenariocraft.core.checks.structural",)
     assert TOOL_SEMANTIC_GROUPS["external_tools"] == (
         "scenariocraft.external_tools.asam_qc",
         "scenariocraft.external_tools.esmini",
@@ -81,7 +81,7 @@ def test_canonical_semantic_package_imports_are_available() -> None:
     from scenariocraft.rendering import generate_2d_preview, generate_validation_report
     from scenariocraft.rendering.preview_2d import estimate_ttc_s
     from scenariocraft.tooling.boundary_manifest import current_boundary_modules
-    from scenariocraft.core.validation import validate_semantics
+    from scenariocraft.core.checks import validate_semantics
 
     assert AsamQcResult.__name__ == "AsamQcResult"
     assert BuildResult.__name__ == "BuildResult"
@@ -122,6 +122,8 @@ def test_pre_release_compatibility_facades_are_not_used_by_source() -> None:
         "scenariocraft.orchestration",
         "scenariocraft.setup",
         "scenariocraft.core_boundary",
+        "scenariocraft.core.probes",
+        "scenariocraft.core.validation",
         "scenariocraft.core.schemas.scenario_spec",
         "scenariocraft.web.demo_cases",
     )
@@ -142,7 +144,7 @@ def test_scenariocraft_app_no_longer_contains_core_package_directories() -> None
         "generators",
         "loop",
         "metrics",
-        "probes",
+        "checks",
         "repair",
         "roads",
         "schemas",
@@ -181,6 +183,8 @@ def test_retired_source_layout_paths_are_absent() -> None:
         Path("scenariocraft/orchestration"),
         Path("scenariocraft/setup.py"),
         Path("scenariocraft/core_boundary.py"),
+        Path("scenariocraft/core/probes"),
+        Path("scenariocraft/core/validation"),
     )
 
     offenders = [str(path) for path in retired_paths if path.exists()]

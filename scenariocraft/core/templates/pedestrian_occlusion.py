@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Deterministic pedestrian-occlusion golden template.
 
-This template remains the canonical baseline for layout, probes, repair, build,
+This template remains the canonical baseline for layout, checks, repair, build,
 and playback validation while broader intent/template coverage grows.
 """
 
