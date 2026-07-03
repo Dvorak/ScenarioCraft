@@ -2,7 +2,7 @@
 
 **A local-first harness for structured autonomous-driving scenario generation and validation.**
 
-ScenarioCraft turns a natural-language scenario request into a typed `ScenarioSpec`, deterministic OpenSCENARIO/OpenDRIVE artifacts, semantic previews, validation probes, optional runtime evidence, and structured repair traces.
+ScenarioCraft turns a natural-language scenario request into a typed `ScenarioSpec`, deterministic OpenSCENARIO/OpenDRIVE artifacts, semantic previews, check evidence, optional runtime evidence, and structured repair traces.
 
 The current demo centers on a rainy pedestrian-occlusion scenario where an ego vehicle approaches a parked van and a pedestrian crosses from behind it.
 
@@ -46,12 +46,7 @@ UV_CACHE_DIR=.uv-cache .venv/bin/uv sync --extra dev --extra web --extra openai 
 
 This installs the base package, Web UI dependencies, the OpenAI adapter dependency, `just`, esmini, and the ASAM OpenSCENARIO XML checker.
 
-After setup, export the tool paths for the current shell:
-
-```bash
-export ESMINI_BIN="$(cat third_party/esmini/ESMINI_BIN)"
-export ASAM_QC_OPENSCENARIOXML_BIN="$(cat third_party/asam_qc/ASAM_QC_OPENSCENARIOXML_BIN)"
-```
+The setup command prints the `ESMINI_BIN` and `ASAM_QC_OPENSCENARIOXML_BIN` exports for the current shell.
 
 Set `OPENAI_API_KEY` only when you want to try the OpenAI repair provider. The default demo works without an API key.
 
@@ -180,14 +175,14 @@ Core objects:
 
 - `ScenarioSpec`: typed scenario contract.
 - `ScenarioTemplate`: deterministic scenario family generator.
-- `ProbeResult`: structured validation evidence.
+- `CheckResult`: structured check evidence.
 - `PatchSpec`: structured scenario repair operations.
 
 Repository shape:
 
 ```text
 scenariocraft/
-  core/             deterministic contracts, templates, probes, repair, build, metrics
+  core/             deterministic contracts, templates, checks, repair, build, metrics
   application/      CLI/Web shared workflows
   external_tools/   esmini and ASAM QC local executable adapters
   providers/        optional model/provider adapters
