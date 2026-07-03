@@ -61,6 +61,7 @@ def test_workspace_is_default_and_has_one_demo_case_selector() -> None:
     assert app.button[0].help == "Generate selected scenario"
     assert app.button[0].icon == WORKSPACE_GENERATE_ICON
     markdown = [item.value for item in app.markdown]
+    assert not any('class="workspace-pipeline-strip"' in item for item in markdown)
     assert "### Preview 2D Semantic" in markdown
     assert "### Playback Esmini" in markdown
     assert "### 2D Semantic Preview" not in markdown
@@ -125,17 +126,26 @@ def test_advanced_page_retains_diagnostic_artifact_sections() -> None:
 
     markdown = [item.value for item in app.markdown]
     assert '<span class="advanced-page-marker" aria-hidden="true"></span>' in markdown
+    assert any('class="advanced-pipeline-timeline"' in item for item in markdown)
+    timeline_markup = next(item for item in markdown if 'class="advanced-pipeline-timeline"' in item)
+    for stage in ("Intent", "Spec", "Build", "Checks", "Metrics", "Quality", "Simulation", "Repair"):
+        assert stage in timeline_markup
     assert "</div>" not in markdown
+    assert any('class="advanced-card-heading"' in item and "Intent &amp; Spec" in item for item in markdown)
+    assert any('class="advanced-card-heading"' in item and "Build" in item for item in markdown)
+    assert any('class="advanced-card-heading"' in item and "Metrics" in item for item in markdown)
     labels = {item.label for item in app.expander}
     assert {
         "ScenarioSpec JSON",
         "OpenSCENARIO XML",
-        "Repair / Experiment Trace",
-        "Semantic / Geometry Validation",
-        "ASAM QC",
-        "esmini / Media Provenance",
-        "Artifacts / Report",
+        "validation_report.md",
+        "Check Evidence",
+        "External Evidence JSON",
+        "Repair Trace Detail",
     }.issubset(labels)
+    assert "Semantic / Geometry Validation" not in labels
+    assert "ASAM QC" not in labels
+    assert "esmini / Media Provenance" not in labels
 
 
 def test_workspace_repair_appears_only_until_successful_revalidation(tmp_path: Path) -> None:
@@ -225,6 +235,9 @@ def test_workspace_css_hides_streamlit_chrome_and_scopes_icon_controls() -> None
     assert ".advanced-page-marker" in css
     assert ".stApp:has(.advanced-page-marker)" in css
     assert '[data-testid="stExpander"]' in css
+    assert ".advanced-card-heading" in css
+    assert ".advanced-summary-row" in css
+    assert ".advanced-metric-grid" in css
     assert "font-family: var(--sc-font-mono)" in css
     assert "@media (max-width: 900px)" in css
     assert '[data-testid="stHorizontalBlock"]:has(.st-key-workspace_left_normal, .st-key-workspace_left_repair)' in css
@@ -241,7 +254,7 @@ def test_workspace_status_is_one_textual_four_stage_grid() -> None:
     )
 
     assert status_markup.count('class="status-item ') == 4
-    for label in ("Scenario", "Probes", "OSC Quality", "Simulation"):
+    for label in ("Scenario", "Checks", "OSC Quality", "Simulation"):
         assert label in status_markup
     assert status_markup.count("</i>Not run</strong>") == 4
     assert status_markup.count('tabindex="0"') == 4
@@ -298,7 +311,7 @@ def test_geometry_failure_exposes_explicit_fake_repair(tmp_path: Path) -> None:
 
     assert execution.provider_requested is True
     assert execution.terminal_status == "passed"
-    assert all(result.passed for result in execution.final_geometry_probe_results)
+    assert all(result.passed for result in execution.final_geometry_check_results)
 
 
 def test_trigger_after_conflict_view_model_shows_negative_lead_time_before_repair(tmp_path: Path) -> None:
@@ -338,7 +351,7 @@ def test_artifact_failure_is_detection_only_without_patch_provider(tmp_path: Pat
     assert repair.suggested_operations[0]["op"] == "rebuild_artifacts"
 
 
-def test_workspace_status_reports_prepared_probe_failure(tmp_path: Path) -> None:
+def test_workspace_status_reports_prepared_check_failure(tmp_path: Path) -> None:
     spec = generate_default_pedestrian_occlusion_spec("pedestrian occlusion")
     prepared = prepare_demo_case("geometry_van_in_ego_lane", spec, tmp_path)
 
@@ -347,13 +360,13 @@ def test_workspace_status_reports_prepared_probe_failure(tmp_path: Path) -> None
     values = {item.label: item.value for item in status.items}
     assert values == {
         "Scenario": "Generated",
-        "Probes": "Failed",
+        "Checks": "Failed",
         "OSC Quality": "Waiting",
         "Simulation": "Waiting",
     }
     details = {item.label: item.detail for item in status.items}
     assert "ScenarioSpec" in details["Scenario"]
-    assert "probes passed" in details["Probes"]
+    assert "checks passed" in details["Checks"]
     assert "ASAM QC" in details["OSC Quality"]
     assert "esmini" in details["Simulation"]
 

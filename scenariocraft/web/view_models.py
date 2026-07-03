@@ -7,8 +7,8 @@ from scenariocraft.core.loop.types import RepairRunResult
 from scenariocraft.references import XoscMetadata
 from scenariocraft.core.metrics import compute_timing_metrics
 from scenariocraft.external_tools import AsamQcResult, EsminiResult
-from scenariocraft.core.schemas import PatchSpec, ProbeResult, ScenarioSpec
-from scenariocraft.core.validation import SemanticValidationResult
+from scenariocraft.core.schemas import PatchSpec, CheckResult, ScenarioSpec
+from scenariocraft.core.checks import SemanticValidationResult
 from scenariocraft.application.demo_cases import DemoCaseExecution, PreparedDemoCase
 
 
@@ -85,7 +85,7 @@ class WorkspaceRepairViewModel:
     visible: bool
     detection_only: bool
     provider_name: str | None
-    failures: tuple[RepairProbeTraceViewModel, ...]
+    failures: tuple[RepairCheckTraceViewModel, ...]
     suggested_operations: tuple[dict[str, object], ...]
     can_repair: bool
 
@@ -120,10 +120,10 @@ def build_workspace_status_view_model(
             "ScenarioSpec",
         ),
         WorkspaceStatusItemViewModel(
-            "Probes",
+            "Checks",
             validation_value,
             validation_state,
-            _workspace_probe_detail(prepared_case, semantic_result),
+            _workspace_check_detail(prepared_case, semantic_result),
         ),
         WorkspaceStatusItemViewModel(
             "OSC Quality",
@@ -142,22 +142,22 @@ def build_workspace_status_view_model(
     ))
 
 
-def _workspace_probe_detail(
+def _workspace_check_detail(
     prepared_case: PreparedDemoCase | None,
     semantic_result: SemanticValidationResult | None,
 ) -> str:
     if prepared_case is not None:
         results = (
-            prepared_case.initial_geometry_probe_results
-            + prepared_case.artifact_probe_results
+            prepared_case.initial_geometry_check_results
+            + prepared_case.artifact_check_results
         )
         if results:
             passed = sum(result.passed for result in results)
-            return f"Deterministic validation: {passed}/{len(results)} probes passed"
+            return f"Deterministic validation: {passed}/{len(results)} checks passed"
     if semantic_result is not None and semantic_result.checks:
         passed = sum(check.passed for check in semantic_result.checks)
         return f"Deterministic validation: {passed}/{len(semantic_result.checks)} semantic checks passed"
-    return "Deterministic validation: semantic and geometry probes"
+    return "Deterministic validation: semantic and geometry checks"
 
 
 def _workspace_qc_detail(result: AsamQcResult | None) -> str:
@@ -196,7 +196,7 @@ def build_workspace_repair_view_model(
         visible=True,
         detection_only=detection_only,
         provider_name=None if detection_only else "FakeRepairProvider",
-        failures=tuple(_repair_probe_view_model(result) for result in failures),
+        failures=tuple(_repair_check_view_model(result) for result in failures),
         suggested_operations=tuple(suggestions),
         can_repair=prepared_case.repair_required,
     )
@@ -249,7 +249,7 @@ def _workspace_esmini_state(result: EsminiResult | None, generated: bool) -> str
 
 
 @dataclass(frozen=True)
-class RepairProbeTraceViewModel:
+class RepairCheckTraceViewModel:
     name: str
     passed: bool
     severity: str
@@ -271,10 +271,10 @@ class RepairRoundTraceViewModel:
 class RepairTraceViewModel:
     fault_description: str
     injected_operations: tuple[dict[str, object], ...]
-    initial_failures: tuple[RepairProbeTraceViewModel, ...]
+    initial_failures: tuple[RepairCheckTraceViewModel, ...]
     rounds: tuple[RepairRoundTraceViewModel, ...]
-    final_geometry_results: tuple[RepairProbeTraceViewModel, ...]
-    final_artifact_results: tuple[RepairProbeTraceViewModel, ...]
+    final_geometry_results: tuple[RepairCheckTraceViewModel, ...]
+    final_artifact_results: tuple[RepairCheckTraceViewModel, ...]
     geometry_revalidated: bool
     artifacts_consistent: bool
     terminal_status: str
@@ -293,7 +293,7 @@ class DemoExperimentTraceViewModel:
     setup_description: str
     setup_values: dict[str, object]
     injected_operations: tuple[dict[str, object], ...]
-    initial_geometry_results: tuple[RepairProbeTraceViewModel, ...]
+    initial_geometry_results: tuple[RepairCheckTraceViewModel, ...]
     initial_geometry_passed: bool
     provider_decision: str
     provider_name: str | None
@@ -301,9 +301,9 @@ class DemoExperimentTraceViewModel:
     proposed_operations: tuple[dict[str, object], ...]
     patch_applied: bool
     application_error: str | None
-    final_geometry_results: tuple[RepairProbeTraceViewModel, ...]
+    final_geometry_results: tuple[RepairCheckTraceViewModel, ...]
     geometry_revalidated: bool
-    artifact_results: tuple[RepairProbeTraceViewModel, ...]
+    artifact_results: tuple[RepairCheckTraceViewModel, ...]
     artifacts_consistent: bool
     terminal_status: str
     terminal_reason: str
@@ -314,16 +314,16 @@ def build_demo_experiment_trace_view_model(
     execution: DemoCaseExecution,
 ) -> DemoExperimentTraceViewModel:
     initial_geometry = tuple(
-        _repair_probe_view_model(probe)
-        for probe in execution.initial_geometry_probe_results
+        _repair_check_view_model(check)
+        for check in execution.initial_geometry_check_results
     )
     final_geometry = tuple(
-        _repair_probe_view_model(probe)
-        for probe in execution.final_geometry_probe_results
+        _repair_check_view_model(check)
+        for check in execution.final_geometry_check_results
     )
     artifact_results = tuple(
-        _repair_probe_view_model(probe)
-        for probe in execution.artifact_probe_results
+        _repair_check_view_model(check)
+        for check in execution.artifact_check_results
     )
     return DemoExperimentTraceViewModel(
         case_id=execution.case.case_id,
@@ -343,7 +343,7 @@ def build_demo_experiment_trace_view_model(
             )
         ),
         initial_geometry_results=initial_geometry,
-        initial_geometry_passed=bool(initial_geometry) and all(probe.passed for probe in initial_geometry),
+        initial_geometry_passed=bool(initial_geometry) and all(check.passed for check in initial_geometry),
         provider_decision=execution.provider_rationale,
         provider_name=execution.provider_name,
         provider_rationale=execution.provider_rationale,
@@ -358,9 +358,9 @@ def build_demo_experiment_trace_view_model(
         patch_applied=execution.patch_applied,
         application_error=execution.application_error,
         final_geometry_results=final_geometry,
-        geometry_revalidated=bool(final_geometry) and all(probe.passed for probe in final_geometry),
+        geometry_revalidated=bool(final_geometry) and all(check.passed for check in final_geometry),
         artifact_results=artifact_results,
-        artifacts_consistent=bool(artifact_results) and all(probe.passed for probe in artifact_results),
+        artifacts_consistent=bool(artifact_results) and all(check.passed for check in artifact_results),
         terminal_status=execution.terminal_status,
         terminal_reason=execution.terminal_reason,
         artifact_paths=tuple(str(path) for path in execution.artifact_paths),
@@ -373,8 +373,8 @@ def build_repair_trace_view_model(
     fault_description: str,
     injected_patch: PatchSpec,
 ) -> RepairTraceViewModel:
-    first_round_results = result.rounds[0].input_probe_results if result.rounds else ()
-    initial_failures = tuple(_repair_probe_view_model(probe) for probe in first_round_results if not probe.passed)
+    first_round_results = result.rounds[0].input_check_results if result.rounds else ()
+    initial_failures = tuple(_repair_check_view_model(check) for check in first_round_results if not check.passed)
     rounds = tuple(
         RepairRoundTraceViewModel(
             round_index=round_trace.round_index,
@@ -394,10 +394,10 @@ def build_repair_trace_view_model(
         for round_trace in result.rounds
     )
     geometry_results = tuple(
-        _repair_probe_view_model(probe) for probe in result.final_geometry_probe_results
+        _repair_check_view_model(check) for check in result.final_geometry_check_results
     )
     artifact_results = tuple(
-        _repair_probe_view_model(probe) for probe in result.final_artifact_probe_results
+        _repair_check_view_model(check) for check in result.final_artifact_check_results
     )
     return RepairTraceViewModel(
         fault_description=fault_description,
@@ -408,8 +408,8 @@ def build_repair_trace_view_model(
         rounds=rounds,
         final_geometry_results=geometry_results,
         final_artifact_results=artifact_results,
-        geometry_revalidated=bool(geometry_results) and all(probe.passed for probe in geometry_results),
-        artifacts_consistent=bool(artifact_results) and all(probe.passed for probe in artifact_results),
+        geometry_revalidated=bool(geometry_results) and all(check.passed for check in geometry_results),
+        artifacts_consistent=bool(artifact_results) and all(check.passed for check in artifact_results),
         terminal_status=result.terminal_status,
         terminal_reason=result.terminal_reason,
         artifact_paths=tuple(
@@ -418,13 +418,13 @@ def build_repair_trace_view_model(
     )
 
 
-def _repair_probe_view_model(probe: ProbeResult) -> RepairProbeTraceViewModel:
-    return RepairProbeTraceViewModel(
-        name=probe.name,
-        passed=probe.passed,
-        severity=probe.severity,
-        message=probe.message,
-        measured=dict(probe.measured),
+def _repair_check_view_model(check: CheckResult) -> RepairCheckTraceViewModel:
+    return RepairCheckTraceViewModel(
+        name=check.name,
+        passed=check.passed,
+        severity=check.severity,
+        message=check.message,
+        measured=dict(check.measured),
     )
 
 

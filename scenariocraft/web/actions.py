@@ -3,21 +3,21 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
-from scenariocraft.core.probes import run_and_write_runtime_consistency_probes
+from scenariocraft.core.checks import run_and_write_runtime_consistency_checks
 from scenariocraft.core.build import BuildResult
 from scenariocraft.rendering import generate_validation_report
 from scenariocraft.external_tools import AsamQcResult, EsminiPlaybackResult, EsminiResult
-from scenariocraft.core.schemas import ProbeResult, ScenarioSpec
-from scenariocraft.core.validation import SemanticValidationResult
+from scenariocraft.core.schemas import CheckResult, ScenarioSpec
+from scenariocraft.core.checks import SemanticValidationResult
 
 
-def run_runtime_probes_for_generated_scenario(
+def run_runtime_checks_for_generated_scenario(
     spec: ScenarioSpec,
     *,
     build_result: BuildResult,
     output_dir: Path,
-) -> tuple[ProbeResult, ...]:
-    return run_and_write_runtime_consistency_probes(
+) -> tuple[CheckResult, ...]:
+    return run_and_write_runtime_consistency_checks(
         spec,
         output_dir=output_dir,
         xosc_path=build_result.xosc_path,
@@ -35,7 +35,7 @@ def write_generated_validation_report(
     semantic_result: SemanticValidationResult,
     output_dir: Path,
     playback_result: EsminiPlaybackResult | None = None,
-    runtime_probe_results: Sequence[ProbeResult] | None = None,
+    runtime_check_results: Sequence[CheckResult] | None = None,
 ) -> Path:
     return generate_validation_report(
         scenario_text,
@@ -46,5 +46,5 @@ def write_generated_validation_report(
         semantic_result,
         output_dir,
         playback_result=playback_result,
-        runtime_probe_results=runtime_probe_results,
+        runtime_check_results=runtime_check_results,
     )

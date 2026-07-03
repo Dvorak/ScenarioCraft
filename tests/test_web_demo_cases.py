@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
-from scenariocraft.core.probes import run_pedestrian_occlusion_timing_probes
+from scenariocraft.core.checks import run_pedestrian_occlusion_timing_checks
 from scenariocraft.core.repair.providers import FakeRepairProvider
 from scenariocraft.application.demo_cases import DEMO_CASES, get_demo_case, prepare_demo_case, run_demo_case
 
@@ -48,8 +48,8 @@ def test_normal_case_passes_without_mutation_or_provider_request(
     assert result.provider_requested is False
     assert result.proposed_patch is None
     assert result.patch_applied is False
-    assert all(probe.passed for probe in result.initial_geometry_probe_results)
-    assert all(probe.passed for probe in result.artifact_probe_results)
+    assert all(check.passed for check in result.initial_geometry_check_results)
+    assert all(check.passed for check in result.artifact_check_results)
     assert spec.to_json() == original_json
     assert result.experiment_spec.to_dict() == spec.to_dict()
 
@@ -63,8 +63,8 @@ def test_van_case_fails_then_repairs_with_fake_provider(tmp_path: Path) -> None:
     result = run_demo_case("geometry_van_in_ego_lane", spec, tmp_path)
 
     assert any(
-        probe.name == "parked_van_footprint_in_parking_strip" and not probe.passed
-        for probe in result.initial_geometry_probe_results
+        check.name == "parked_van_footprint_in_parking_strip" and not check.passed
+        for check in result.initial_geometry_check_results
     )
     assert result.experiment_spec.layout is not None
     faulty_pose = result.experiment_spec.layout.actor_poses["parked_van"]
@@ -81,8 +81,8 @@ def test_van_case_fails_then_repairs_with_fake_provider(tmp_path: Path) -> None:
     )
     expected_repaired_y = (parking_band.y_min_m + parking_band.y_max_m) / 2.0
     assert result.setup_values["after_repair"]["y_m"] == expected_repaired_y
-    assert all(probe.passed for probe in result.final_geometry_probe_results)
-    assert all(probe.passed for probe in result.artifact_probe_results)
+    assert all(check.passed for check in result.final_geometry_check_results)
+    assert all(check.passed for check in result.artifact_check_results)
     assert result.terminal_status == "passed"
     assert spec.to_json() == original_json
     orchestrator_path = tmp_path / "demo_experiments" / "geometry_van_in_ego_lane" / "orchestrator_result.json"
@@ -106,24 +106,24 @@ def test_trigger_case_fails_then_repairs_with_fake_provider(tmp_path: Path) -> N
     assert faulty_trigger.x_m > conflict.x_m
     assert ego_lane.y_min_m <= faulty_trigger.y_m <= ego_lane.y_max_m
     assert any(
-        probe.name == "trigger_point_before_conflict_and_in_ego_lane" and not probe.passed
-        for probe in result.initial_geometry_probe_results
+        check.name == "trigger_point_before_conflict_and_in_ego_lane" and not check.passed
+        for check in result.initial_geometry_check_results
     )
     assert result.provider_requested is True
     assert result.proposed_patch is not None
     assert result.proposed_patch.operations[0].to_dict()["op"] == "set_named_point"
     assert result.patch_applied is True
     assert result.setup_values["after_repair"]["x_m"] < conflict.x_m
-    assert all(probe.passed for probe in result.final_geometry_probe_results)
+    assert all(check.passed for check in result.final_geometry_check_results)
     assert result.terminal_status == "passed"
     assert spec.to_json() == original_json
 
 
-def test_trigger_case_preparation_exposes_timing_probe_failures(tmp_path: Path) -> None:
+def test_trigger_case_preparation_exposes_timing_check_failures(tmp_path: Path) -> None:
     spec = _canonical_spec()
 
     prepared = prepare_demo_case("geometry_trigger_after_conflict", spec, tmp_path)
-    timing_results = run_pedestrian_occlusion_timing_probes(prepared.experiment_spec)
+    timing_results = run_pedestrian_occlusion_timing_checks(prepared.experiment_spec)
     failures = {result.name for result in timing_results if not result.passed}
 
     assert "ego_lead_time_to_conflict_positive" in failures
@@ -148,22 +148,22 @@ def test_artifact_drift_is_detection_only_and_scenario_spec_remains_canonical(
     assert spec.to_json() == original_json
     assert result.original_spec.to_dict() == spec.to_dict()
     assert result.experiment_spec.to_dict() == spec.to_dict()
-    assert all(probe.passed for probe in result.initial_geometry_probe_results)
-    failures = [probe for probe in result.artifact_probe_results if not probe.passed]
-    assert [probe.name for probe in failures] == ["xosc_actor_poses_match_layout"]
-    pose_probe = failures[0]
-    assert pose_probe.measured["position_error_m"]["parked_van"] == pytest.approx(0.75)
-    assert pose_probe.measured["position_error_m"]["ego"] == 0.0
-    assert pose_probe.measured["position_error_m"]["pedestrian"] == 0.0
-    assert pose_probe.measured["heading_error_rad"] == {
+    assert all(check.passed for check in result.initial_geometry_check_results)
+    failures = [check for check in result.artifact_check_results if not check.passed]
+    assert [check.name for check in failures] == ["xosc_actor_poses_match_layout"]
+    pose_check = failures[0]
+    assert pose_check.measured["position_error_m"]["parked_van"] == pytest.approx(0.75)
+    assert pose_check.measured["position_error_m"]["ego"] == 0.0
+    assert pose_check.measured["position_error_m"]["pedestrian"] == 0.0
+    assert pose_check.measured["heading_error_rad"] == {
         "ego": 0.0,
         "parked_van": 0.0,
         "pedestrian": 0.0,
     }
     assert all(
-        probe.passed
-        for probe in result.artifact_probe_results
-        if probe.name != "xosc_actor_poses_match_layout"
+        check.passed
+        for check in result.artifact_check_results
+        if check.name != "xosc_actor_poses_match_layout"
     )
     assert result.provider_requested is False
     assert result.proposed_patch is None

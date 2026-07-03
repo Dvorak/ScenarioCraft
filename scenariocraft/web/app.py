@@ -32,9 +32,9 @@ from scenariocraft.external_tools import (
     run_esmini_playback,
 )
 from scenariocraft.core.schemas import ScenarioSpec
-from scenariocraft.core.validation import SemanticValidationResult
-from scenariocraft.core.validation import validate_semantics
-from scenariocraft.web.actions import run_runtime_probes_for_generated_scenario, write_generated_validation_report
+from scenariocraft.core.checks import SemanticValidationResult
+from scenariocraft.core.checks import validate_semantics
+from scenariocraft.web.actions import run_runtime_checks_for_generated_scenario, write_generated_validation_report
 from scenariocraft.web.advanced_view import render_advanced_page
 from scenariocraft.web.media_view import (
     _frame_sequence_state,
@@ -63,7 +63,7 @@ from scenariocraft.web.styles import inject_css
 from scenariocraft.web.view_models import (
     DemoExperimentTraceViewModel,
     GeneratedScenarioViewModel,
-    RepairProbeTraceViewModel,
+    RepairCheckTraceViewModel,
     build_demo_experiment_trace_view_model,
     build_generated_scenario_view_model,
 )
@@ -74,6 +74,9 @@ def main() -> None:
     st.set_page_config(page_title="ScenarioCraft-Agent", layout="wide")
     inject_css()
     _ensure_state()
+    query_page = st.query_params.get("page")
+    if query_page in WORKSPACE_PAGES:
+        st.session_state.active_page = query_page
 
     header = st.columns([0.68, 0.32], vertical_alignment="center")
     with header[0]:
@@ -123,7 +126,7 @@ def _render_advanced_page(output_dir: Path) -> None:
         prepared_case=_prepared_case(),
         qc_result=st.session_state.qc_result,
         playback_result=st.session_state.playback_result,
-        runtime_probe_results=st.session_state.runtime_probe_results,
+        runtime_check_results=st.session_state.runtime_check_results,
         report_text=st.session_state.report_text,
         render_xml_panel=_render_xml_panel,
         render_demo_trace=_render_demo_experiment_trace,
@@ -147,8 +150,8 @@ def _render_demo_experiment_trace(trace: DemoExperimentTraceViewModel) -> None:
         st.caption("Controlled ScenarioSpec injection PatchSpec")
         st.json(list(trace.injected_operations))
 
-    st.markdown("##### 2. Initial Geometry Probe Result")
-    _render_repair_probe_results(trace.initial_geometry_results, show_failure_evidence=True)
+    st.markdown("##### 2. Initial Geometry Check Result")
+    _render_repair_check_results(trace.initial_geometry_results, show_failure_evidence=True)
 
     st.markdown("##### 3. Provider Decision")
     if trace.provider_name is not None:
@@ -170,10 +173,10 @@ def _render_demo_experiment_trace(trace: DemoExperimentTraceViewModel) -> None:
         st.info("No ScenarioSpec patch was applied.")
 
     st.markdown("##### 6. Geometry Revalidation")
-    _render_repair_probe_results(trace.final_geometry_results)
+    _render_repair_check_results(trace.final_geometry_results)
 
     st.markdown("##### 7. Build and Artifact Validation")
-    _render_repair_probe_results(trace.artifact_results, show_failure_evidence=True)
+    _render_repair_check_results(trace.artifact_results, show_failure_evidence=True)
 
     st.markdown("##### 8. Terminal Status")
     if trace.terminal_status == "passed":
@@ -188,35 +191,35 @@ def _render_demo_experiment_trace(trace: DemoExperimentTraceViewModel) -> None:
         st.json({
             "setup_values": trace.setup_values,
             "initial_failures": [
-                {"name": probe.name, "measured": probe.measured}
-                for probe in trace.initial_geometry_results
-                if not probe.passed
+                {"name": check.name, "measured": check.measured}
+                for check in trace.initial_geometry_results
+                if not check.passed
             ],
             "artifact_failures": [
-                {"name": probe.name, "measured": probe.measured}
-                for probe in trace.artifact_results
-                if not probe.passed
+                {"name": check.name, "measured": check.measured}
+                for check in trace.artifact_results
+                if not check.passed
             ],
             "artifact_paths": list(trace.artifact_paths),
         })
 
 
-def _render_repair_probe_results(
-    results: tuple[RepairProbeTraceViewModel, ...],
+def _render_repair_check_results(
+    results: tuple[RepairCheckTraceViewModel, ...],
     *,
     show_failure_evidence: bool = False,
 ) -> None:
     if not results:
-        st.warning("No probe evidence was produced.")
+        st.warning("No check evidence was produced.")
         return
-    for probe in results:
-        message = f"{probe.name}: {probe.message}"
-        if probe.passed:
+    for check in results:
+        message = f"{check.name}: {check.message}"
+        if check.passed:
             st.success(message)
         else:
             st.error(message)
             if show_failure_evidence:
-                st.json(probe.measured)
+                st.json(check.measured)
 
 
 def _run_demo_experiment_if_requested(
@@ -279,9 +282,9 @@ def _generate_selected_case(provider_name: str, case_id: str) -> None:
                 options=ScenarioWorkflowOptions(
                     run_preview=True,
                     run_semantics=True,
-                    run_geometry_probes=True,
-                    run_artifact_probes=False,
-                    run_runtime_probes=True,
+                    run_geometry_checks=True,
+                    run_artifact_checks=False,
+                    run_runtime_checks=True,
                     run_report=True,
                     run_asam_qc=True,
                     run_esmini=False,
@@ -325,7 +328,7 @@ def _apply_workflow_result(result: ScenarioWorkflowResult) -> None:
     st.session_state.qc_result = result.qc_result
     st.session_state.esmini_result = result.esmini_result
     st.session_state.playback_result = result.playback_result
-    st.session_state.runtime_probe_results = result.runtime_probe_results
+    st.session_state.runtime_check_results = result.runtime_check_results
     st.session_state.report_text = result.report_text
 
 
@@ -479,12 +482,12 @@ def _run_esmini(output_dir: Path, require_esmini: bool, esmini_bin: str | None, 
     _info("esmini completed." if result.executed else "esmini skipped or failed.")
 
 
-def _run_runtime_probes(output_dir: Path) -> None:
+def _run_runtime_checks(output_dir: Path) -> None:
     spec = _current_spec()
     if spec is None:
         return
     build_result = _ensure_build_result(output_dir)
-    st.session_state.runtime_probe_results = run_runtime_probes_for_generated_scenario(
+    st.session_state.runtime_check_results = run_runtime_checks_for_generated_scenario(
         spec,
         build_result=build_result,
         output_dir=output_dir,
@@ -510,7 +513,7 @@ def _write_report(output_dir: Path) -> None:
         playback_result=st.session_state.playback_result
         if isinstance(st.session_state.playback_result, EsminiPlaybackResult)
         else None,
-        runtime_probe_results=st.session_state.runtime_probe_results,
+        runtime_check_results=st.session_state.runtime_check_results,
     )
     st.session_state.semantic_result = semantic_result
     st.session_state.report_text = report_path.read_text(encoding="utf-8")

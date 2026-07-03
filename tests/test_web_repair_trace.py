@@ -58,8 +58,8 @@ def test_geometry_demo_trace_contains_real_provider_patch_and_revalidation(
     )
     assert trace.patch_applied is True
     assert any(
-        probe.name == "parked_van_footprint_in_parking_strip" and not probe.passed
-        for probe in trace.initial_geometry_results
+        check.name == "parked_van_footprint_in_parking_strip" and not check.passed
+        for check in trace.initial_geometry_results
     )
     assert trace.geometry_revalidated is True
     assert trace.artifacts_consistent is True

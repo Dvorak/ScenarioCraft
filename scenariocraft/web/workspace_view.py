@@ -46,7 +46,7 @@ def render_workspace(
     generate_selected_case: Callable[[str, str], None],
     execute_workspace_repair: Callable[[Path], object],
 ) -> None:
-    workspace = st.columns([0.4, 0.6], gap="large", vertical_alignment="top")
+    workspace = st.columns([0.25, 0.75], gap="small", vertical_alignment="top")
     with workspace[0]:
         left_key = "workspace_left_repair" if build_workspace_repair_view_model(prepared_case).visible else "workspace_left_normal"
         with st.container(key=left_key):

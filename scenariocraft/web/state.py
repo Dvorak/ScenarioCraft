@@ -52,7 +52,7 @@ def ensure_session_state() -> None:
         "qc_result": None,
         "esmini_result": None,
         "playback_result": None,
-        "runtime_probe_results": (),
+        "runtime_check_results": (),
         "repair_history": [],
         "selected_demo_case_id": DEMO_CASES[0].case_id,
         "demo_experiment_trace": None,
@@ -98,6 +98,6 @@ def reset_generated_scenario_state() -> None:
     st.session_state.qc_result = None
     st.session_state.esmini_result = None
     st.session_state.playback_result = None
-    st.session_state.runtime_probe_results = ()
+    st.session_state.runtime_check_results = ()
     st.session_state.report_text = ""
     st.session_state.demo_experiment_trace = None
