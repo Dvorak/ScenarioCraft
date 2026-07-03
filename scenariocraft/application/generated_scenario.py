@@ -10,8 +10,8 @@ from scenariocraft.application.contracts import (
     ScenarioWorkflowStatus,
 )
 from scenariocraft.application.demo_cases import PreparedDemoCase, prepare_demo_case
-from scenariocraft.core.probes import run_artifact_consistency_probes, run_pedestrian_occlusion_probes
-from scenariocraft.core.probes.runtime_pipeline import run_and_write_runtime_consistency_probes
+from scenariocraft.core.checks import run_artifact_consistency_checks, run_pedestrian_occlusion_checks
+from scenariocraft.core.checks.runtime_pipeline import run_and_write_runtime_consistency_checks
 from scenariocraft.core.build import BuildResult, build_openscenario
 from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 from scenariocraft.rendering import generate_2d_preview, generate_validation_report
@@ -24,8 +24,8 @@ from scenariocraft.external_tools import (
     run_esmini_playback,
 )
 from scenariocraft.core.schemas import ScenarioSpec
-from scenariocraft.core.validation import SemanticValidationResult
-from scenariocraft.core.validation import validate_semantics
+from scenariocraft.core.checks import SemanticValidationResult
+from scenariocraft.core.checks import validate_semantics
 
 
 def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> ScenarioWorkflowResult:
@@ -47,8 +47,8 @@ def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> Scenari
 
     preview_path = _generate_preview(spec, output_dir, options)
     semantic_result = validate_semantics(spec) if options.run_semantics else None
-    geometry_results = _geometry_probe_results(spec, options, prepared_case)
-    artifact_results = _artifact_probe_results(spec, options, build_result)
+    geometry_results = _geometry_check_results(spec, options, prepared_case)
+    artifact_results = _artifact_check_results(spec, options, build_result)
 
     skip_optional = _should_skip_optional_integrations(options, prepared_case)
     qc_result = None
@@ -80,8 +80,8 @@ def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> Scenari
             mode=options.playback_mode,
         )
         esmini_result = _read_esmini_result(output_dir) or esmini_result
-    if options.run_runtime_probes and not skip_optional:
-        runtime_results = run_and_write_runtime_consistency_probes(
+    if options.run_runtime_checks and not skip_optional:
+        runtime_results = run_and_write_runtime_consistency_checks(
             spec,
             output_dir=output_dir,
             xosc_path=build_result.xosc_path,
@@ -99,10 +99,10 @@ def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> Scenari
             esmini_for_report,
             semantic_for_report,
             output_dir,
-            probe_results=geometry_results,
+            check_results=geometry_results,
             playback_result=playback_result,
-            artifact_probe_results=artifact_results,
-            runtime_probe_results=runtime_results,
+            artifact_check_results=artifact_results,
+            runtime_check_results=runtime_results,
         )
         semantic_result = semantic_for_report
         qc_result = qc_for_report
@@ -134,9 +134,9 @@ def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> Scenari
         prepared_case=prepared_case,
         build_result=build_result,
         semantic_result=semantic_result,
-        geometry_probe_results=geometry_results,
-        artifact_probe_results=artifact_results,
-        runtime_probe_results=runtime_results,
+        geometry_check_results=geometry_results,
+        artifact_check_results=artifact_results,
+        runtime_check_results=runtime_results,
         qc_result=qc_result,
         esmini_result=esmini_result,
         playback_result=playback_result,
@@ -179,26 +179,26 @@ def _generate_preview(
     )
 
 
-def _geometry_probe_results(
+def _geometry_check_results(
     spec: ScenarioSpec,
     options: ScenarioWorkflowOptions,
     prepared_case: PreparedDemoCase | None,
 ) -> tuple:
     if prepared_case is not None:
-        return prepared_case.initial_geometry_probe_results
-    if not options.run_geometry_probes:
+        return prepared_case.initial_geometry_check_results
+    if not options.run_geometry_checks:
         return ()
-    return run_pedestrian_occlusion_probes(spec)
+    return run_pedestrian_occlusion_checks(spec)
 
 
-def _artifact_probe_results(
+def _artifact_check_results(
     spec: ScenarioSpec,
     options: ScenarioWorkflowOptions,
     build_result: BuildResult,
 ) -> tuple:
-    if not options.run_artifact_probes:
+    if not options.run_artifact_checks:
         return ()
-    return run_artifact_consistency_probes(
+    return run_artifact_consistency_checks(
         spec,
         xosc_path=build_result.xosc_path,
         xodr_path=build_result.xodr_path,
@@ -231,9 +231,9 @@ def _workflow_status(
     if prepared_case is not None and prepared_case.detection_only:
         return ScenarioWorkflowStatus("artifact_mismatch", prepared_case.terminal_reason, tuple(warnings))
     if any(not result.passed for result in geometry_results):
-        return ScenarioWorkflowStatus("repair_required", "ScenarioSpec geometry probes failed.", tuple(warnings))
+        return ScenarioWorkflowStatus("repair_required", "ScenarioSpec geometry checks failed.", tuple(warnings))
     if any(not result.passed for result in artifact_results):
-        return ScenarioWorkflowStatus("artifact_mismatch", "Generated artifact consistency probes failed.", tuple(warnings))
+        return ScenarioWorkflowStatus("artifact_mismatch", "Generated artifact consistency checks failed.", tuple(warnings))
     if semantic_result is not None and not semantic_result.passed:
         return ScenarioWorkflowStatus("validation_failed", "Semantic validation failed.", tuple(warnings))
     return ScenarioWorkflowStatus("passed", "Generated scenario workflow completed.", tuple(warnings))

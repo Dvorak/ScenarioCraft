@@ -59,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         _progress(f"Generating ScenarioSpec with provider={args.provider}")
-        _progress(f"Building XOSC/XODR, preview, probes, ASAM QC, esmini check: output={output_dir}")
+        _progress(f"Building XOSC/XODR, preview, checks, ASAM QC, esmini check: output={output_dir}")
         if args.require_esmini:
             _progress("esmini is required for this run; missing esmini will return exit code 2.")
         result = run_generated_scenario_workflow(
@@ -71,9 +71,9 @@ def main(argv: list[str] | None = None) -> int:
                 options=ScenarioWorkflowOptions(
                     run_preview=True,
                     run_semantics=True,
-                    run_geometry_probes=True,
-                    run_artifact_probes=True,
-                    run_runtime_probes=True,
+                    run_geometry_checks=True,
+                    run_artifact_checks=True,
+                    run_runtime_checks=True,
                     run_report=True,
                     run_asam_qc=True,
                     run_esmini=True,
@@ -178,7 +178,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--use-orchestrator",
         action="store_true",
-        help="Run the bounded generate-build-probe-repair orchestrator path.",
+        help="Run the bounded generate-build-check-repair orchestrator path.",
     )
     parser.add_argument(
         "--max-repair-rounds",
@@ -244,7 +244,7 @@ def _print_esmini_missing_guidance(install_hint: str | None) -> None:
     print("Required esmini binary was not found.")
     print("This CLI path runs an esmini load/execution check; it does not open the visual playback window.")
     print("Install and export esmini, then rerun:")
-    print("  .venv/bin/python scripts/install_esmini.py --package bin")
+    print("  .venv/bin/python -m scenariocraft.tooling.install_esmini --package bin")
     print('  export ESMINI_BIN="$(cat third_party/esmini/ESMINI_BIN)"')
     print("  \"$ESMINI_BIN\" --version")
     if install_hint:

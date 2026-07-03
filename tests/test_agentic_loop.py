@@ -27,16 +27,16 @@ def test_orchestrator_passes_canonical_scenario_and_writes_artifacts(monkeypatch
     assert result.repair_run_result is not None
     assert result.repair_run_result.rounds == ()
     assert result.build_result is not None
-    assert result.final_geometry_probe_results
-    assert all(probe.passed for probe in result.final_geometry_probe_results)
-    assert result.final_artifact_probe_results
-    assert all(probe.passed for probe in result.final_artifact_probe_results)
-    assert result.runtime_probe_results
-    assert any(probe.name == "runtime_motion_verifiable" for probe in result.runtime_probe_results)
+    assert result.final_geometry_check_results
+    assert all(check.passed for check in result.final_geometry_check_results)
+    assert result.final_artifact_check_results
+    assert all(check.passed for check in result.final_artifact_check_results)
+    assert result.runtime_check_results
+    assert any(check.name == "runtime_motion_verifiable" for check in result.runtime_check_results)
     assert (tmp_path / "orchestrator_result.json").exists()
-    assert (tmp_path / "runtime_probe_results.json").exists()
+    assert (tmp_path / "runtime_check_results.json").exists()
     assert (tmp_path / "validation_report.md").exists()
-    assert "## Runtime Consistency Probes" in (tmp_path / "validation_report.md").read_text(encoding="utf-8")
+    assert "## Runtime Consistency Checks" in (tmp_path / "validation_report.md").read_text(encoding="utf-8")
     json.loads((tmp_path / "orchestrator_result.json").read_text(encoding="utf-8"))
 
 
@@ -55,7 +55,7 @@ def test_orchestrator_repairs_van_fault_before_building(monkeypatch, tmp_path: P
     patch = result.repair_run_result.rounds[0].proposed_patch
     assert patch is not None
     assert patch.operations[0].to_dict()["op"] == "reposition_actor_to_band"
-    assert all(probe.passed for probe in result.final_geometry_probe_results)
+    assert all(check.passed for check in result.final_geometry_check_results)
     assert result.build_result is not None and result.build_result.xosc_path.exists()
 
 
@@ -77,7 +77,7 @@ def test_orchestrator_repairs_trigger_after_conflict(monkeypatch, tmp_path: Path
         "set_named_point",
         "set_trigger_point_by_lead_time",
     ]
-    assert all(probe.passed for probe in result.final_geometry_probe_results)
+    assert all(check.passed for check in result.final_geometry_check_results)
 
 
 def test_orchestrator_without_provider_reports_repair_required(tmp_path: Path) -> None:
@@ -89,8 +89,8 @@ def test_orchestrator_without_provider_reports_repair_required(tmp_path: Path) -
 
     assert result.terminal_status == "repair_required"
     assert result.build_result is None
-    assert result.runtime_probe_results == ()
-    assert any(not probe.passed for probe in result.final_geometry_probe_results)
+    assert result.runtime_check_results == ()
+    assert any(not check.passed for check in result.final_geometry_check_results)
     assert (tmp_path / "orchestrator_result.json").exists()
 
 
@@ -107,7 +107,7 @@ def test_orchestrator_preserves_provider_refusal_as_terminal(monkeypatch, tmp_pa
     assert result.terminal_status == "provider_refused"
     assert provider.propose_patch.call_count == 1
     assert result.build_result is None
-    assert result.runtime_probe_results == ()
+    assert result.runtime_check_results == ()
     assert result.report_path is None
 
 
@@ -132,7 +132,7 @@ def test_cli_orchestrator_path_writes_unified_result(monkeypatch, tmp_path: Path
     assert exit_code == 0
     result = json.loads((output_dir / "orchestrator_result.json").read_text(encoding="utf-8"))
     assert result["terminal_status"] == "passed"
-    assert (output_dir / "runtime_probe_results.json").exists()
+    assert (output_dir / "runtime_check_results.json").exists()
     assert (output_dir / "validation_report.md").exists()
 
 

@@ -7,13 +7,13 @@ from xml.etree import ElementTree as ET
 
 from scenariocraft.core.loop import RepairRunResult
 from scenariocraft.application.orchestrator import run_bounded_orchestrator
-from scenariocraft.core.probes import run_artifact_consistency_probes, run_pedestrian_occlusion_probes
+from scenariocraft.core.checks import run_artifact_consistency_checks, run_pedestrian_occlusion_checks
 from scenariocraft.core.repair import apply_patch
 from scenariocraft.core.repair.providers import FakeRepairProvider
 from scenariocraft.core.build import build_openscenario
 from scenariocraft.core.schemas import (
     PatchSpec,
-    ProbeResult,
+    CheckResult,
     ScenarioSpec,
     SetActorPoseOperation,
     SetNamedPointOperation,
@@ -66,9 +66,9 @@ class DemoCaseExecution:
     setup_description: str
     setup_values: dict[str, object]
     injected_patch: PatchSpec | None
-    initial_geometry_probe_results: tuple[ProbeResult, ...]
-    final_geometry_probe_results: tuple[ProbeResult, ...]
-    artifact_probe_results: tuple[ProbeResult, ...]
+    initial_geometry_check_results: tuple[CheckResult, ...]
+    final_geometry_check_results: tuple[CheckResult, ...]
+    artifact_check_results: tuple[CheckResult, ...]
     provider_requested: bool
     provider_name: str | None
     provider_rationale: str
@@ -89,19 +89,19 @@ class PreparedDemoCase:
     setup_description: str
     setup_values: dict[str, object]
     injected_patch: PatchSpec | None
-    initial_geometry_probe_results: tuple[ProbeResult, ...]
-    artifact_probe_results: tuple[ProbeResult, ...]
+    initial_geometry_check_results: tuple[CheckResult, ...]
+    artifact_check_results: tuple[CheckResult, ...]
     terminal_status: str
     terminal_reason: str
     artifact_paths: tuple[Path, ...] = ()
 
     @property
-    def geometry_failures(self) -> tuple[ProbeResult, ...]:
-        return tuple(result for result in self.initial_geometry_probe_results if not result.passed)
+    def geometry_failures(self) -> tuple[CheckResult, ...]:
+        return tuple(result for result in self.initial_geometry_check_results if not result.passed)
 
     @property
-    def artifact_failures(self) -> tuple[ProbeResult, ...]:
-        return tuple(result for result in self.artifact_probe_results if not result.passed)
+    def artifact_failures(self) -> tuple[CheckResult, ...]:
+        return tuple(result for result in self.artifact_check_results if not result.passed)
 
     @property
     def repair_required(self) -> bool:
@@ -181,15 +181,15 @@ def prepare_demo_case(
             setup_description=execution.setup_description,
             setup_values=execution.setup_values,
             injected_patch=None,
-            initial_geometry_probe_results=execution.initial_geometry_probe_results,
-            artifact_probe_results=execution.artifact_probe_results,
+            initial_geometry_check_results=execution.initial_geometry_check_results,
+            artifact_check_results=execution.artifact_check_results,
             terminal_status=execution.terminal_status,
             terminal_reason=execution.terminal_reason,
             artifact_paths=execution.artifact_paths,
         )
 
     experiment_spec, injected_patch, setup_description, setup_values = _geometry_case_setup(case, canonical)
-    geometry_results = run_pedestrian_occlusion_probes(experiment_spec)
+    geometry_results = run_pedestrian_occlusion_checks(experiment_spec)
     failures = tuple(result for result in geometry_results if not result.passed)
     terminal_status = "repair_required" if failures else "geometry_passed"
     terminal_reason = (
@@ -204,8 +204,8 @@ def prepare_demo_case(
         setup_description=setup_description,
         setup_values=setup_values,
         injected_patch=injected_patch,
-        initial_geometry_probe_results=geometry_results,
-        artifact_probe_results=(),
+        initial_geometry_check_results=geometry_results,
+        artifact_check_results=(),
         terminal_status=terminal_status,
         terminal_reason=terminal_reason,
     )
@@ -239,9 +239,9 @@ def execute_prepared_demo_case(
         setup_description=prepared.setup_description,
         setup_values=completed_setup_values,
         injected_patch=prepared.injected_patch,
-        initial_geometry_probe_results=prepared.initial_geometry_probe_results,
-        final_geometry_probe_results=orchestrator_result.final_geometry_probe_results,
-        artifact_probe_results=orchestrator_result.final_artifact_probe_results,
+        initial_geometry_check_results=prepared.initial_geometry_check_results,
+        final_geometry_check_results=orchestrator_result.final_geometry_check_results,
+        artifact_check_results=orchestrator_result.final_artifact_check_results,
         provider_requested=first_round is not None,
         provider_name=first_round.provider_name if first_round is not None else None,
         provider_rationale=(
@@ -271,9 +271,9 @@ def _execution_from_prepared_artifact(prepared: PreparedDemoCase) -> DemoCaseExe
         setup_description=prepared.setup_description,
         setup_values=prepared.setup_values,
         injected_patch=None,
-        initial_geometry_probe_results=prepared.initial_geometry_probe_results,
-        final_geometry_probe_results=prepared.initial_geometry_probe_results,
-        artifact_probe_results=prepared.artifact_probe_results,
+        initial_geometry_check_results=prepared.initial_geometry_check_results,
+        final_geometry_check_results=prepared.initial_geometry_check_results,
+        artifact_check_results=prepared.artifact_check_results,
         provider_requested=False,
         provider_name=None,
         provider_rationale=_provider_not_needed_reason(prepared.case),
@@ -355,10 +355,10 @@ def _run_artifact_drift_case(
     canonical: ScenarioSpec,
     case_dir: Path,
 ) -> DemoCaseExecution:
-    geometry_results = run_pedestrian_occlusion_probes(canonical)
+    geometry_results = run_pedestrian_occlusion_checks(canonical)
     build_result = build_openscenario(canonical, case_dir)
     expected_y_m, observed_y_m = _drift_parked_van_xosc_y(build_result.xosc_path)
-    artifact_results = run_artifact_consistency_probes(
+    artifact_results = run_artifact_consistency_checks(
         canonical,
         xosc_path=build_result.xosc_path,
         xodr_path=build_result.xodr_path,
@@ -384,9 +384,9 @@ def _run_artifact_drift_case(
             "scenario_spec_changed": False,
         },
         injected_patch=None,
-        initial_geometry_probe_results=geometry_results,
-        final_geometry_probe_results=geometry_results,
-        artifact_probe_results=artifact_results,
+        initial_geometry_check_results=geometry_results,
+        final_geometry_check_results=geometry_results,
+        artifact_check_results=artifact_results,
         provider_requested=False,
         provider_name=None,
         provider_rationale=_provider_not_needed_reason(case),

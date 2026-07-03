@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, TypeAlias
 
-from scenariocraft.core.schemas import PatchSpec, ProbeResult, ScenarioSpec
+from scenariocraft.core.schemas import PatchSpec, CheckResult, ScenarioSpec
 
 
 TerminalStatus: TypeAlias = Literal[
@@ -22,7 +22,7 @@ TerminalStatus: TypeAlias = Literal[
 @dataclass(frozen=True)
 class RepairRoundTrace:
     round_index: int
-    input_probe_results: tuple[ProbeResult, ...]
+    input_check_results: tuple[CheckResult, ...]
     allowed_operation_types: tuple[str, ...]
     provider_name: str
     proposal_rationale: str
@@ -33,7 +33,7 @@ class RepairRoundTrace:
     def to_dict(self) -> dict[str, object]:
         return {
             "round_index": self.round_index,
-            "input_probe_results": [result.to_dict() for result in self.input_probe_results],
+            "input_check_results": [result.to_dict() for result in self.input_check_results],
             "allowed_operation_types": list(self.allowed_operation_types),
             "provider_name": self.provider_name,
             "proposal_rationale": self.proposal_rationale,
@@ -48,8 +48,8 @@ class RepairRunResult:
     initial_spec: ScenarioSpec
     final_spec: ScenarioSpec
     rounds: tuple[RepairRoundTrace, ...]
-    final_geometry_probe_results: tuple[ProbeResult, ...]
-    final_artifact_probe_results: tuple[ProbeResult, ...]
+    final_geometry_check_results: tuple[CheckResult, ...]
+    final_artifact_check_results: tuple[CheckResult, ...]
     terminal_status: TerminalStatus
     terminal_reason: str
     xosc_path: Path | None = None
@@ -60,11 +60,11 @@ class RepairRunResult:
             "initial_spec": self.initial_spec.to_dict(),
             "final_spec": self.final_spec.to_dict(),
             "rounds": [round_trace.to_dict() for round_trace in self.rounds],
-            "final_geometry_probe_results": [
-                result.to_dict() for result in self.final_geometry_probe_results
+            "final_geometry_check_results": [
+                result.to_dict() for result in self.final_geometry_check_results
             ],
-            "final_artifact_probe_results": [
-                result.to_dict() for result in self.final_artifact_probe_results
+            "final_artifact_check_results": [
+                result.to_dict() for result in self.final_artifact_check_results
             ],
             "terminal_status": self.terminal_status,
             "terminal_reason": self.terminal_reason,

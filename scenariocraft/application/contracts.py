@@ -6,8 +6,8 @@ from typing import Any, Literal, TypeAlias
 
 from scenariocraft.core.build import BuildResult
 from scenariocraft.external_tools import AsamQcResult, EsminiPlaybackResult, EsminiResult
-from scenariocraft.core.schemas import ProbeResult, ScenarioSpec
-from scenariocraft.core.validation import SemanticValidationResult
+from scenariocraft.core.schemas import CheckResult, ScenarioSpec
+from scenariocraft.core.checks import SemanticValidationResult
 
 
 WorkflowTerminalStatus: TypeAlias = Literal[
@@ -32,9 +32,9 @@ ExternalWorkflowTerminalStatus: TypeAlias = Literal[
 class ScenarioWorkflowOptions:
     run_preview: bool = True
     run_semantics: bool = True
-    run_geometry_probes: bool = True
-    run_artifact_probes: bool = False
-    run_runtime_probes: bool = True
+    run_geometry_checks: bool = True
+    run_artifact_checks: bool = False
+    run_runtime_checks: bool = True
     run_report: bool = True
     run_asam_qc: bool = False
     run_esmini: bool = False
@@ -131,9 +131,9 @@ class ScenarioWorkflowResult:
     prepared_case: object | None = None
     build_result: BuildResult | None = None
     semantic_result: SemanticValidationResult | None = None
-    geometry_probe_results: tuple[ProbeResult, ...] = ()
-    artifact_probe_results: tuple[ProbeResult, ...] = ()
-    runtime_probe_results: tuple[ProbeResult, ...] = ()
+    geometry_check_results: tuple[CheckResult, ...] = ()
+    artifact_check_results: tuple[CheckResult, ...] = ()
+    runtime_check_results: tuple[CheckResult, ...] = ()
     qc_result: AsamQcResult | None = None
     esmini_result: EsminiResult | None = None
     playback_result: EsminiPlaybackResult | None = None
@@ -158,9 +158,9 @@ class ScenarioWorkflowResult:
             "prepared_case": _prepared_case_to_dict(self.prepared_case),
             "build_result": _build_result_to_dict(self.build_result),
             "semantic_result": _json_value(self.semantic_result),
-            "geometry_probe_results": [_json_value(result) for result in self.geometry_probe_results],
-            "artifact_probe_results": [_json_value(result) for result in self.artifact_probe_results],
-            "runtime_probe_results": [_json_value(result) for result in self.runtime_probe_results],
+            "geometry_check_results": [_json_value(result) for result in self.geometry_check_results],
+            "artifact_check_results": [_json_value(result) for result in self.artifact_check_results],
+            "runtime_check_results": [_json_value(result) for result in self.runtime_check_results],
             "qc_result": _json_value(self.qc_result),
             "esmini_result": _json_value(self.esmini_result),
             "playback_result": _json_value(self.playback_result),

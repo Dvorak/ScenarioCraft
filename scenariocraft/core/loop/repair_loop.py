@@ -2,22 +2,22 @@ from __future__ import annotations
 
 """Bounded deterministic repair loop orchestration.
 
-The loop runs probes, asks a repair provider for PatchSpec proposals, applies
+The loop runs checks, asks a repair provider for PatchSpec proposals, applies
 patches, rebuilds artifacts, and revalidates within a fixed round limit.
 """
 
 from pathlib import Path
 
 from scenariocraft.core.loop.types import RepairRoundTrace, RepairRunResult, TerminalStatus
-from scenariocraft.core.probes import (
-    run_artifact_consistency_probes,
-    run_pedestrian_occlusion_probes,
-    run_pedestrian_occlusion_timing_probes,
+from scenariocraft.core.checks import (
+    run_artifact_consistency_checks,
+    run_pedestrian_occlusion_checks,
+    run_pedestrian_occlusion_timing_checks,
 )
 from scenariocraft.core.repair import PatchApplicationError, apply_patch
 from scenariocraft.core.repair.providers import RepairProvider, RepairRequest
 from scenariocraft.core.build import build_openscenario
-from scenariocraft.core.schemas import ProbeResult, ScenarioSpec
+from scenariocraft.core.schemas import CheckResult, ScenarioSpec
 
 
 ALLOWED_OPERATION_TYPES = (
@@ -65,7 +65,7 @@ def run_bounded_repair_loop(
             rounds,
             validation_results,
             status="geometry_validation_failed",
-            reason="No geometry or timing probe evidence was produced for the supported scenario.",
+            reason="No geometry or timing check evidence was produced for the supported scenario.",
         )
     failures = _failures(validation_results)
     if failures and max_rounds == 0:
@@ -83,7 +83,7 @@ def run_bounded_repair_loop(
             RepairRequest(
                 user_intent=user_intent,
                 scenario_spec=current_spec,
-                failed_probe_results=failures,
+                failed_check_results=failures,
                 allowed_operation_types=ALLOWED_OPERATION_TYPES,
             )
         )
@@ -91,7 +91,7 @@ def run_bounded_repair_loop(
             rounds.append(
                 RepairRoundTrace(
                     round_index=len(rounds) + 1,
-                    input_probe_results=validation_results,
+                    input_check_results=validation_results,
                     allowed_operation_types=ALLOWED_OPERATION_TYPES,
                     provider_name=proposal.provider_name,
                     proposal_rationale=proposal.rationale,
@@ -114,7 +114,7 @@ def run_bounded_repair_loop(
             rounds.append(
                 RepairRoundTrace(
                     round_index=len(rounds) + 1,
-                    input_probe_results=validation_results,
+                    input_check_results=validation_results,
                     allowed_operation_types=ALLOWED_OPERATION_TYPES,
                     provider_name=proposal.provider_name,
                     proposal_rationale=proposal.rationale,
@@ -135,7 +135,7 @@ def run_bounded_repair_loop(
         rounds.append(
             RepairRoundTrace(
                 round_index=len(rounds) + 1,
-                input_probe_results=validation_results,
+                input_check_results=validation_results,
                 allowed_operation_types=ALLOWED_OPERATION_TYPES,
                 provider_name=proposal.provider_name,
                 proposal_rationale=proposal.rationale,
@@ -152,7 +152,7 @@ def run_bounded_repair_loop(
                 rounds,
                 validation_results,
                 status="geometry_validation_failed",
-                reason="No geometry or timing probe evidence was produced after patch application.",
+                reason="No geometry or timing check evidence was produced after patch application.",
             )
         failures = _failures(validation_results)
 
@@ -178,7 +178,7 @@ def run_bounded_repair_loop(
             reason=f"Deterministic artifact build failed with {type(exc).__name__}: {exc}",
         )
 
-    artifact_results = run_artifact_consistency_probes(
+    artifact_results = run_artifact_consistency_checks(
         current_spec,
         xosc_path=build_result.xosc_path,
         xodr_path=build_result.xodr_path,
@@ -192,9 +192,9 @@ def run_bounded_repair_loop(
             artifact_results=artifact_results,
             status="artifact_validation_failed",
             reason=(
-                "No static artifact consistency probe evidence was produced."
+                "No static artifact consistency check evidence was produced."
                 if not artifact_results
-                else "One or more static artifact consistency probes failed."
+                else "One or more static artifact consistency checks failed."
             ),
             xosc_path=build_result.xosc_path,
             xodr_path=build_result.xodr_path,
@@ -206,21 +206,21 @@ def run_bounded_repair_loop(
         validation_results,
         artifact_results=artifact_results,
         status="passed",
-        reason="Geometry, timing, and static artifact consistency probes passed.",
+        reason="Geometry, timing, and static artifact consistency checks passed.",
         xosc_path=build_result.xosc_path,
         xodr_path=build_result.xodr_path,
     )
 
 
-def _failures(results: tuple[ProbeResult, ...]) -> tuple[ProbeResult, ...]:
+def _failures(results: tuple[CheckResult, ...]) -> tuple[CheckResult, ...]:
     return tuple(result for result in results if not result.passed)
 
 
-def _scenario_validation_results(spec: ScenarioSpec) -> tuple[ProbeResult, ...]:
-    geometry_results = run_pedestrian_occlusion_probes(spec)
+def _scenario_validation_results(spec: ScenarioSpec) -> tuple[CheckResult, ...]:
+    geometry_results = run_pedestrian_occlusion_checks(spec)
     if not geometry_results:
         return ()
-    timing_results = run_pedestrian_occlusion_timing_probes(spec)
+    timing_results = run_pedestrian_occlusion_timing_checks(spec)
     return geometry_results + timing_results
 
 
@@ -228,11 +228,11 @@ def _result(
     initial_spec: ScenarioSpec,
     final_spec: ScenarioSpec,
     rounds: list[RepairRoundTrace],
-    geometry_results: tuple[ProbeResult, ...],
+    geometry_results: tuple[CheckResult, ...],
     *,
     status: TerminalStatus,
     reason: str,
-    artifact_results: tuple[ProbeResult, ...] = (),
+    artifact_results: tuple[CheckResult, ...] = (),
     xosc_path: Path | None = None,
     xodr_path: Path | None = None,
 ) -> RepairRunResult:
@@ -240,8 +240,8 @@ def _result(
         initial_spec=initial_spec,
         final_spec=final_spec,
         rounds=tuple(rounds),
-        final_geometry_probe_results=geometry_results,
-        final_artifact_probe_results=artifact_results,
+        final_geometry_check_results=geometry_results,
+        final_artifact_check_results=artifact_results,
         terminal_status=status,
         terminal_reason=reason,
         xosc_path=xosc_path,

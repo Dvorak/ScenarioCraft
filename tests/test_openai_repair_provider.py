@@ -14,7 +14,7 @@ from scenariocraft.core.repair.providers import (
     RepairProvider,
     RepairRequest,
 )
-from scenariocraft.core.schemas import PatchSpec, ProbeResult, RepositionActorToBandOperation
+from scenariocraft.core.schemas import PatchSpec, CheckResult, RepositionActorToBandOperation
 
 
 class FakeResponses:
@@ -53,13 +53,13 @@ def test_request_contains_only_structured_repair_context_and_guardrails() -> Non
     payload = json.loads(messages[1]["content"])
     assert payload["user_intent"] == request.user_intent
     assert payload["scenario_spec"] == request.scenario_spec.to_dict()
-    assert payload["failed_probe_results"] == [request.failed_probe_results[0].to_dict()]
+    assert payload["failed_check_results"] == [request.failed_check_results[0].to_dict()]
     assert payload["allowed_operation_types"] == ["reposition_actor_to_band"]
     assert set(payload["allowed_operation_contract"]) == {"reposition_actor_to_band"}
     assert payload["repair_authority"] == {
         "provider_role": "proposal_only",
         "output_contract": "PatchSpec JSON or refusal",
-        "success_authority": "deterministic probes/build/runtime evidence",
+        "success_authority": "deterministic checks/build/runtime evidence",
         "may_mutate_xml": False,
         "may_claim_repair_success": False,
     }
@@ -190,14 +190,14 @@ def test_missing_api_key_without_injected_client_fails_clearly(monkeypatch) -> N
         OpenAIRepairProvider(model="test-model")
 
 
-def test_provider_does_not_mutate_or_call_repair_build_probe_runtime_or_web(monkeypatch) -> None:
+def test_provider_does_not_mutate_or_call_repair_build_check_runtime_or_web(monkeypatch) -> None:
     def forbidden(*args, **kwargs):
         raise AssertionError("OpenAI provider crossed its proposal-only boundary.")
 
     monkeypatch.setattr("scenariocraft.core.repair.apply_patch", forbidden)
     monkeypatch.setattr("scenariocraft.core.build.build_openscenario", forbidden)
     monkeypatch.setattr("scenariocraft.external_tools.run_esmini", forbidden)
-    monkeypatch.setattr("scenariocraft.core.probes.run_artifact_consistency_probes", forbidden)
+    monkeypatch.setattr("scenariocraft.core.checks.run_artifact_consistency_checks", forbidden)
     request = _request()
     original = request.scenario_spec.to_json()
 
@@ -224,7 +224,7 @@ def test_provider_does_not_mutate_or_call_repair_build_probe_runtime_or_web(monk
 
 def _request() -> RepairRequest:
     spec = generate_default_pedestrian_occlusion_spec("rainy pedestrian occlusion")
-    failed = ProbeResult(
+    failed = CheckResult(
         name="parked_van_footprint_in_parking_strip",
         passed=False,
         severity="failure",
@@ -241,7 +241,7 @@ def _request() -> RepairRequest:
     return RepairRequest(
         user_intent="Keep the parked van inside the parking strip.",
         scenario_spec=spec,
-        failed_probe_results=(failed,),
+        failed_check_results=(failed,),
         allowed_operation_types=("reposition_actor_to_band",),
     )
 

@@ -46,8 +46,8 @@ def test_generated_scenario_workflow_builds_deterministic_artifacts(tmp_path: Pa
             options=ScenarioWorkflowOptions(
                 run_preview=False,
                 run_semantics=False,
-                run_geometry_probes=False,
-                run_runtime_probes=False,
+                run_geometry_checks=False,
+                run_runtime_checks=False,
                 run_report=False,
             ),
         )
@@ -76,8 +76,8 @@ def test_generated_scenario_workflow_writes_preview_report_and_skipped_adapter_r
             options=ScenarioWorkflowOptions(
                 run_preview=True,
                 run_semantics=True,
-                run_geometry_probes=True,
-                run_runtime_probes=False,
+                run_geometry_checks=True,
+                run_runtime_checks=False,
                 run_report=True,
                 run_asam_qc=False,
                 run_esmini=False,
@@ -113,7 +113,7 @@ def test_generated_scenario_workflow_applies_template_parameter_overrides(tmp_pa
             },
             options=ScenarioWorkflowOptions(
                 run_preview=False,
-                run_runtime_probes=False,
+                run_runtime_checks=False,
                 run_report=False,
             ),
         )
@@ -135,8 +135,8 @@ def test_controlled_repair_case_skips_optional_integrations_until_repair(tmp_pat
             options=ScenarioWorkflowOptions(
                 run_preview=True,
                 run_semantics=True,
-                run_geometry_probes=True,
-                run_runtime_probes=True,
+                run_geometry_checks=True,
+                run_runtime_checks=True,
                 run_report=True,
                 run_asam_qc=True,
                 run_playback=True,
@@ -150,10 +150,10 @@ def test_controlled_repair_case_skips_optional_integrations_until_repair(tmp_pat
     assert result.qc_result is None
     assert result.esmini_result is None
     assert result.playback_result is None
-    assert result.runtime_probe_results == ()
+    assert result.runtime_check_results == ()
     assert result.artifacts.report_path is None
     assert result.artifacts.preview_path == tmp_path / "preview_2d.png"
-    assert any(not probe.passed for probe in result.geometry_probe_results)
+    assert any(not check.passed for check in result.geometry_check_results)
 
 
 def test_workflow_request_and_result_contracts_are_json_friendly(tmp_path: Path) -> None:
@@ -161,7 +161,7 @@ def test_workflow_request_and_result_contracts_are_json_friendly(tmp_path: Path)
         scenario_text="pedestrian occlusion",
         output_dir=tmp_path,
         provider_name="mock",
-        options=ScenarioWorkflowOptions(run_preview=False, run_runtime_probes=False, run_report=False),
+        options=ScenarioWorkflowOptions(run_preview=False, run_runtime_checks=False, run_report=False),
     )
     result = run_generated_scenario_workflow(request)
 

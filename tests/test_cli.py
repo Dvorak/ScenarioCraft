@@ -24,20 +24,20 @@ def test_cli_happy_path_with_mock_provider(monkeypatch, tmp_path: Path) -> None:
     assert (output_dir / "scenario.xosc").exists()
     assert (output_dir / "qc_report.json").exists()
     assert (output_dir / "esmini_log.txt").exists()
-    assert (output_dir / "runtime_probe_results.json").exists()
+    assert (output_dir / "runtime_check_results.json").exists()
     assert "Scenario playback/execution check was skipped" in (output_dir / "validation_report.md").read_text(
         encoding="utf-8"
     )
-    runtime_results = json.loads((output_dir / "runtime_probe_results.json").read_text(encoding="utf-8"))
+    runtime_results = json.loads((output_dir / "runtime_check_results.json").read_text(encoding="utf-8"))
     assert any(result["name"] == "runtime_esmini_execution_available" for result in runtime_results)
     assert any(
         result["name"] == "runtime_motion_verifiable" and result["severity"] == "warning"
         for result in runtime_results
     )
     report = (output_dir / "validation_report.md").read_text(encoding="utf-8")
-    assert "## Template-Aware Probes" in report
-    assert "## Artifact Consistency Probes" in report
-    assert "## Runtime Consistency Probes" in report
+    assert "## Template-Aware Checks" in report
+    assert "## Artifact Consistency Checks" in report
+    assert "## Runtime Consistency Checks" in report
     assert "`ego_footprint_in_ego_lane`" in report
     assert "`trigger_point_before_conflict_and_in_ego_lane`" in report
     assert "`xosc_actor_poses_match_layout`" in report
@@ -53,7 +53,7 @@ def test_cli_generated_scenario_path_delegates_to_application_workflow() -> None
     assert "import streamlit" not in source
 
 
-def test_cli_layout_free_spec_succeeds_without_template_aware_probes(monkeypatch, tmp_path: Path) -> None:
+def test_cli_layout_free_spec_succeeds_without_template_aware_checks(monkeypatch, tmp_path: Path) -> None:
     input_path = tmp_path / "input.txt"
     output_dir = tmp_path / "out"
     input_path.write_text("rainy pedestrian occlusion", encoding="utf-8")
@@ -75,8 +75,8 @@ def test_cli_layout_free_spec_succeeds_without_template_aware_probes(monkeypatch
     assert (output_dir / "scenario_spec.json").exists()
     assert (output_dir / "scenario.xosc").exists()
     report = (output_dir / "validation_report.md").read_text(encoding="utf-8")
-    assert "## Template-Aware Probes" not in report
-    assert "## Artifact Consistency Probes" not in report
+    assert "## Template-Aware Checks" not in report
+    assert "## Artifact Consistency Checks" not in report
 
 
 def test_cli_duration_and_trigger_window_overrides_propagate(monkeypatch, tmp_path: Path) -> None:
@@ -171,12 +171,12 @@ def test_cli_require_esmini_returns_nonzero_when_missing(monkeypatch, tmp_path: 
     stdout = capsys.readouterr().out
     assert "[ScenarioCraft] Reading request:" in stdout
     assert "[ScenarioCraft] Generating ScenarioSpec with provider=mock" in stdout
-    assert "[ScenarioCraft] Building XOSC/XODR, preview, probes, ASAM QC, esmini check:" in stdout
+    assert "[ScenarioCraft] Building XOSC/XODR, preview, checks, ASAM QC, esmini check:" in stdout
     assert "[ScenarioCraft] esmini is required for this run" in stdout
     assert "esmini check: unavailable" in stdout
     assert "Required esmini binary was not found." in stdout
     assert "This CLI path runs an esmini load/execution check; it does not open the visual playback window." in stdout
-    assert ".venv/bin/python scripts/install_esmini.py --package bin" in stdout
+    assert ".venv/bin/python -m scenariocraft.tooling.install_esmini --package bin" in stdout
 
 
 def test_cli_uses_explicit_esmini_binary(monkeypatch, tmp_path: Path) -> None:

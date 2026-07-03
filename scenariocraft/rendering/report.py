@@ -4,11 +4,11 @@ from pathlib import Path
 import json
 from collections.abc import Sequence
 
-from scenariocraft.core.schemas import ProbeResult, ScenarioSpec
+from scenariocraft.core.schemas import CheckResult, ScenarioSpec
 from scenariocraft.core.templates.pedestrian_occlusion import assess_pedestrian_occlusion_timing
 from scenariocraft.external_tools import AsamQcResult, EsminiPlaybackResult, EsminiResult
 from scenariocraft.core.build import BuildResult
-from scenariocraft.core.validation import SemanticValidationResult
+from scenariocraft.core.checks import SemanticValidationResult
 from scenariocraft.core.metrics import compute_timing_metrics
 
 
@@ -20,10 +20,10 @@ def generate_validation_report(
     esmini_result: EsminiResult,
     semantic_result: SemanticValidationResult,
     output_dir: Path,
-    probe_results: Sequence[ProbeResult] | None = None,
+    check_results: Sequence[CheckResult] | None = None,
     playback_result: EsminiPlaybackResult | None = None,
-    artifact_probe_results: Sequence[ProbeResult] | None = None,
-    runtime_probe_results: Sequence[ProbeResult] | None = None,
+    artifact_check_results: Sequence[CheckResult] | None = None,
+    runtime_check_results: Sequence[CheckResult] | None = None,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     report_path = output_dir / "validation_report.md"
@@ -35,10 +35,10 @@ def generate_validation_report(
             qc_result,
             esmini_result,
             semantic_result,
-            probe_results,
+            check_results,
             playback_result,
-            artifact_probe_results,
-            runtime_probe_results,
+            artifact_check_results,
+            runtime_check_results,
         ),
         encoding="utf-8",
     )
@@ -52,10 +52,10 @@ def _render_report(
     qc_result: AsamQcResult,
     esmini_result: EsminiResult,
     semantic_result: SemanticValidationResult,
-    probe_results: Sequence[ProbeResult] | None = None,
+    check_results: Sequence[CheckResult] | None = None,
     playback_result: EsminiPlaybackResult | None = None,
-    artifact_probe_results: Sequence[ProbeResult] | None = None,
-    runtime_probe_results: Sequence[ProbeResult] | None = None,
+    artifact_check_results: Sequence[CheckResult] | None = None,
+    runtime_check_results: Sequence[CheckResult] | None = None,
 ) -> str:
     semantic_lines = "\n".join(
         f"- [{'x' if check.passed else ' '}] `{check.name}`: {check.message}" for check in semantic_result.checks
@@ -65,9 +65,9 @@ def _render_report(
     esmini_summary = _esmini_summary(esmini_result)
     esmini_media_summary = _esmini_media_summary(playback_result)
     timing_section = _timing_section(spec)
-    probe_section = _probe_section(probe_results)
-    artifact_probe_section = _artifact_probe_section(artifact_probe_results)
-    runtime_probe_section = _runtime_probe_section(runtime_probe_results)
+    check_section = _check_section(check_results)
+    artifact_check_section = _artifact_check_section(artifact_check_results)
+    runtime_check_section = _runtime_check_section(runtime_check_results)
     return f"""# scenarioCraft Validation Report
 
 ## Input Scenario Intent
@@ -113,9 +113,9 @@ def _render_report(
 Overall result: `{'passed' if semantic_result.passed else 'failed'}`
 
 {semantic_lines}
-{probe_section}
-{artifact_probe_section}
-{runtime_probe_section}
+{check_section}
+{artifact_check_section}
+{runtime_check_section}
 
 ## Known Limitations
 
@@ -196,13 +196,14 @@ def _timing_derivation(spec: ScenarioSpec) -> str | None:
     )
 
 
-def _probe_section(probe_results: Sequence[ProbeResult] | None) -> str:
-    if not probe_results:
+def _check_section(check_results: Sequence[CheckResult] | None) -> str:
+    if not check_results:
         return ""
-    lines = ["", "## Template-Aware Probes", ""]
-    for result in probe_results:
+    lines = ["", "## Template-Aware Checks", ""]
+    for result in check_results:
         state = "PASS" if result.passed else "FAIL"
         lines.append(f"- [{state}] `{result.name}` ({result.severity}): {result.message}")
+        lines.extend(_check_metadata_lines(result))
         if result.measured:
             lines.append(f"  - measured: `{json.dumps(result.measured, sort_keys=True)}`")
         if result.suggested_operations:
@@ -212,13 +213,14 @@ def _probe_section(probe_results: Sequence[ProbeResult] | None) -> str:
     return "\n".join(lines)
 
 
-def _artifact_probe_section(probe_results: Sequence[ProbeResult] | None) -> str:
-    if not probe_results:
+def _artifact_check_section(check_results: Sequence[CheckResult] | None) -> str:
+    if not check_results:
         return ""
-    lines = ["", "## Artifact Consistency Probes", ""]
-    for result in probe_results:
+    lines = ["", "## Artifact Consistency Checks", ""]
+    for result in check_results:
         state = "PASS" if result.passed else "FAIL"
         lines.append(f"- [{state}] `{result.name}` ({result.severity}): {result.message}")
+        lines.extend(_check_metadata_lines(result))
         if result.measured:
             lines.append(f"  - measured: `{json.dumps(result.measured, sort_keys=True)}`")
         if result.suggested_operations:
@@ -228,16 +230,29 @@ def _artifact_probe_section(probe_results: Sequence[ProbeResult] | None) -> str:
     return "\n".join(lines)
 
 
-def _runtime_probe_section(probe_results: Sequence[ProbeResult] | None) -> str:
-    if not probe_results:
+def _runtime_check_section(check_results: Sequence[CheckResult] | None) -> str:
+    if not check_results:
         return ""
-    lines = ["", "## Runtime Consistency Probes", ""]
-    for result in probe_results:
+    lines = ["", "## Runtime Consistency Checks", ""]
+    for result in check_results:
         state = "PASS" if result.passed else ("WARN" if result.severity == "warning" else "FAIL")
         lines.append(f"- [{state}] `{result.name}` ({result.severity}): {result.message}")
+        lines.extend(_check_metadata_lines(result))
         if result.measured:
             lines.append(f"  - measured: `{json.dumps(result.measured, sort_keys=True)}`")
     return "\n".join(lines)
+
+
+def _check_metadata_lines(result: CheckResult) -> list[str]:
+    lines = [
+        f"  - category: `{result.category}`",
+        f"  - intent_relation: `{result.intent_relation}`",
+    ]
+    if result.repair_action is not None:
+        lines.append(f"  - repair_action: `{result.repair_action}`")
+    if result.expected is not None:
+        lines.append(f"  - expected: `{json.dumps(result.expected, sort_keys=True)}`")
+    return lines
 
 
 def _qc_summary(result: AsamQcResult) -> str:

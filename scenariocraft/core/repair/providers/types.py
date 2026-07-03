@@ -2,13 +2,13 @@ from __future__ import annotations
 
 """Repair provider request/proposal contracts.
 
-Providers receive failed ProbeResult evidence and may propose PatchSpec JSON;
+Providers receive failed CheckResult evidence and may propose PatchSpec JSON;
 deterministic patching and revalidation decide success.
 """
 
 from dataclasses import dataclass
 
-from scenariocraft.core.schemas import PatchSpec, ProbeResult, ScenarioSpec
+from scenariocraft.core.schemas import PatchSpec, CheckResult, ScenarioSpec
 
 
 class RepairProviderContractError(ValueError):
@@ -25,7 +25,7 @@ def _require_non_empty(value: str, field_name: str) -> str:
 class RepairRequest:
     user_intent: str | None
     scenario_spec: ScenarioSpec
-    failed_probe_results: tuple[ProbeResult, ...]
+    failed_check_results: tuple[CheckResult, ...]
     allowed_operation_types: tuple[str, ...]
 
     def __post_init__(self) -> None:
@@ -33,18 +33,18 @@ class RepairRequest:
             _require_non_empty(self.user_intent, "user_intent")
         if not isinstance(self.scenario_spec, ScenarioSpec):
             raise RepairProviderContractError("scenario_spec must be a ScenarioSpec.")
-        failed_results = tuple(self.failed_probe_results)
+        failed_results = tuple(self.failed_check_results)
         for index, result in enumerate(failed_results):
-            if not isinstance(result, ProbeResult):
-                raise RepairProviderContractError(f"failed_probe_results[{index}] must be a ProbeResult.")
+            if not isinstance(result, CheckResult):
+                raise RepairProviderContractError(f"failed_check_results[{index}] must be a CheckResult.")
             if result.passed:
-                raise RepairProviderContractError(f"failed_probe_results[{index}] must be a failed result.")
+                raise RepairProviderContractError(f"failed_check_results[{index}] must be a failed result.")
         allowed_types = tuple(self.allowed_operation_types)
         for index, operation_type in enumerate(allowed_types):
             _require_non_empty(operation_type, f"allowed_operation_types[{index}]")
         if len(allowed_types) != len(set(allowed_types)):
             raise RepairProviderContractError("allowed_operation_types must be unique.")
-        object.__setattr__(self, "failed_probe_results", failed_results)
+        object.__setattr__(self, "failed_check_results", failed_results)
         object.__setattr__(self, "allowed_operation_types", allowed_types)
 
 

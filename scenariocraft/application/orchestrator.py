@@ -6,11 +6,11 @@ from pathlib import Path
 
 from scenariocraft.core.loop.repair_loop import run_bounded_repair_loop
 from scenariocraft.core.loop.types import RepairRunResult
-from scenariocraft.core.probes import (
-    run_and_write_runtime_consistency_probes,
-    run_artifact_consistency_probes,
-    run_pedestrian_occlusion_probes,
-    run_pedestrian_occlusion_timing_probes,
+from scenariocraft.core.checks import (
+    run_and_write_runtime_consistency_checks,
+    run_artifact_consistency_checks,
+    run_pedestrian_occlusion_checks,
+    run_pedestrian_occlusion_timing_checks,
 )
 from scenariocraft.core.repair.providers import RepairProvider
 from scenariocraft.core.build import BuildResult, build_openscenario
@@ -23,9 +23,9 @@ from scenariocraft.external_tools import (
     run_esmini,
     run_esmini_playback,
 )
-from scenariocraft.core.schemas import ProbeResult, ScenarioSpec
-from scenariocraft.core.validation import SemanticValidationResult
-from scenariocraft.core.validation import validate_semantics
+from scenariocraft.core.schemas import CheckResult, ScenarioSpec
+from scenariocraft.core.checks import SemanticValidationResult
+from scenariocraft.core.checks import validate_semantics
 
 
 ORCHESTRATOR_RESULT_FILENAME = "orchestrator_result.json"
@@ -38,9 +38,9 @@ class OrchestratorRunResult:
     initial_semantic_result: SemanticValidationResult
     final_semantic_result: SemanticValidationResult
     repair_run_result: RepairRunResult | None
-    final_geometry_probe_results: tuple[ProbeResult, ...]
-    final_artifact_probe_results: tuple[ProbeResult, ...]
-    runtime_probe_results: tuple[ProbeResult, ...]
+    final_geometry_check_results: tuple[CheckResult, ...]
+    final_artifact_check_results: tuple[CheckResult, ...]
+    runtime_check_results: tuple[CheckResult, ...]
     build_result: BuildResult | None
     qc_result: AsamQcResult | None
     esmini_result: EsminiResult | None
@@ -56,9 +56,9 @@ class OrchestratorRunResult:
             "initial_semantic_result": self.initial_semantic_result.to_dict(),
             "final_semantic_result": self.final_semantic_result.to_dict(),
             "repair_run_result": self.repair_run_result.to_dict() if self.repair_run_result is not None else None,
-            "final_geometry_probe_results": [result.to_dict() for result in self.final_geometry_probe_results],
-            "final_artifact_probe_results": [result.to_dict() for result in self.final_artifact_probe_results],
-            "runtime_probe_results": [result.to_dict() for result in self.runtime_probe_results],
+            "final_geometry_check_results": [result.to_dict() for result in self.final_geometry_check_results],
+            "final_artifact_check_results": [result.to_dict() for result in self.final_artifact_check_results],
+            "runtime_check_results": [result.to_dict() for result in self.runtime_check_results],
             "build_result": _build_result_dict(self.build_result),
             "qc_result": self.qc_result.to_dict() if self.qc_result is not None else None,
             "esmini_result": self.esmini_result.to_dict() if self.esmini_result is not None else None,
@@ -86,7 +86,7 @@ def run_bounded_orchestrator(
     sim_duration_s: float = 3.0,
     try_video: bool = True,
 ) -> OrchestratorRunResult:
-    """Run the bounded deterministic generate/build/probe/repair harness."""
+    """Run the bounded deterministic generate/build/check/repair harness."""
     if not isinstance(spec, ScenarioSpec):
         raise TypeError("spec must be a ScenarioSpec.")
 
@@ -99,8 +99,8 @@ def run_bounded_orchestrator(
 
     repair_result: RepairRunResult | None = None
     final_spec = initial_spec
-    geometry_results: tuple[ProbeResult, ...] = ()
-    artifact_results: tuple[ProbeResult, ...] = ()
+    geometry_results: tuple[CheckResult, ...] = ()
+    artifact_results: tuple[CheckResult, ...] = ()
     build_result: BuildResult | None = None
 
     if repair_provider is not None:
@@ -112,8 +112,8 @@ def run_bounded_orchestrator(
             max_rounds=max_repair_rounds,
         )
         final_spec = repair_result.final_spec
-        geometry_results = repair_result.final_geometry_probe_results
-        artifact_results = repair_result.final_artifact_probe_results
+        geometry_results = repair_result.final_geometry_check_results
+        artifact_results = repair_result.final_artifact_check_results
         if repair_result.xosc_path is not None:
             build_result = BuildResult(
                 xosc_path=repair_result.xosc_path,
@@ -143,7 +143,7 @@ def run_bounded_orchestrator(
             return result
     else:
         geometry_results = _scenario_validation_results(initial_spec)
-        failures = _failed_probes(geometry_results)
+        failures = _failed_checks(geometry_results)
         if failures:
             final_semantic = validate_semantics(final_spec)
             result = _result(
@@ -189,12 +189,12 @@ def run_bounded_orchestrator(
             )
             _write_orchestrator_result(output_dir, result)
             return result
-        artifact_results = run_artifact_consistency_probes(
+        artifact_results = run_artifact_consistency_checks(
             final_spec,
             xosc_path=build_result.xosc_path,
             xodr_path=build_result.xodr_path,
         )
-        if not artifact_results or _failed_probes(artifact_results):
+        if not artifact_results or _failed_checks(artifact_results):
             final_semantic = validate_semantics(final_spec)
             result = _result(
                 initial_spec=initial_spec,
@@ -211,9 +211,9 @@ def run_bounded_orchestrator(
                 playback_result=None,
                 terminal_status="artifact_validation_failed",
                 terminal_reason=(
-                    "No static artifact consistency probe evidence was produced."
+                    "No static artifact consistency check evidence was produced."
                     if not artifact_results
-                    else "One or more static artifact consistency probes failed."
+                    else "One or more static artifact consistency checks failed."
                 ),
                 report_path=None,
             )
@@ -222,7 +222,7 @@ def run_bounded_orchestrator(
 
     if build_result is None:
         build_result = build_openscenario(final_spec, output_dir)
-        artifact_results = run_artifact_consistency_probes(
+        artifact_results = run_artifact_consistency_checks(
             final_spec,
             xosc_path=build_result.xosc_path,
             xodr_path=build_result.xodr_path,
@@ -256,7 +256,7 @@ def run_bounded_orchestrator(
         (output_dir / "esmini_log.txt").write_text("esmini check was not requested.\n", encoding="utf-8")
 
     runtime_results = (
-        run_and_write_runtime_consistency_probes(
+        run_and_write_runtime_consistency_checks(
             final_spec,
             output_dir=output_dir,
             xosc_path=build_result.xosc_path,
@@ -274,10 +274,10 @@ def run_bounded_orchestrator(
         esmini_result,
         final_semantic,
         output_dir,
-        probe_results=geometry_results,
+        check_results=geometry_results,
         playback_result=playback_result,
-        artifact_probe_results=artifact_results,
-        runtime_probe_results=runtime_results,
+        artifact_check_results=artifact_results,
+        runtime_check_results=runtime_results,
     )
     result = _result(
         initial_spec=initial_spec,
@@ -300,25 +300,25 @@ def run_bounded_orchestrator(
     return result
 
 
-def _scenario_validation_results(spec: ScenarioSpec) -> tuple[ProbeResult, ...]:
-    geometry_results = run_pedestrian_occlusion_probes(spec)
+def _scenario_validation_results(spec: ScenarioSpec) -> tuple[CheckResult, ...]:
+    geometry_results = run_pedestrian_occlusion_checks(spec)
     if not geometry_results:
         return ()
-    return geometry_results + run_pedestrian_occlusion_timing_probes(spec)
+    return geometry_results + run_pedestrian_occlusion_timing_checks(spec)
 
 
-def _failed_probes(results: tuple[ProbeResult, ...]) -> tuple[ProbeResult, ...]:
+def _failed_checks(results: tuple[CheckResult, ...]) -> tuple[CheckResult, ...]:
     return tuple(result for result in results if not result.passed)
 
 
-def _passed_reason(runtime_results: tuple[ProbeResult, ...]) -> str:
+def _passed_reason(runtime_results: tuple[CheckResult, ...]) -> str:
     warnings = tuple(result for result in runtime_results if not result.passed and result.severity == "warning")
     failures = tuple(result for result in runtime_results if not result.passed and result.severity == "failure")
     if failures:
-        return "Geometry, timing, and static artifact probes passed; runtime probes reported failures."
+        return "Geometry, timing, and static artifact checks passed; runtime checks reported failures."
     if warnings:
-        return "Geometry, timing, and static artifact probes passed; runtime evidence is incomplete or unavailable."
-    return "Geometry, timing, static artifact, and runtime consistency probes passed."
+        return "Geometry, timing, and static artifact checks passed; runtime evidence is incomplete or unavailable."
+    return "Geometry, timing, static artifact, and runtime consistency checks passed."
 
 
 def _result(
@@ -328,9 +328,9 @@ def _result(
     initial_semantic: SemanticValidationResult,
     final_semantic: SemanticValidationResult,
     repair_result: RepairRunResult | None,
-    geometry_results: tuple[ProbeResult, ...],
-    artifact_results: tuple[ProbeResult, ...],
-    runtime_results: tuple[ProbeResult, ...],
+    geometry_results: tuple[CheckResult, ...],
+    artifact_results: tuple[CheckResult, ...],
+    runtime_results: tuple[CheckResult, ...],
     build_result: BuildResult | None,
     qc_result: AsamQcResult | None,
     esmini_result: EsminiResult | None,
@@ -345,9 +345,9 @@ def _result(
         initial_semantic_result=initial_semantic,
         final_semantic_result=final_semantic,
         repair_run_result=repair_result,
-        final_geometry_probe_results=geometry_results,
-        final_artifact_probe_results=artifact_results,
-        runtime_probe_results=runtime_results,
+        final_geometry_check_results=geometry_results,
+        final_artifact_check_results=artifact_results,
+        runtime_check_results=runtime_results,
         build_result=build_result,
         qc_result=qc_result,
         esmini_result=esmini_result,

@@ -2,15 +2,15 @@ from pathlib import Path
 from dataclasses import replace
 
 from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
-from scenariocraft.core.probes import (
-    run_artifact_consistency_probes,
-    run_pedestrian_occlusion_probes,
-    run_runtime_consistency_probes,
+from scenariocraft.core.checks import (
+    run_artifact_consistency_checks,
+    run_pedestrian_occlusion_checks,
+    run_runtime_consistency_checks,
 )
-from scenariocraft.core.schemas import ProbeResult
+from scenariocraft.core.schemas import CheckResult
 from scenariocraft.core.build import build_openscenario
 from scenariocraft.rendering import generate_validation_report
-from scenariocraft.core.validation import validate_semantics
+from scenariocraft.core.checks import validate_semantics
 from scenariocraft.external_tools import AsamQcResult
 from scenariocraft.external_tools import EsminiPlaybackResult, EsminiResult
 
@@ -46,7 +46,7 @@ def test_report_includes_missing_tool_warnings(tmp_path: Path) -> None:
     assert "Preferred trigger window: `1.5` s to `3` s" in report
     assert "Predicted trigger time: `3` s" in report
     assert "Timing classification: `preferred`" in report
-    assert "Template-Aware Probes" not in report
+    assert "Template-Aware Checks" not in report
 
 
 def test_report_handles_legacy_layout_free_timing_metrics_gracefully(tmp_path: Path) -> None:
@@ -75,17 +75,21 @@ def test_report_handles_legacy_layout_free_timing_metrics_gracefully(tmp_path: P
     assert "## Timing Harness" not in report
 
 
-def test_report_includes_optional_probe_results(tmp_path: Path) -> None:
+def test_report_includes_optional_check_results(tmp_path: Path) -> None:
     spec = generate_default_pedestrian_occlusion_spec("scenario text")
     build_result = build_openscenario(spec, tmp_path)
     qc_result = AsamQcResult(False, ["asam-qc-openscenarioxml", "scenario.xosc"], None, "", "", None)
     esmini_result = EsminiResult(False, ["esmini", "--osc", "scenario.xosc"], None, None, "", "", None, None, None)
-    probe_results = (
-        ProbeResult(
-            name="future_geometry_probe",
+    check_results = (
+        CheckResult(
+            name="future_geometry_check",
             passed=False,
             severity="warning",
-            message="Geometry probe placeholder result.",
+            message="Geometry check placeholder result.",
+            category="intent_alignment",
+            intent_relation="mismatches_intent",
+            repair_action="repair",
+            expected={"clearance_m": 1.0},
             measured={"clearance_m": 0.25},
             suggested_operations=({"operation": "future_patch_placeholder", "target": "layout"},),
         ),
@@ -99,20 +103,24 @@ def test_report_includes_optional_probe_results(tmp_path: Path) -> None:
         esmini_result,
         validate_semantics(spec),
         tmp_path,
-        probe_results=probe_results,
+        check_results=check_results,
     )
 
     report = report_path.read_text(encoding="utf-8")
-    assert "## Template-Aware Probes" in report
-    assert "`future_geometry_probe`" in report
+    assert "## Template-Aware Checks" in report
+    assert "`future_geometry_check`" in report
     assert "[FAIL]" in report
     assert "(warning)" in report
-    assert "Geometry probe placeholder result." in report
+    assert "Geometry check placeholder result." in report
+    assert "category: `intent_alignment`" in report
+    assert "intent_relation: `mismatches_intent`" in report
+    assert "repair_action: `repair`" in report
+    assert '"clearance_m": 1.0' in report
     assert '"clearance_m": 0.25' in report
     assert "future_patch_placeholder" in report
 
 
-def test_report_includes_canonical_pedestrian_occlusion_probe_results(tmp_path: Path) -> None:
+def test_report_includes_canonical_pedestrian_occlusion_check_results(tmp_path: Path) -> None:
     spec = generate_default_pedestrian_occlusion_spec("scenario text")
     build_result = build_openscenario(spec, tmp_path)
     qc_result = AsamQcResult(False, ["asam-qc-openscenarioxml", "scenario.xosc"], None, "", "", None)
@@ -126,22 +134,22 @@ def test_report_includes_canonical_pedestrian_occlusion_probe_results(tmp_path: 
         esmini_result,
         validate_semantics(spec),
         tmp_path,
-        probe_results=run_pedestrian_occlusion_probes(spec),
+        check_results=run_pedestrian_occlusion_checks(spec),
     )
 
     report = report_path.read_text(encoding="utf-8")
-    assert "## Template-Aware Probes" in report
+    assert "## Template-Aware Checks" in report
     assert "`ego_footprint_in_ego_lane`" in report
     assert "`pedestrian_line_of_sight_occluded_by_van`" in report
     assert '"actor_id": "ego"' in report
 
 
-def test_report_includes_artifact_consistency_probe_results(tmp_path: Path) -> None:
+def test_report_includes_artifact_consistency_check_results(tmp_path: Path) -> None:
     spec = generate_default_pedestrian_occlusion_spec("scenario text")
     build_result = build_openscenario(spec, tmp_path)
     qc_result = AsamQcResult(False, ["asam-qc-openscenarioxml", "scenario.xosc"], None, "", "", None)
     esmini_result = EsminiResult(False, ["esmini", "--osc", "scenario.xosc"], None, None, "", "", None, None, None)
-    artifact_results = run_artifact_consistency_probes(
+    artifact_results = run_artifact_consistency_checks(
         spec,
         xosc_path=build_result.xosc_path,
         xodr_path=build_result.xodr_path,
@@ -155,19 +163,19 @@ def test_report_includes_artifact_consistency_probe_results(tmp_path: Path) -> N
         esmini_result,
         validate_semantics(spec),
         tmp_path,
-        probe_results=run_pedestrian_occlusion_probes(spec),
-        artifact_probe_results=artifact_results,
+        check_results=run_pedestrian_occlusion_checks(spec),
+        artifact_check_results=artifact_results,
     )
 
     report = report_path.read_text(encoding="utf-8")
-    assert "## Template-Aware Probes" in report
-    assert "## Artifact Consistency Probes" in report
+    assert "## Template-Aware Checks" in report
+    assert "## Artifact Consistency Checks" in report
     assert "`xosc_actor_poses_match_layout`" in report
     assert "`xosc_logic_file_matches_canonical_road`" in report
     assert "[PASS]" in report
 
 
-def test_report_includes_runtime_consistency_probe_results(tmp_path: Path) -> None:
+def test_report_includes_runtime_consistency_check_results(tmp_path: Path) -> None:
     spec = generate_default_pedestrian_occlusion_spec("scenario text")
     build_result = build_openscenario(spec, tmp_path)
     qc_result = AsamQcResult(False, ["asam-qc-openscenarioxml", "scenario.xosc"], None, "", "", None)
@@ -191,7 +199,7 @@ def test_report_includes_runtime_consistency_probe_results(tmp_path: Path) -> No
         '"media_quality_status": "valid"}',
         encoding="utf-8",
     )
-    runtime_results = run_runtime_consistency_probes(
+    runtime_results = run_runtime_consistency_checks(
         spec,
         xosc_path=build_result.xosc_path,
         xodr_path=build_result.xodr_path,
@@ -207,11 +215,11 @@ def test_report_includes_runtime_consistency_probe_results(tmp_path: Path) -> No
         esmini_result,
         validate_semantics(spec),
         tmp_path,
-        runtime_probe_results=runtime_results,
+        runtime_check_results=runtime_results,
     )
 
     report = report_path.read_text(encoding="utf-8")
-    assert "## Runtime Consistency Probes" in report
+    assert "## Runtime Consistency Checks" in report
     assert "`runtime_pedestrian_event_reached_running_state`" in report
     assert "`runtime_motion_verifiable`" in report
     assert "[PASS]" in report

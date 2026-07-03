@@ -9,9 +9,9 @@ from scenariocraft.core.schemas import (
 )
 from scenariocraft.core.metrics import compute_timing_metrics
 
-PARKING_PROBE = "parked_van_footprint_in_parking_strip"
-TRIGGER_PROBE = "trigger_point_before_conflict_and_in_ego_lane"
-TIMING_TRIGGER_PROBES = {
+PARKING_CHECK = "parked_van_footprint_in_parking_strip"
+TRIGGER_CHECK = "trigger_point_before_conflict_and_in_ego_lane"
+TIMING_TRIGGER_CHECKS = {
     "ego_lead_time_to_conflict_positive",
     "ego_lead_time_within_timing_policy",
     "pedestrian_conflict_timing_alignment",
@@ -28,12 +28,12 @@ class FakeRepairProvider:
         if not isinstance(request, RepairRequest):
             raise TypeError("request must be a RepairRequest.")
 
-        failed_names = {result.name for result in request.failed_probe_results}
+        failed_names = {result.name for result in request.failed_check_results}
         allowed = set(request.allowed_operation_types)
         operations = []
         blocked_operations: list[str] = []
 
-        if PARKING_PROBE in failed_names:
+        if PARKING_CHECK in failed_names:
             operation_type = RepositionActorToBandOperation.op
             if operation_type in allowed:
                 operations.append(
@@ -45,7 +45,7 @@ class FakeRepairProvider:
             else:
                 blocked_operations.append(operation_type)
 
-        if TRIGGER_PROBE in failed_names:
+        if TRIGGER_CHECK in failed_names:
             operation_type = SetNamedPointOperation.op
             if operation_type in allowed:
                 layout = request.scenario_spec.layout
@@ -65,7 +65,7 @@ class FakeRepairProvider:
             else:
                 blocked_operations.append(operation_type)
 
-        if failed_names & TIMING_TRIGGER_PROBES:
+        if failed_names & TIMING_TRIGGER_CHECKS:
             operation_type = SetTriggerPointByLeadTimeOperation.op
             if operation_type in allowed:
                 lead_time_s = _required_lead_time_s(request)
@@ -85,14 +85,14 @@ class FakeRepairProvider:
         if operations:
             return RepairProposal(
                 patch=PatchSpec(tuple(operations)),
-                rationale="Proposed deterministic operations for supported failed probes.",
+                rationale="Proposed deterministic operations for supported failed checks.",
                 provider_name=self.provider_name,
             )
         if blocked_operations:
             blocked = ", ".join(sorted(set(blocked_operations)))
             return self._decline(f"Required operation types are not allowed: {blocked}.")
         unsupported = ", ".join(sorted(failed_names)) or "none"
-        return self._decline(f"No supported deterministic repair for failed probes: {unsupported}.")
+        return self._decline(f"No supported deterministic repair for failed checks: {unsupported}.")
 
     def _decline(self, rationale: str) -> RepairProposal:
         return RepairProposal(
@@ -104,7 +104,7 @@ class FakeRepairProvider:
 
 def _required_lead_time_s(request: RepairRequest) -> float | None:
     candidates: list[float] = []
-    for result in request.failed_probe_results:
+    for result in request.failed_check_results:
         value = result.measured.get("required_minimum_lead_time_s")
         if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0.0:
             candidates.append(float(value))

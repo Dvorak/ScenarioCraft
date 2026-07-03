@@ -1317,7 +1317,7 @@ def _display_path(path: Path) -> str:
 def _install_hint() -> str:
     return (
         "Install a prebuilt esmini release with "
-        "`python scripts/install_esmini.py --package bin`, set ESMINI_BIN, "
+        "`python -m scenariocraft.tooling.install_esmini --package bin`, set ESMINI_BIN, "
         "or add esmini to PATH."
     )
 

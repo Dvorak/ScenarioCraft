@@ -62,7 +62,7 @@ def test_patch_spec_parses_and_round_trips_typed_operations() -> None:
     assert patch.operations[2].points == (Point2D(25.0, 4.6), Point2D(25.0, -1.0))
 
 
-def test_patch_spec_normalizes_reposition_actor_probe_suggestion() -> None:
+def test_patch_spec_normalizes_reposition_actor_check_suggestion() -> None:
     patch = PatchSpec.from_dict({
         "operations": [{
             "op": "reposition_actor",
