@@ -8,6 +8,14 @@ version = "0.1.0"
 description = "Deterministic research prototype for structured autonomous-driving scenario generation and validation."
 readme = "README.md"
 requires-python = ">=3.10"
+license = {file = "LICENSE"}
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
 dependencies = [
   "matplotlib>=3.8,<4",
   "scenariogeneration>=0.16,<0.17",

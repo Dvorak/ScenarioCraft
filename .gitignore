@@ -6,10 +6,16 @@ __pycache__/
 .playwright-cli/
 .uv-cache/
 .venv/
+.env
+.env.*
 /build/
 /dist/
 AGENTS.md
-docs/
+.local-dev-docs/
+docs/agents/
+docs/architecture/archive/
+docs/architecture/work_items/
+docs/ui/archive/
 external/
 third_party/
 outputs/

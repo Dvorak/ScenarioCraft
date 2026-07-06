@@ -1,0 +1,1 @@
+A vehicle in the adjacent lane cuts into the ego vehicle lane on an urban multilane road.

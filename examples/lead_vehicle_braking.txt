@@ -1,0 +1,1 @@
+An ego vehicle follows a lead vehicle in the city and the lead vehicle suddenly brakes.

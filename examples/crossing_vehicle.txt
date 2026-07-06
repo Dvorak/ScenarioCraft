@@ -1,0 +1,1 @@
+An ego vehicle approaches an intersection while a crossing vehicle enters its path.

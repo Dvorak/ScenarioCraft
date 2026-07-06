@@ -5,9 +5,12 @@ from PIL import Image
 
 def test_readme_architecture_asset_is_png() -> None:
     readme = Path("README.md").read_text(encoding="utf-8")
-    png_path = Path("assets/readme/scenariocraft-architecture.png")
+    png_path = Path("docs/assets/scenariocraft-architecture.png")
 
-    assert "assets/readme/scenariocraft-architecture.png" in readme
+    assert "docs/assets/scenariocraft-architecture.png" in readme
+    assert "Candidate Generation Loop" in readme
+    assert "Scenario Revision Loop" in readme
+    assert "PatchSpec Repair Loop" in readme
     assert png_path.exists()
 
     with Image.open(png_path) as image:

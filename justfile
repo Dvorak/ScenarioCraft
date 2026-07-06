@@ -8,7 +8,7 @@ setup:
 
 setup-full:
     UV_CACHE_DIR=.uv-cache {{uv}} sync --extra dev --extra web --extra openai --extra qc
-    {{python}} -m scenariocraft.setup
+    {{python}} -m scenariocraft.tooling.setup_tools
 
 setup-openai:
     UV_CACHE_DIR=.uv-cache {{uv}} sync --extra dev --extra web --extra openai
