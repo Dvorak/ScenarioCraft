@@ -1,4 +1,6 @@
 from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
+from scenariocraft.core.templates import get_template
+from scenariocraft.core.schemas import ScenarioIntent
 from scenariocraft.core.checks import run_structural_validity_checks, validate_semantics
 
 
@@ -24,3 +26,17 @@ def test_semantic_validator_emits_structural_validity_check_evidence() -> None:
     assert {result.category for result in results} == {"structural_validity"}
     assert {result.intent_relation for result in results} == {"not_applicable"}
     assert {result.repair_action for result in results} == {"none"}
+
+
+def test_semantic_validator_is_family_aware_for_lead_vehicle_braking() -> None:
+    spec = get_template("lead_vehicle_braking").instantiate(
+        intent=ScenarioIntent(template_id="lead_vehicle_braking")
+    )
+
+    result = validate_semantics(spec)
+
+    assert result.passed is True
+    names = {check.name for check in result.checks}
+    assert "occluding_vehicle_exists" not in names
+    assert "pedestrian_exists" not in names
+    assert "pedestrian_speed_plausible" not in names

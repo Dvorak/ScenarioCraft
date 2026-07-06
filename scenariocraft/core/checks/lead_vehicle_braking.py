@@ -11,6 +11,7 @@ def run_lead_vehicle_braking_checks(spec: ScenarioSpec) -> tuple[CheckResult, ..
     return (
         _same_lane_following_check(spec),
         _initial_gap_check(spec),
+        _actors_inside_ego_lane_check(spec),
         _braking_trigger_timing_check(spec),
         _braking_semantics_check(spec),
     )
@@ -43,6 +44,21 @@ def _initial_gap_check(spec: ScenarioSpec) -> CheckResult:
         "Lead vehicle initial gap is inside the family-supported domain.",
         "Lead vehicle initial gap is outside the family-supported domain.",
         {**measured, "initial_gap_m": initial_gap, "expected_gap_range_m": [18.0, 35.0]},
+    )
+
+
+def _actors_inside_ego_lane_check(spec: ScenarioSpec) -> CheckResult:
+    measured = _actor_lane_occupancy_measured(spec)
+    passed = bool(
+        measured.get("ego_inside_ego_lane")
+        and measured.get("lead_vehicle_inside_ego_lane")
+    )
+    return _result(
+        "lead_vehicle_actors_inside_ego_lane",
+        passed,
+        "Ego and lead vehicle footprints are fully inside the ego driving lane.",
+        "Ego and lead vehicle footprints must be fully inside the ego driving lane.",
+        measured,
     )
 
 
@@ -111,6 +127,40 @@ def _layout_measured(spec: ScenarioSpec) -> dict[str, object]:
             "lateral_offset_m": lead_pose.y_m - ego_pose.y_m,
         }
     )
+    return measured
+
+
+def _actor_lane_occupancy_measured(spec: ScenarioSpec) -> dict[str, object]:
+    measured: dict[str, object] = {"lane_band_id": "ego_driving_lane"}
+    if spec.layout is None:
+        measured.update(
+            {
+                "ego_inside_ego_lane": False,
+                "lead_vehicle_inside_ego_lane": False,
+            }
+        )
+        return measured
+    lane = next((band for band in spec.layout.road_bands if band.id == "ego_driving_lane"), None)
+    measured.update(
+        {
+            "lane_y_min_m": lane.y_min_m if lane is not None else None,
+            "lane_y_max_m": lane.y_max_m if lane is not None else None,
+        }
+    )
+    for actor_id in ("ego", "lead_vehicle"):
+        pose = spec.layout.actor_poses.get(actor_id)
+        footprint = spec.layout.actor_footprints.get(actor_id)
+        if pose is None or footprint is None or lane is None:
+            measured[f"{actor_id}_y_min_m"] = None
+            measured[f"{actor_id}_y_max_m"] = None
+            measured[f"{actor_id}_inside_ego_lane"] = False
+            continue
+        half_width = footprint.width_m / 2.0
+        y_min = pose.y_m - half_width
+        y_max = pose.y_m + half_width
+        measured[f"{actor_id}_y_min_m"] = y_min
+        measured[f"{actor_id}_y_max_m"] = y_max
+        measured[f"{actor_id}_inside_ego_lane"] = lane.y_min_m <= y_min <= y_max <= lane.y_max_m
     return measured
 
 

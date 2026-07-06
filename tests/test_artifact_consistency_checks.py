@@ -168,6 +168,9 @@ def test_lead_vehicle_braking_artifact_consistency_checks_pass(tmp_path: Path) -
         "xosc_lead_actor_poses_match_layout",
         "xosc_lead_braking_action_present",
         "xosc_lead_braking_trigger_matches_spec",
+        "xosc_logic_file_is_relative",
+        "xodr_logic_file_target_exists",
+        "xosc_logic_file_matches_canonical_road",
     }
     assert all(result.passed for result in results)
     assert by_name["xosc_lead_braking_action_present"].measured["action_name"] == "lead_vehicle_brakes"

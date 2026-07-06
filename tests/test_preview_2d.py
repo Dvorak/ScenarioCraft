@@ -3,18 +3,22 @@ from pathlib import Path
 
 import pytest
 
-from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec, get_template
 from scenariocraft.rendering import estimate_ttc_s, generate_2d_preview
 from scenariocraft.rendering.preview_2d import (
     CLEAN_PREVIEW_ASPECT_RATIO,
     _apply_display_orientation,
+    _actor_legend_items,
     _clean_legend_groups,
+    _road_surface_style,
     _road_context_items,
+    _scenario_geometry_items,
     _layout_footprint,
     _layout_path,
     _layout_plot_limits,
     _layout_pose,
     _layout_point,
+    _intersection_cross_x,
     _render_preview_figure,
 )
 
@@ -67,10 +71,62 @@ def test_clean_split_legend_contract_has_three_groups_and_distinct_geometry_symb
     assert [title for title, _items in groups] == ["Road", "Actors", "Scenario Geometry"]
     geometry = {label: symbol for label, _color, symbol in groups[2][1]}
     assert geometry == {
+        "ego path": "line",
         "pedestrian crossing path": "dashed_line",
         "trigger point": "diamond",
         "conflict point": "ring",
     }
+
+
+@pytest.mark.parametrize(
+    "template_id",
+    [
+        "pedestrian_occlusion",
+        "lead_vehicle_braking",
+        "cut_in",
+        "crossing_vehicle",
+        "oncoming_turn_across_path",
+    ],
+)
+def test_clean_split_legend_items_are_family_aware(template_id: str) -> None:
+    spec = get_template(template_id).instantiate()
+    assert spec.layout is not None
+
+    actor_labels = {label for label, _color, _symbol in _actor_legend_items(spec)}
+    geometry_labels = {label for label, _color, _symbol in _scenario_geometry_items(spec)}
+
+    assert actor_labels == {actor.id.replace("_", " ") for actor in spec.actors}
+    assert {path_name.replace("_", " ") for path_name in spec.layout.paths}.issubset(geometry_labels)
+    assert {point_name.replace("_", " ") for point_name in spec.layout.points}.issubset(geometry_labels)
+    if template_id != "pedestrian_occlusion":
+        assert "parked van" not in actor_labels
+        assert "pedestrian crossing path" not in geometry_labels
+
+
+def test_preview_surface_style_follows_road_capability_not_scenario_type() -> None:
+    crossing_on_straight = replace(
+        get_template("crossing_vehicle").instantiate(),
+        metadata={"road_asset_id": "urban_two_way_parking"},
+    )
+    lead_on_intersection = replace(
+        get_template("lead_vehicle_braking").instantiate(),
+        metadata={"road_asset_id": "urban_four_way_intersection"},
+    )
+
+    assert _road_surface_style(crossing_on_straight) == "road_bands"
+    assert _road_surface_style(lead_on_intersection) == "intersection"
+    assert _road_surface_style(get_template("crossing_vehicle").instantiate()) == "intersection"
+    assert _road_surface_style(get_template("oncoming_turn_across_path").instantiate()) == "intersection"
+    assert _road_surface_style(get_template("pedestrian_occlusion").instantiate()) == "road_bands"
+    assert _road_surface_style(get_template("lead_vehicle_braking").instantiate()) == "road_bands"
+    assert _road_surface_style(get_template("cut_in").instantiate()) == "road_bands"
+
+
+def test_intersection_preview_cross_road_uses_road_asset_intersection_center() -> None:
+    spec = get_template("crossing_vehicle").instantiate()
+    assert spec.layout is not None
+
+    assert _intersection_cross_x(spec) == spec.layout.points["conflict_point"].x_m
 
 
 def test_clean_split_preview_does_not_repeat_summary_or_scene_labels(tmp_path: Path) -> None:

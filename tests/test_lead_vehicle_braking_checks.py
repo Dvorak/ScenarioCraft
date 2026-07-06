@@ -12,6 +12,7 @@ def test_lead_vehicle_braking_checks_pass_for_default_family_instance() -> None:
 
     assert by_name["lead_vehicle_same_lane_following"].passed is True
     assert by_name["lead_vehicle_initial_gap_in_domain"].passed is True
+    assert by_name["lead_vehicle_actors_inside_ego_lane"].passed is True
     assert by_name["lead_vehicle_braking_trigger_timing"].passed is True
     assert by_name["lead_vehicle_braking_semantics"].passed is True
     assert by_name["lead_vehicle_initial_gap_in_domain"].measured["initial_gap_m"] == 28.0
@@ -37,6 +38,20 @@ def test_lead_vehicle_braking_checks_report_lateral_or_behind_actor_mismatch() -
     assert lateral["lead_vehicle_same_lane_following"].measured["lateral_offset_m"] == 3.5
     assert behind["lead_vehicle_same_lane_following"].passed is False
     assert behind["lead_vehicle_same_lane_following"].measured["longitudinal_gap_m"] == -5.0
+
+
+def test_lead_vehicle_braking_checks_require_actor_footprints_inside_ego_lane() -> None:
+    spec = resolve_scenario_intent(ScenarioIntent(template_id="lead_vehicle_braking"))
+    assert spec.layout is not None
+    layout = replace(
+        spec.layout,
+        actor_poses={**spec.layout.actor_poses, "lead_vehicle": Pose2D(28.0, 1.0, 0.0)},
+    )
+
+    by_name = {result.name: result for result in run_lead_vehicle_braking_checks(replace(spec, layout=layout))}
+
+    assert by_name["lead_vehicle_actors_inside_ego_lane"].passed is False
+    assert by_name["lead_vehicle_actors_inside_ego_lane"].measured["lead_vehicle_y_max_m"] > 1.75
 
 
 def test_lead_vehicle_braking_checks_report_trigger_after_stop_window() -> None:

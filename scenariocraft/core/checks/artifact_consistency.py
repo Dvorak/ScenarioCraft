@@ -4,7 +4,11 @@ import math
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from scenariocraft.core.roads import URBAN_TWO_WAY_PARKING_FILENAME
+from scenariocraft.core.roads import (
+    MULTI_LANE_SAME_DIRECTION_FILENAME,
+    URBAN_FOUR_WAY_INTERSECTION_FILENAME,
+    URBAN_TWO_WAY_PARKING_FILENAME,
+)
 from scenariocraft.core.schemas import CheckResult, ScenarioSpec
 
 POSITION_TOLERANCE_M = 1e-6
@@ -12,6 +16,9 @@ HEADING_TOLERANCE_RAD = 1e-6
 PATH_TOLERANCE_M = 1e-6
 CANONICAL_ACTOR_IDS = ("ego", "parked_van", "pedestrian")
 LEAD_BRAKING_ACTOR_IDS = ("ego", "lead_vehicle")
+CUT_IN_ACTOR_IDS = ("ego", "cut_in_vehicle")
+CROSSING_VEHICLE_ACTOR_IDS = ("ego", "crossing_vehicle")
+ONCOMING_TURN_ACTOR_IDS = ("ego", "oncoming_vehicle")
 
 
 def run_artifact_consistency_checks(
@@ -24,21 +31,60 @@ def run_artifact_consistency_checks(
         return ()
 
     root, parse_error = _parse_xosc(xosc_path)
+    logic_file_path = _logic_file_path(root)
     if spec.scenario_type == "lead_vehicle_braking":
         return (
             _lead_actor_poses_check(spec, root, parse_error),
             _lead_braking_action_check(spec, root, parse_error),
             _lead_braking_trigger_check(spec, root, parse_error),
+            _logic_file_relative_check(logic_file_path, parse_error),
+            _logic_file_target_exists_check(xosc_path, xodr_path, logic_file_path, parse_error),
+            _logic_file_canonical_check(spec, logic_file_path, parse_error),
+        )
+    if spec.scenario_type == "cut_in":
+        return (
+            _cut_in_actor_poses_check(spec, root, parse_error),
+            _cut_in_trajectory_check(spec, root, parse_error),
+            _logic_file_relative_check(logic_file_path, parse_error),
+            _logic_file_target_exists_check(xosc_path, xodr_path, logic_file_path, parse_error),
+            _logic_file_canonical_check(spec, logic_file_path, parse_error),
+        )
+    if spec.scenario_type == "crossing_vehicle":
+        return (
+            _crossing_vehicle_actor_poses_check(spec, root, parse_error),
+            _crossing_vehicle_trajectory_check(spec, root, parse_error),
+            _logic_file_relative_check(logic_file_path, parse_error),
+            _logic_file_target_exists_check(xosc_path, xodr_path, logic_file_path, parse_error),
+            _logic_file_canonical_check(spec, logic_file_path, parse_error),
+            _intersection_layout_alignment_check(
+                spec,
+                xodr_path,
+                name="xodr_crossing_vehicle_layout_aligns_with_road",
+                path_id="crossing_vehicle_path",
+            ),
+        )
+    if spec.scenario_type == "oncoming_turn_across_path":
+        return (
+            _oncoming_turn_actor_poses_check(spec, root, parse_error),
+            _oncoming_turn_trajectory_check(spec, root, parse_error),
+            _logic_file_relative_check(logic_file_path, parse_error),
+            _logic_file_target_exists_check(xosc_path, xodr_path, logic_file_path, parse_error),
+            _logic_file_canonical_check(spec, logic_file_path, parse_error),
+            _intersection_layout_alignment_check(
+                spec,
+                xodr_path,
+                name="xodr_oncoming_turn_layout_aligns_with_road",
+                path_id="oncoming_turn_path",
+            ),
         )
     if spec.scenario_type != "pedestrian_occlusion":
         return ()
-    logic_file_path = _logic_file_path(root)
     return (
         _actor_poses_check(spec, root, parse_error),
         _pedestrian_trajectory_check(spec, root, parse_error),
         _logic_file_relative_check(logic_file_path, parse_error),
         _logic_file_target_exists_check(xosc_path, xodr_path, logic_file_path, parse_error),
-        _logic_file_canonical_check(logic_file_path, parse_error),
+        _logic_file_canonical_check(spec, logic_file_path, parse_error),
     )
 
 
@@ -131,6 +177,54 @@ def _lead_actor_poses_check(
         name="xosc_lead_actor_poses_match_layout",
         pass_message="XOSC lead-braking actor WorldPosition values match ScenarioSpec layout poses.",
         failure_message="XOSC lead-braking actor WorldPosition values diverge from ScenarioSpec layout poses.",
+    )
+
+
+def _cut_in_actor_poses_check(
+    spec: ScenarioSpec,
+    root: ET.Element | None,
+    parse_error: str | None,
+) -> CheckResult:
+    return _actor_pose_match_result(
+        spec,
+        root,
+        parse_error,
+        actor_ids=CUT_IN_ACTOR_IDS,
+        name="xosc_cut_in_actor_poses_match_layout",
+        pass_message="XOSC cut-in actor WorldPosition values match ScenarioSpec layout poses.",
+        failure_message="XOSC cut-in actor WorldPosition values diverge from ScenarioSpec layout poses.",
+    )
+
+
+def _crossing_vehicle_actor_poses_check(
+    spec: ScenarioSpec,
+    root: ET.Element | None,
+    parse_error: str | None,
+) -> CheckResult:
+    return _actor_pose_match_result(
+        spec,
+        root,
+        parse_error,
+        actor_ids=CROSSING_VEHICLE_ACTOR_IDS,
+        name="xosc_crossing_vehicle_actor_poses_match_layout",
+        pass_message="XOSC crossing-vehicle actor WorldPosition values match ScenarioSpec layout poses.",
+        failure_message="XOSC crossing-vehicle actor WorldPosition values diverge from ScenarioSpec layout poses.",
+    )
+
+
+def _oncoming_turn_actor_poses_check(
+    spec: ScenarioSpec,
+    root: ET.Element | None,
+    parse_error: str | None,
+) -> CheckResult:
+    return _actor_pose_match_result(
+        spec,
+        root,
+        parse_error,
+        actor_ids=ONCOMING_TURN_ACTOR_IDS,
+        name="xosc_oncoming_turn_actor_poses_match_layout",
+        pass_message="XOSC oncoming-turn actor WorldPosition values match ScenarioSpec layout poses.",
+        failure_message="XOSC oncoming-turn actor WorldPosition values diverge from ScenarioSpec layout poses.",
     )
 
 
@@ -277,7 +371,7 @@ def _pedestrian_trajectory_check(
     path_id = "pedestrian_crossing_path"
     expected_points = spec.layout.paths[path_id].points
     expected_vertices = [{"x_m": point.x_m, "y_m": point.y_m} for point in expected_points]
-    observed_vertices, times_parseable = _pedestrian_trajectory_vertices(root)
+    observed_vertices, times_parseable = _trajectory_vertices(root, action_name="pedestrian_follow_crossing_path")
     comparable_count = min(len(expected_vertices), len(observed_vertices))
     errors = [
         math.hypot(
@@ -315,6 +409,113 @@ def _pedestrian_trajectory_check(
         suggested_operations=({
             "op": "rebuild_artifacts",
             "reason": "XOSC pedestrian trajectory diverges from ScenarioSpec layout path.",
+        },),
+    )
+
+
+def _cut_in_trajectory_check(
+    spec: ScenarioSpec,
+    root: ET.Element | None,
+    parse_error: str | None,
+) -> CheckResult:
+    return _layout_path_trajectory_check(
+        spec,
+        root,
+        parse_error,
+        path_id="cut_in_path",
+        action_name="cut_in_vehicle_follow_cut_in_path",
+        name="xosc_cut_in_trajectory_matches_layout_path",
+        pass_message="XOSC cut-in FollowTrajectoryAction vertices match ScenarioSpec layout path.",
+        failure_message="XOSC cut-in FollowTrajectoryAction vertices diverge from ScenarioSpec layout path.",
+    )
+
+
+def _crossing_vehicle_trajectory_check(
+    spec: ScenarioSpec,
+    root: ET.Element | None,
+    parse_error: str | None,
+) -> CheckResult:
+    return _layout_path_trajectory_check(
+        spec,
+        root,
+        parse_error,
+        path_id="crossing_vehicle_path",
+        action_name="crossing_vehicle_follow_crossing_path",
+        name="xosc_crossing_vehicle_trajectory_matches_layout_path",
+        pass_message="XOSC crossing-vehicle FollowTrajectoryAction vertices match ScenarioSpec layout path.",
+        failure_message="XOSC crossing-vehicle FollowTrajectoryAction vertices diverge from ScenarioSpec layout path.",
+    )
+
+
+def _oncoming_turn_trajectory_check(
+    spec: ScenarioSpec,
+    root: ET.Element | None,
+    parse_error: str | None,
+) -> CheckResult:
+    return _layout_path_trajectory_check(
+        spec,
+        root,
+        parse_error,
+        path_id="oncoming_turn_path",
+        action_name="oncoming_vehicle_follow_turn_path",
+        name="xosc_oncoming_turn_trajectory_matches_layout_path",
+        pass_message="XOSC oncoming-turn FollowTrajectoryAction vertices match ScenarioSpec layout path.",
+        failure_message="XOSC oncoming-turn FollowTrajectoryAction vertices diverge from ScenarioSpec layout path.",
+    )
+
+
+def _layout_path_trajectory_check(
+    spec: ScenarioSpec,
+    root: ET.Element | None,
+    parse_error: str | None,
+    *,
+    path_id: str,
+    action_name: str,
+    name: str,
+    pass_message: str,
+    failure_message: str,
+) -> CheckResult:
+    expected_points = spec.layout.paths[path_id].points
+    expected_vertices = [{"x_m": point.x_m, "y_m": point.y_m} for point in expected_points]
+    observed_vertices, times_parseable = _trajectory_vertices(root, action_name=action_name)
+    comparable_count = min(len(expected_vertices), len(observed_vertices))
+    errors = [
+        math.hypot(
+            float(observed_vertices[index]["x_m"]) - expected_vertices[index]["x_m"],
+            float(observed_vertices[index]["y_m"]) - expected_vertices[index]["y_m"],
+        )
+        for index in range(comparable_count)
+        if observed_vertices[index]["x_m"] is not None and observed_vertices[index]["y_m"] is not None
+    ]
+    maximum_error = max(errors) if len(errors) == comparable_count and errors else None
+    passed = (
+        parse_error is None
+        and len(expected_vertices) == len(observed_vertices)
+        and maximum_error is not None
+        and maximum_error <= PATH_TOLERANCE_M
+        and times_parseable
+    )
+    measured: dict[str, object] = {
+        "path_id": path_id,
+        "action_name": action_name,
+        "expected_vertex_count": len(expected_vertices),
+        "observed_vertex_count": len(observed_vertices),
+        "expected_vertices": expected_vertices,
+        "observed_vertices": observed_vertices,
+        "maximum_position_error_m": maximum_error,
+        "time_attributes_parseable": times_parseable,
+    }
+    if parse_error is not None:
+        measured["xosc_parse_error"] = parse_error
+    return _result(
+        name=name,
+        passed=passed,
+        pass_message=pass_message,
+        failure_message=failure_message,
+        measured=measured,
+        suggested_operations=({
+            "op": "rebuild_artifacts",
+            "reason": "XOSC trajectory diverges from ScenarioSpec layout path.",
         },),
     )
 
@@ -380,11 +581,12 @@ def _logic_file_target_exists_check(
     )
 
 
-def _logic_file_canonical_check(logic_file_path: str | None, parse_error: str | None) -> CheckResult:
+def _logic_file_canonical_check(spec: ScenarioSpec, logic_file_path: str | None, parse_error: str | None) -> CheckResult:
+    expected_basename = _expected_canonical_road_filename(spec)
     observed_basename = Path(logic_file_path).name if logic_file_path else None
-    passed = parse_error is None and observed_basename == URBAN_TWO_WAY_PARKING_FILENAME
+    passed = parse_error is None and observed_basename == expected_basename
     measured: dict[str, object] = {
-        "expected_basename": URBAN_TWO_WAY_PARKING_FILENAME,
+        "expected_basename": expected_basename,
         "observed_basename": observed_basename,
     }
     if parse_error is not None:
@@ -397,9 +599,97 @@ def _logic_file_canonical_check(logic_file_path: str | None, parse_error: str | 
         measured=measured,
         suggested_operations=({
             "op": "materialize_canonical_road_asset",
-            "road_asset": URBAN_TWO_WAY_PARKING_FILENAME,
+            "road_asset": expected_basename,
         },),
     )
+
+
+def _intersection_layout_alignment_check(
+    spec: ScenarioSpec,
+    xodr_path: Path | None,
+    *,
+    name: str,
+    path_id: str,
+) -> CheckResult:
+    assert spec.layout is not None
+    conflict_point = spec.layout.points.get("conflict_point")
+    path = spec.layout.paths.get(path_id)
+    road_data, parse_error = _intersection_road_data(xodr_path)
+    crossing_x_error = None
+    conflict_on_ego_corridor = False
+    path_uses_crossing_corridor = False
+    junction_has_lane_links = False
+    if conflict_point is not None and road_data is not None:
+        crossing_x_error = abs(road_data["north_south_cross_x_m"] - conflict_point.x_m)
+        conflict_on_ego_corridor = -1.75 <= conflict_point.y_m <= 1.75
+        if path is not None and path.points:
+            path_uses_crossing_corridor = all(
+                abs(point.x_m - conflict_point.x_m) <= 1e-6
+                for point in path.points
+                if point is not conflict_point
+            ) or path_id == "oncoming_turn_path"
+        junction_has_lane_links = bool(road_data["junction_lane_link_count"] > 0)
+    passed = (
+        parse_error is None
+        and crossing_x_error is not None
+        and crossing_x_error <= POSITION_TOLERANCE_M
+        and conflict_on_ego_corridor
+        and path_uses_crossing_corridor
+        and junction_has_lane_links
+    )
+    measured: dict[str, object] = {
+        "road_asset_id": spec.metadata.get("road_asset_id"),
+        "path_id": path_id,
+        "conflict_point_x_m": conflict_point.x_m if conflict_point is not None else None,
+        "conflict_point_y_m": conflict_point.y_m if conflict_point is not None else None,
+        "north_south_cross_x_m": road_data["north_south_cross_x_m"] if road_data is not None else None,
+        "crossing_x_error_m": crossing_x_error,
+        "conflict_on_ego_corridor": conflict_on_ego_corridor,
+        "path_uses_crossing_corridor": path_uses_crossing_corridor,
+        "junction_lane_link_count": road_data["junction_lane_link_count"] if road_data is not None else 0,
+    }
+    if parse_error is not None:
+        measured["xodr_parse_error"] = parse_error
+    return _result(
+        name=name,
+        passed=passed,
+        pass_message="Intersection XODR road geometry and junction links align with ScenarioSpec layout.",
+        failure_message="Intersection XODR road geometry or junction links do not align with ScenarioSpec layout.",
+        measured=measured,
+        suggested_operations=({
+            "op": "rebuild_artifacts",
+            "reason": "Generated OpenDRIVE intersection does not align with ScenarioSpec layout.",
+        },),
+    )
+
+
+def _intersection_road_data(xodr_path: Path | None) -> tuple[dict[str, float | int] | None, str | None]:
+    if xodr_path is None:
+        return None, "missing xodr_path"
+    try:
+        root = ET.parse(xodr_path).getroot()
+    except (OSError, ET.ParseError) as exc:
+        return None, str(exc)
+    roads = {road.attrib.get("name", ""): road for road in root.findall("./road")}
+    cross_geometry = roads.get("north_south_cross").find("./planView/geometry") if "north_south_cross" in roads else None
+    if cross_geometry is None:
+        return None, "north_south_cross geometry missing"
+    try:
+        cross_x = float(cross_geometry.attrib["x"])
+    except (KeyError, ValueError) as exc:
+        return None, f"north_south_cross x parse error: {exc}"
+    return {
+        "north_south_cross_x_m": cross_x,
+        "junction_lane_link_count": len(root.findall("./junction/connection/laneLink")),
+    }, None
+
+
+def _expected_canonical_road_filename(spec: ScenarioSpec) -> str:
+    if spec.scenario_type in {"crossing_vehicle", "oncoming_turn_across_path"}:
+        return URBAN_FOUR_WAY_INTERSECTION_FILENAME
+    if spec.scenario_type == "cut_in":
+        return MULTI_LANE_SAME_DIRECTION_FILENAME
+    return URBAN_TWO_WAY_PARKING_FILENAME
 
 
 def _initial_world_positions(root: ET.Element | None) -> dict[str, tuple[float, float, float]]:
@@ -422,12 +712,14 @@ def _initial_world_positions(root: ET.Element | None) -> dict[str, tuple[float, 
     return positions
 
 
-def _pedestrian_trajectory_vertices(
+def _trajectory_vertices(
     root: ET.Element | None,
+    *,
+    action_name: str,
 ) -> tuple[list[dict[str, float | None]], bool]:
     if root is None:
         return [], False
-    action = root.find(".//Action[@name='pedestrian_follow_crossing_path']")
+    action = root.find(f".//Action[@name='{action_name}']")
     if action is None:
         return [], False
     vertices: list[dict[str, float | None]] = []
