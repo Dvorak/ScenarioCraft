@@ -526,6 +526,20 @@ def test_builder_serializes_lead_vehicle_braking_speed_action(tmp_path) -> None:
     assert condition.attrib["value"] == "18.0"
 
 
+def test_builder_binds_lead_vehicle_braking_to_opendrive_logic_file(tmp_path) -> None:
+    spec = resolve_scenario_intent(ScenarioIntent(template_id="lead_vehicle_braking"))
+
+    result = build_openscenario(spec, tmp_path)
+    root = ET.parse(result.xosc_path).getroot()
+    logic_file = root.find("./RoadNetwork/LogicFile")
+
+    assert result.xodr_path == tmp_path / URBAN_TWO_WAY_PARKING_FILENAME
+    assert result.xodr_path.exists()
+    assert logic_file is not None
+    assert logic_file.attrib["filepath"] == URBAN_TWO_WAY_PARKING_FILENAME
+    assert not Path(logic_file.attrib["filepath"]).is_absolute()
+
+
 def test_fallback_builder_serializes_lead_vehicle_braking_speed_action(tmp_path) -> None:
     spec = resolve_scenario_intent(ScenarioIntent(template_id="lead_vehicle_braking"))
 
