@@ -43,6 +43,50 @@ def test_cli_happy_path_with_mock_provider(monkeypatch, tmp_path: Path) -> None:
     assert "`xosc_actor_poses_match_layout`" in report
 
 
+def test_cli_openai_compatible_provider_uses_intent_path(monkeypatch, tmp_path: Path) -> None:
+    input_path = tmp_path / "input.txt"
+    output_dir = tmp_path / "out"
+    input_path.write_text("ego follows a lead vehicle that brakes hard", encoding="utf-8")
+    monkeypatch.setenv("ESMINI_BIN", str(tmp_path / "missing-esmini"))
+    monkeypatch.setenv("SCENARIOCRAFT_OPENAI_API_KEY", "local")
+    monkeypatch.setenv("SCENARIOCRAFT_OPENAI_BASE_URL", "http://localhost:11434/v1")
+    monkeypatch.setenv("SCENARIOCRAFT_INTENT_MODEL", "qwen2.5:7b")
+    monkeypatch.setattr("shutil.which", lambda _binary: None)
+
+    class StaticProvider:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def propose_intent(self, request):
+            from scenariocraft.core.schemas import ScenarioIntent
+            from scenariocraft.providers.intent import IntentProposal
+
+            return IntentProposal(
+                intent=ScenarioIntent(
+                    template_id="lead_vehicle_braking",
+                    parameters={"scenario_name": "cli_intent_lead_braking", "initial_gap_m": 31.0},
+                ),
+                rationale="lead braking",
+                provider_name="openai_compatible",
+            )
+
+    monkeypatch.setattr("scenariocraft.main.OpenAIIntentProvider", StaticProvider)
+
+    exit_code = main([
+        "--input",
+        str(input_path),
+        "--out",
+        str(output_dir),
+        "--provider",
+        "openai-compatible",
+    ])
+
+    assert exit_code == 0
+    spec = json.loads((output_dir / "scenario_spec.json").read_text(encoding="utf-8"))
+    assert spec["scenario_type"] == "lead_vehicle_braking"
+    assert spec["scenario_name"] == "cli_intent_lead_braking"
+
+
 def test_cli_generated_scenario_path_delegates_to_application_workflow() -> None:
     source = Path("scenariocraft/main.py").read_text(encoding="utf-8")
     generated_path = source[source.index("def main") : source.index("def _parse_args")]

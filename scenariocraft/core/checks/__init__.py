@@ -15,6 +15,7 @@ _EXPORTS = {
     "run_and_write_runtime_consistency_checks": "scenariocraft.core.checks.runtime_pipeline",
     "run_pedestrian_occlusion_checks": "scenariocraft.core.checks.pedestrian_occlusion",
     "run_pedestrian_occlusion_timing_checks": "scenariocraft.core.checks.pedestrian_occlusion",
+    "run_lead_vehicle_braking_checks": "scenariocraft.core.checks.lead_vehicle_braking",
     "run_runtime_consistency_checks": "scenariocraft.core.checks.runtime_consistency",
     "run_checks": "scenariocraft.core.checks.runner",
     "run_structural_validity_checks": "scenariocraft.core.checks.structural",

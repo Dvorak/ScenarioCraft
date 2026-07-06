@@ -81,6 +81,7 @@ def test_resolver_maps_lead_vehicle_braking_intent_to_scenario_spec() -> None:
     assert spec.layout.actor_poses["lead_vehicle"].x_m == 28.0
     assert spec.layout.actor_poses["ego"].y_m == spec.layout.actor_poses["lead_vehicle"].y_m == 0.0
     assert spec.intended_criticality.target_min_ttc_s == 2.0
+    assert spec.trigger.distance_m == 18.0
     assert spec.metadata["lead_vehicle_braking"]["lead_deceleration_mps2"] == -4.0
 
 
@@ -106,8 +107,27 @@ def test_lead_vehicle_braking_template_emits_same_lane_layout_and_timing_semanti
     assert spec.layout.paths["ego_path"].points[-1].x_m > spec.layout.actor_poses["lead_vehicle"].x_m
     assert spec.trigger.source == "ego"
     assert spec.trigger.target == "lead_vehicle"
-    assert spec.trigger.distance_m == 30.0
+    assert spec.trigger.distance_m == 18.0
     relations = {(relation.relation_type, relation.subject, relation.object) for relation in spec.spatial_relations}
     assert ("same_lane_as", "ego", "lead_vehicle") in relations
     assert ("ahead_of", "lead_vehicle", "ego") in relations
     assert ("brakes_before", "lead_vehicle", "ego") in relations
+
+
+def test_lead_vehicle_braking_template_emits_storyboard_semantics() -> None:
+    spec = resolve_scenario_intent(ScenarioIntent(template_id="lead_vehicle_braking"))
+
+    assert spec.storyboard is not None
+    assert {group.id for group in spec.storyboard.maneuver_groups} == {
+        "ego_driving",
+        "lead_vehicle_braking",
+    }
+    lead_group = next(group for group in spec.storyboard.maneuver_groups if group.id == "lead_vehicle_braking")
+    assert lead_group.actor_refs == ("lead_vehicle",)
+    lead_event = next(event for event in spec.storyboard.events if event.id == "lead_vehicle_starts_braking")
+    assert lead_event.start_trigger_ref == "lead_vehicle_brake_relative_distance"
+    lead_action = next(action for action in spec.storyboard.actions if action.id == "lead_vehicle_brakes")
+    assert lead_action.type == "absolute_speed"
+    assert lead_action.actor_refs == ("lead_vehicle",)
+    assert lead_action.metadata["target_speed_mps"] == 0.0
+    assert lead_action.metadata["dynamics_dimension"] == "rate"

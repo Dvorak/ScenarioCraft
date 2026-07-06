@@ -20,6 +20,7 @@ from scenariocraft.core.schemas import (
     Pose2D,
     RoadBandSpec,
     RoadSpec,
+    ScenarioIntent,
     ScenarioSpec,
     ScenarioTimingSpec,
     SpatialRelationSpec,
@@ -33,6 +34,7 @@ from scenariocraft.core.schemas import (
     TriggerSpec,
     WeatherSpec,
 )
+from scenariocraft.core.templates.capability import ParameterDomain, TemplateCapability
 
 
 @dataclass(frozen=True)
@@ -59,6 +61,7 @@ class PedestrianOcclusionParameters:
     minimum_post_trigger_buffer_s: float = 0.5
     canonical_nominal_trigger_time_s: float | None = None
     weather: str = "rainy_wet"
+    target_min_ttc_s: float = 1.5
 
 
 class PedestrianOcclusionTemplate:
@@ -71,11 +74,67 @@ class PedestrianOcclusionTemplate:
         "parameters": PedestrianOcclusionParameters(),
     }
     supported_operations = ()
+    capability = TemplateCapability(
+        template_id=template_id,
+        interaction_family="pedestrian_occlusion",
+        description=description,
+        actor_roles=required_actors,
+        road_contexts=("urban", "urban_straight"),
+        topologies=("urban_two_way_parking", "straight_two_way"),
+        aliases=(
+            "occluded pedestrian crossing",
+            "pedestrian crosses from behind parked vehicle",
+            "child emerges from behind van",
+            "pedestrian hidden by delivery van",
+        ),
+        semantic_slots=(
+            "road_context",
+            "ego",
+            "crossing_actor",
+            "occluder",
+            "occlusion_relation",
+            "crossing_path",
+            "lighting",
+            "weather",
+        ),
+        supported_variants=(
+            "adult or child pedestrian semantics in intent metadata",
+            "van, delivery van, parked vehicle occluder semantics in intent metadata",
+            "rainy/wet or clear/dry weather",
+            "night lighting metadata",
+        ),
+        unsupported_boundary_examples=(
+            "cyclist occlusion",
+            "highway cut-in",
+            "freeway pedestrian",
+            "intersection vehicle crossing",
+            "intersection crossing vehicle",
+            "multi-road pedestrian route",
+        ),
+        parameter_domains=(
+            ParameterDomain("ego_speed_kph", "float", 35.0, unit="km/h", min_value=28.0, max_value=45.0),
+            ParameterDomain("pedestrian_speed_mps", "float", 1.5, unit="m/s", min_value=1.1, max_value=1.9),
+            ParameterDomain("trigger_offset_m", "float", 18.0, unit="m", min_value=16.0, max_value=22.0),
+            ParameterDomain("van_to_conflict_offset_m", "float", 5.0, unit="m", min_value=4.5, max_value=6.5),
+            ParameterDomain("total_duration_s", "float", 8.0, unit="s", min_value=8.0, max_value=12.0, sampleable=False),
+            ParameterDomain("preferred_trigger_earliest_s", "float", 1.5, unit="s", min_value=1.0, max_value=2.5, sampleable=False),
+            ParameterDomain("preferred_trigger_latest_s", "float", 3.0, unit="s", min_value=2.0, max_value=4.0, sampleable=False),
+            ParameterDomain("target_min_ttc_s", "float", 1.5, unit="s", min_value=0.8, max_value=3.0),
+            ParameterDomain(
+                "weather",
+                "str",
+                "rainy_wet",
+                allowed_values=("rainy_wet", "clear_dry"),
+                sampleable=False,
+            ),
+        ),
+    )
 
     def instantiate(self, **parameters: object) -> ScenarioSpec:
         scenario_name = str(parameters.get("scenario_name", self.default_parameters["scenario_name"]))
         source_text = str(parameters.get("source_text", self.default_parameters["source_text"]))
-        template_parameters = _parameters_from_mapping(parameters)
+        intent = parameters.get("intent")
+        template_parameters = _parameters_from_mapping(parameters, intent if isinstance(intent, ScenarioIntent) else None)
         timing = _derive_timing(template_parameters)
         layout = _derive_layout(template_parameters)
         metadata = {"generator": "mock", "source_text": source_text}
@@ -83,7 +142,7 @@ class PedestrianOcclusionTemplate:
             scenario_name=scenario_name,
             scenario_type=self.template_id,
             road=RoadSpec(type="urban_straight", lanes_per_direction=1, speed_limit_kph=50),
-            weather=WeatherSpec(rain=True, road_condition="wet"),
+            weather=_weather(template_parameters),
             actors=[
                 ActorSpec(id="ego", type="car", role="ego", initial_speed_kph=template_parameters.ego_speed_kph),
                 ActorSpec(id="parked_van", type="van", role="occluder", state="parked"),
@@ -96,7 +155,7 @@ class PedestrianOcclusionTemplate:
                 distance_m=template_parameters.trigger_offset_m,
                 condition=_trigger_condition(template_parameters),
             ),
-            intended_criticality=CriticalitySpec(type="near_miss", target_min_ttc_s=1.5),
+            intended_criticality=CriticalitySpec(type="near_miss", target_min_ttc_s=template_parameters.target_min_ttc_s),
             metadata=metadata,
             layout=layout,
             spatial_relations=_spatial_relations(template_parameters),
@@ -105,7 +164,10 @@ class PedestrianOcclusionTemplate:
         )
 
 
-def _parameters_from_mapping(values: Mapping[str, object]) -> PedestrianOcclusionParameters:
+def _parameters_from_mapping(
+    values: Mapping[str, object],
+    intent: ScenarioIntent | None = None,
+) -> PedestrianOcclusionParameters:
     template_parameters = values.get("parameters", PedestrianOcclusionParameters())
     if isinstance(template_parameters, PedestrianOcclusionParameters):
         base = template_parameters
@@ -113,12 +175,30 @@ def _parameters_from_mapping(values: Mapping[str, object]) -> PedestrianOcclusio
         base = PedestrianOcclusionParameters(**template_parameters)
     else:
         raise TypeError("parameters must be a PedestrianOcclusionParameters or mapping.")
+    intent_overrides: dict[str, object] = {}
+    if intent is not None:
+        ego = intent.actor("ego")
+        pedestrian = intent.actor("pedestrian") or intent.actor("crossing_actor")
+        if "speed_kph" in ego:
+            intent_overrides["ego_speed_kph"] = ego["speed_kph"]
+        if "speed_mps" in pedestrian:
+            intent_overrides["pedestrian_speed_mps"] = pedestrian["speed_mps"]
+        if "target_ttc_s" in intent.criticality:
+            intent_overrides["target_min_ttc_s"] = intent.criticality["target_ttc_s"]
+        if "condition" in intent.weather:
+            intent_overrides["weather"] = intent.weather["condition"]
     overrides = {
         field_name: values[field_name]
         for field_name in PedestrianOcclusionParameters.__dataclass_fields__
         if field_name in values
     }
-    return replace(base, **overrides) if overrides else base
+    return replace(base, **{**intent_overrides, **overrides})
+
+
+def _weather(parameters: PedestrianOcclusionParameters) -> WeatherSpec:
+    if parameters.weather == "clear_dry":
+        return WeatherSpec(rain=False, road_condition="dry")
+    return WeatherSpec(rain=True, road_condition="wet")
 
 
 def _derive_timing(parameters: PedestrianOcclusionParameters) -> ScenarioTimingSpec:

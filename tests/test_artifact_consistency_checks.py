@@ -7,7 +7,8 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
-from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
+from scenariocraft.core.schemas import ScenarioIntent
+from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec, resolve_scenario_intent
 from scenariocraft.core.checks import run_artifact_consistency_checks
 from scenariocraft.core.build import BuildResult, build_openscenario
 
@@ -150,6 +151,27 @@ def test_layout_free_spec_returns_no_artifact_consistency_checks(tmp_path: Path)
     )
 
     assert results == ()
+
+
+def test_lead_vehicle_braking_artifact_consistency_checks_pass(tmp_path: Path) -> None:
+    spec = resolve_scenario_intent(ScenarioIntent(template_id="lead_vehicle_braking"))
+    build_result = build_openscenario(spec, tmp_path / "lead_braking")
+
+    results = run_artifact_consistency_checks(
+        spec,
+        xosc_path=build_result.xosc_path,
+        xodr_path=build_result.xodr_path,
+    )
+    by_name = {result.name: result for result in results}
+
+    assert set(by_name) == {
+        "xosc_lead_actor_poses_match_layout",
+        "xosc_lead_braking_action_present",
+        "xosc_lead_braking_trigger_matches_spec",
+    }
+    assert all(result.passed for result in results)
+    assert by_name["xosc_lead_braking_action_present"].measured["action_name"] == "lead_vehicle_brakes"
+    assert by_name["xosc_lead_braking_trigger_matches_spec"].measured["trigger_distance_m"] == spec.trigger.distance_m
 
 
 def _copy_artifacts(build_result: BuildResult, destination: Path) -> BuildResult:

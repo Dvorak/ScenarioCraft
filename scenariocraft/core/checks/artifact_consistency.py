@@ -11,6 +11,7 @@ POSITION_TOLERANCE_M = 1e-6
 HEADING_TOLERANCE_RAD = 1e-6
 PATH_TOLERANCE_M = 1e-6
 CANONICAL_ACTOR_IDS = ("ego", "parked_van", "pedestrian")
+LEAD_BRAKING_ACTOR_IDS = ("ego", "lead_vehicle")
 
 
 def run_artifact_consistency_checks(
@@ -19,10 +20,18 @@ def run_artifact_consistency_checks(
     xosc_path: Path,
     xodr_path: Path | None,
 ) -> tuple[CheckResult, ...]:
-    if spec.scenario_type != "pedestrian_occlusion" or spec.layout is None:
+    if spec.layout is None:
         return ()
 
     root, parse_error = _parse_xosc(xosc_path)
+    if spec.scenario_type == "lead_vehicle_braking":
+        return (
+            _lead_actor_poses_check(spec, root, parse_error),
+            _lead_braking_action_check(spec, root, parse_error),
+            _lead_braking_trigger_check(spec, root, parse_error),
+        )
+    if spec.scenario_type != "pedestrian_occlusion":
+        return ()
     logic_file_path = _logic_file_path(root)
     return (
         _actor_poses_check(spec, root, parse_error),
@@ -106,6 +115,157 @@ def _actor_poses_check(
             "op": "rebuild_artifacts",
             "reason": "XOSC actor initial pose diverges from ScenarioSpec layout.",
         },),
+    )
+
+
+def _lead_actor_poses_check(
+    spec: ScenarioSpec,
+    root: ET.Element | None,
+    parse_error: str | None,
+) -> CheckResult:
+    return _actor_pose_match_result(
+        spec,
+        root,
+        parse_error,
+        actor_ids=LEAD_BRAKING_ACTOR_IDS,
+        name="xosc_lead_actor_poses_match_layout",
+        pass_message="XOSC lead-braking actor WorldPosition values match ScenarioSpec layout poses.",
+        failure_message="XOSC lead-braking actor WorldPosition values diverge from ScenarioSpec layout poses.",
+    )
+
+
+def _actor_pose_match_result(
+    spec: ScenarioSpec,
+    root: ET.Element | None,
+    parse_error: str | None,
+    *,
+    actor_ids: tuple[str, ...],
+    name: str,
+    pass_message: str,
+    failure_message: str,
+) -> CheckResult:
+    observed = _initial_world_positions(root)
+    expected_x: dict[str, float] = {}
+    expected_y: dict[str, float] = {}
+    observed_x: dict[str, float | None] = {}
+    observed_y: dict[str, float | None] = {}
+    position_error: dict[str, float | None] = {}
+    for actor_id in actor_ids:
+        pose = spec.layout.actor_poses[actor_id]
+        expected_x[actor_id] = pose.x_m
+        expected_y[actor_id] = pose.y_m
+        world_position = observed.get(actor_id)
+        if world_position is None:
+            observed_x[actor_id] = None
+            observed_y[actor_id] = None
+            position_error[actor_id] = None
+            continue
+        x_m, y_m, _heading_rad = world_position
+        observed_x[actor_id] = x_m
+        observed_y[actor_id] = y_m
+        position_error[actor_id] = math.hypot(x_m - pose.x_m, y_m - pose.y_m)
+    passed = parse_error is None and all(
+        position_error[actor_id] is not None and position_error[actor_id] <= POSITION_TOLERANCE_M
+        for actor_id in actor_ids
+    )
+    measured: dict[str, object] = {
+        "actor_id": list(actor_ids),
+        "expected_x_m": expected_x,
+        "expected_y_m": expected_y,
+        "observed_x_m": observed_x,
+        "observed_y_m": observed_y,
+        "position_error_m": position_error,
+    }
+    if parse_error is not None:
+        measured["xosc_parse_error"] = parse_error
+    return _result(
+        name=name,
+        passed=passed,
+        pass_message=pass_message,
+        failure_message=failure_message,
+        measured=measured,
+        suggested_operations=({
+            "op": "rebuild_artifacts",
+            "reason": "XOSC actor initial pose diverges from ScenarioSpec layout.",
+        },),
+    )
+
+
+def _lead_braking_action_check(
+    spec: ScenarioSpec,
+    root: ET.Element | None,
+    parse_error: str | None,
+) -> CheckResult:
+    action = root.find(".//Action[@name='lead_vehicle_brakes']") if root is not None else None
+    dynamics = action.find(".//SpeedActionDynamics") if action is not None else None
+    target_speed = action.find(".//AbsoluteTargetSpeed") if action is not None else None
+    expected_deceleration = _lead_deceleration_mps2(spec)
+    observed_target_speed = _float_attr(target_speed, "value")
+    observed_dynamics_value = _float_attr(dynamics, "value")
+    observed_dimension = dynamics.attrib.get("dynamicsDimension") if dynamics is not None else None
+    observed_shape = dynamics.attrib.get("dynamicsShape") if dynamics is not None else None
+    passed = (
+        parse_error is None
+        and action is not None
+        and observed_target_speed == 0.0
+        and observed_shape == "linear"
+        and observed_dimension == "rate"
+        and observed_dynamics_value == abs(expected_deceleration)
+    )
+    measured: dict[str, object] = {
+        "action_name": "lead_vehicle_brakes",
+        "observed_target_speed_mps": observed_target_speed,
+        "observed_dynamics_shape": observed_shape,
+        "observed_dynamics_dimension": observed_dimension,
+        "observed_dynamics_value": observed_dynamics_value,
+        "expected_deceleration_mps2": expected_deceleration,
+    }
+    if parse_error is not None:
+        measured["xosc_parse_error"] = parse_error
+    return _result(
+        name="xosc_lead_braking_action_present",
+        passed=passed,
+        pass_message="XOSC contains the lead vehicle braking SpeedAction.",
+        failure_message="XOSC lead vehicle braking SpeedAction is missing or inconsistent.",
+        measured=measured,
+        suggested_operations=({"op": "rebuild_artifacts", "reason": "Lead braking action is inconsistent."},),
+    )
+
+
+def _lead_braking_trigger_check(
+    spec: ScenarioSpec,
+    root: ET.Element | None,
+    parse_error: str | None,
+) -> CheckResult:
+    event = root.find(".//Event[@name='lead_vehicle_starts_braking']") if root is not None else None
+    trigger_source = event.find(".//TriggeringEntities/EntityRef") if event is not None else None
+    condition = event.find(".//RelativeDistanceCondition") if event is not None else None
+    observed_distance = _float_attr(condition, "value")
+    observed_target = condition.attrib.get("entityRef") if condition is not None else None
+    observed_source = trigger_source.attrib.get("entityRef") if trigger_source is not None else None
+    passed = (
+        parse_error is None
+        and observed_source == spec.trigger.source
+        and observed_target == spec.trigger.target
+        and observed_distance == spec.trigger.distance_m
+    )
+    measured: dict[str, object] = {
+        "trigger_source": observed_source,
+        "trigger_target": observed_target,
+        "trigger_distance_m": observed_distance,
+        "expected_source": spec.trigger.source,
+        "expected_target": spec.trigger.target,
+        "expected_distance_m": spec.trigger.distance_m,
+    }
+    if parse_error is not None:
+        measured["xosc_parse_error"] = parse_error
+    return _result(
+        name="xosc_lead_braking_trigger_matches_spec",
+        passed=passed,
+        pass_message="XOSC lead braking trigger matches ScenarioSpec trigger semantics.",
+        failure_message="XOSC lead braking trigger diverges from ScenarioSpec trigger semantics.",
+        measured=measured,
+        suggested_operations=({"op": "rebuild_artifacts", "reason": "Lead braking trigger is inconsistent."},),
     )
 
 
@@ -296,6 +456,22 @@ def _logic_file_path(root: ET.Element | None) -> str | None:
     if logic_file is None:
         return None
     return logic_file.attrib.get("filepath")
+
+
+def _float_attr(element: ET.Element | None, name: str) -> float | None:
+    if element is None:
+        return None
+    try:
+        return float(element.attrib[name])
+    except (KeyError, ValueError):
+        return None
+
+
+def _lead_deceleration_mps2(spec: ScenarioSpec) -> float:
+    metadata = spec.metadata.get("lead_vehicle_braking", {})
+    if isinstance(metadata, dict) and metadata.get("lead_deceleration_mps2") is not None:
+        return float(metadata["lead_deceleration_mps2"])
+    return -4.0
 
 
 def _result(

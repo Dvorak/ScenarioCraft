@@ -9,6 +9,7 @@ not parse natural language or generate XOSC/XODR artifacts.
 from typing import Mapping, Protocol
 
 from scenariocraft.core.schemas import ScenarioSpec
+from scenariocraft.core.templates.capability import TemplateCapability
 
 
 class ScenarioTemplate(Protocol):
@@ -17,6 +18,7 @@ class ScenarioTemplate(Protocol):
     required_actors: tuple[str, ...]
     default_parameters: Mapping[str, object]
     supported_operations: tuple[str, ...]
+    capability: TemplateCapability
 
     def instantiate(self, **parameters: object) -> ScenarioSpec:
         """Instantiate this deterministic template as a ScenarioSpec."""

@@ -35,6 +35,10 @@ def test_report_includes_missing_tool_warnings(tmp_path: Path) -> None:
     assert "ASAM OpenSCENARIO XML checker was not found" in report
     assert "esmini was not found" in report
     assert "rainy_pedestrian_occlusion" in report
+    assert "## Template Resolution" in report
+    assert "Template: `pedestrian_occlusion`" in report
+    assert "Seed: `none`" in report
+    assert "`ego_speed_kph` = `35.0 km/h` (default)" in report
     assert "## Timing Metrics" in report
     assert "Target TTC: `1.5 s`" in report
     assert "Trigger threshold time: `1.9 s`" in report

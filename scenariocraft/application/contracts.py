@@ -8,6 +8,7 @@ from scenariocraft.core.build import BuildResult
 from scenariocraft.external_tools import AsamQcResult, EsminiPlaybackResult, EsminiResult
 from scenariocraft.core.schemas import CheckResult, ScenarioSpec
 from scenariocraft.core.checks import SemanticValidationResult
+from scenariocraft.providers.intent import IntentProposal
 
 
 WorkflowTerminalStatus: TypeAlias = Literal[
@@ -59,6 +60,7 @@ class ScenarioWorkflowRequest:
     scenario_text: str
     output_dir: Path
     provider_name: str = "mock"
+    intent_provider: object | None = None
     demo_case_id: str | None = None
     template_parameters: dict[str, object] = field(default_factory=dict)
     options: ScenarioWorkflowOptions = field(default_factory=ScenarioWorkflowOptions)
@@ -68,6 +70,7 @@ class ScenarioWorkflowRequest:
             "scenario_text": self.scenario_text,
             "output_dir": str(self.output_dir),
             "provider_name": self.provider_name,
+            "intent_provider": getattr(self.intent_provider, "provider_name", None),
             "demo_case_id": self.demo_case_id,
             "template_parameters": _json_value(self.template_parameters),
             "options": self.options.to_dict(),
@@ -127,6 +130,7 @@ class ScenarioWorkflowResult:
     status: ScenarioWorkflowStatus
     artifacts: ScenarioArtifactPaths
     spec: ScenarioSpec
+    intent_proposal: IntentProposal | None = None
     original_spec: ScenarioSpec | None = None
     prepared_case: object | None = None
     build_result: BuildResult | None = None
@@ -153,6 +157,7 @@ class ScenarioWorkflowResult:
             "request": self.request.to_dict(),
             "status": self.status.to_dict(),
             "artifacts": self.artifacts.to_dict(),
+            "intent_proposal": _json_value(self.intent_proposal),
             "spec": self.spec.to_dict(),
             "original_spec": self.original_spec.to_dict() if self.original_spec is not None else None,
             "prepared_case": _prepared_case_to_dict(self.prepared_case),

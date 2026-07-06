@@ -11,6 +11,9 @@ from scenariocraft.application import (
     run_external_scenario_workflow,
     run_generated_scenario_workflow,
 )
+from scenariocraft.application.generated_scenario import IntentGenerationOutcomeError
+from scenariocraft.core.schemas import ScenarioIntent
+from scenariocraft.providers.intent import IntentProposal
 
 
 def test_application_layer_has_no_delivery_or_process_imports() -> None:
@@ -125,6 +128,133 @@ def test_generated_scenario_workflow_applies_template_parameter_overrides(tmp_pa
     assert result.spec.timing.preferred_trigger_latest_s == 4.0
 
 
+class _StaticIntentProvider:
+    provider_name = "static-intent"
+
+    def __init__(self) -> None:
+        self.requests = []
+
+    def propose_intent(self, request):
+        self.requests.append(request)
+        return IntentProposal(
+            intent=ScenarioIntent(
+                template_id="lead_vehicle_braking",
+                actors={"ego": {"speed_kph": 48.0}, "lead_vehicle": {"speed_kph": 30.0}},
+                parameters={"scenario_name": "provider_backed_lead_braking", "initial_gap_m": 32.0},
+            ),
+            rationale="The prompt describes a lead vehicle braking scenario.",
+            provider_name=self.provider_name,
+        )
+
+
+class _UnsupportedIntentProvider:
+    provider_name = "unsupported-intent"
+
+    def propose_intent(self, request):
+        return IntentProposal(
+            intent=None,
+            rationale="The request is a highway cut-in.",
+            provider_name=self.provider_name,
+            status="unsupported",
+            refusal_reason="No cut-in template is registered.",
+            nearest_template_candidates=("lead_vehicle_braking",),
+        )
+
+
+class _ClarificationIntentProvider:
+    provider_name = "clarification-intent"
+
+    def propose_intent(self, request):
+        return IntentProposal(
+            intent=None,
+            rationale="The request is ambiguous.",
+            provider_name=self.provider_name,
+            status="clarification_required",
+            clarification_question="Should this be a pedestrian crossing or lead braking scenario?",
+            nearest_template_candidates=("pedestrian_occlusion", "lead_vehicle_braking"),
+        )
+
+
+def test_generated_scenario_workflow_uses_intent_provider_before_resolver(tmp_path: Path) -> None:
+    provider = _StaticIntentProvider()
+
+    result = run_generated_scenario_workflow(
+        ScenarioWorkflowRequest(
+            scenario_text="Ego follows a slower lead vehicle that brakes ahead.",
+            output_dir=tmp_path,
+            provider_name="openai-compatible",
+            intent_provider=provider,
+            options=ScenarioWorkflowOptions(
+                run_preview=False,
+                run_semantics=False,
+                run_geometry_checks=False,
+                run_runtime_checks=False,
+                run_report=False,
+            ),
+        )
+    )
+
+    assert provider.requests
+    assert provider.requests[0].user_text == "Ego follows a slower lead vehicle that brakes ahead."
+    assert provider.requests[0].available_templates == ("lead_vehicle_braking", "pedestrian_occlusion")
+    family_taxonomy = provider.requests[0].metadata["family_taxonomy"]
+    assert family_taxonomy["cut_in"]["status"] == "planned"
+    assert family_taxonomy["lead_vehicle_braking"]["implemented"] is True
+    assert result.spec.scenario_type == "lead_vehicle_braking"
+    assert result.spec.scenario_name == "provider_backed_lead_braking"
+    assert result.spec.layout.actor_poses["lead_vehicle"].x_m == 32.0
+    assert result.intent_proposal is not None
+    assert result.intent_proposal.intent is not None
+    assert result.intent_proposal.intent.template_id == "lead_vehicle_braking"
+
+
+def test_generated_scenario_workflow_stops_on_unsupported_intent_without_building(tmp_path: Path) -> None:
+    provider = _UnsupportedIntentProvider()
+
+    try:
+        run_generated_scenario_workflow(
+            ScenarioWorkflowRequest(
+                scenario_text="Generate a highway cut-in with three lanes.",
+                output_dir=tmp_path,
+                provider_name="openai-compatible",
+                intent_provider=provider,
+                options=ScenarioWorkflowOptions(run_preview=False, run_report=False),
+            )
+        )
+    except IntentGenerationOutcomeError as exc:
+        proposal = exc.proposal
+    else:
+        raise AssertionError("unsupported intent should stop before ScenarioSpec generation")
+
+    assert proposal.status == "unsupported"
+    assert proposal.nearest_template_candidates == ("lead_vehicle_braking",)
+    assert not (tmp_path / "scenario_spec.json").exists()
+    assert not (tmp_path / "scenario.xosc").exists()
+
+
+def test_generated_scenario_workflow_stops_on_clarification_required_without_building(tmp_path: Path) -> None:
+    provider = _ClarificationIntentProvider()
+
+    try:
+        run_generated_scenario_workflow(
+            ScenarioWorkflowRequest(
+                scenario_text="Generate an unclear dangerous urban scenario.",
+                output_dir=tmp_path,
+                provider_name="openai-compatible",
+                intent_provider=provider,
+                options=ScenarioWorkflowOptions(run_preview=False, run_report=False),
+            )
+        )
+    except IntentGenerationOutcomeError as exc:
+        proposal = exc.proposal
+    else:
+        raise AssertionError("clarification-required intent should stop before ScenarioSpec generation")
+
+    assert proposal.status == "clarification_required"
+    assert "pedestrian" in proposal.clarification_question
+    assert not (tmp_path / "scenario_spec.json").exists()
+
+
 def test_controlled_repair_case_skips_optional_integrations_until_repair(tmp_path: Path) -> None:
     result = run_generated_scenario_workflow(
         ScenarioWorkflowRequest(
@@ -168,6 +298,7 @@ def test_workflow_request_and_result_contracts_are_json_friendly(tmp_path: Path)
     assert request.to_dict()["output_dir"] == str(tmp_path)
     payload = result.to_dict()
     assert payload["request"]["provider_name"] == "mock"
+    assert payload["intent_proposal"] is None
     assert payload["artifacts"]["xosc_path"] == str(tmp_path / "scenario.xosc")
     json.dumps(payload, sort_keys=True)
 

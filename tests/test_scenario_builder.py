@@ -3,6 +3,8 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
+from scenariocraft.core.schemas import ScenarioIntent
+from scenariocraft.core.templates import resolve_scenario_intent
 from scenariocraft.core.roads import URBAN_TWO_WAY_PARKING_FILENAME
 from scenariocraft.core.schemas import (
     PathSpec,
@@ -488,6 +490,51 @@ def test_fallback_xml_builder_serializes_ego_driving_trajectory(tmp_path) -> Non
     vertices = _trajectory_vertices(result.xosc_path, "ego_follow_ego_path")
 
     assert [(x, y) for _, x, y, _ in vertices] == [(0.0, 0.0), (DEFAULT_CONFLICT_X_M + 35.0, 0.0)]
+
+
+def test_builder_serializes_lead_vehicle_braking_speed_action(tmp_path) -> None:
+    spec = resolve_scenario_intent(
+        ScenarioIntent(
+            template_id="lead_vehicle_braking",
+            parameters={
+                "initial_gap_m": 30.0,
+                "reaction_point_x_m": 12.0,
+                "lead_deceleration_mps2": -6.0,
+            },
+        )
+    )
+
+    result = build_openscenario(spec, tmp_path)
+    root = ET.parse(result.xosc_path).getroot()
+
+    event = root.find(".//Event[@name='lead_vehicle_starts_braking']")
+    assert event is not None
+    assert root.find(".//ManeuverGroup[@name='lead_vehicle_braking']/Actors/EntityRef[@entityRef='lead_vehicle']") is not None
+    speed_action = root.find(".//Action[@name='lead_vehicle_brakes']//SpeedAction")
+    assert speed_action is not None
+    dynamics = speed_action.find("./SpeedActionDynamics")
+    assert dynamics is not None
+    assert dynamics.attrib["dynamicsShape"] == "linear"
+    assert dynamics.attrib["dynamicsDimension"] == "rate"
+    assert dynamics.attrib["value"] == "6.0"
+    target_speed = speed_action.find("./SpeedActionTarget/AbsoluteTargetSpeed")
+    assert target_speed is not None
+    assert target_speed.attrib["value"] == "0.0"
+    condition = root.find(".//Event[@name='lead_vehicle_starts_braking']/StartTrigger//RelativeDistanceCondition")
+    assert condition is not None
+    assert condition.attrib["entityRef"] == "lead_vehicle"
+    assert condition.attrib["value"] == "18.0"
+
+
+def test_fallback_builder_serializes_lead_vehicle_braking_speed_action(tmp_path) -> None:
+    spec = resolve_scenario_intent(ScenarioIntent(template_id="lead_vehicle_braking"))
+
+    result = build_openscenario(spec, tmp_path, builder=FallbackXmlScenarioBuilder())
+    root = ET.parse(result.xosc_path).getroot()
+
+    assert root.find(".//Event[@name='lead_vehicle_starts_braking']") is not None
+    assert root.find(".//Action[@name='lead_vehicle_brakes']//SpeedAction") is not None
+    assert root.find(".//Action[@name='pedestrian_speed_action']") is None
 
 
 def test_builder_consumes_storyboard_ids_for_xosc_hierarchy(tmp_path) -> None:

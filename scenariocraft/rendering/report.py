@@ -64,6 +64,7 @@ def _render_report(
     qc_summary = _qc_summary(qc_result)
     esmini_summary = _esmini_summary(esmini_result)
     esmini_media_summary = _esmini_media_summary(playback_result)
+    template_resolution_section = _template_resolution_section(spec)
     timing_section = _timing_section(spec)
     check_section = _check_section(check_results)
     artifact_check_section = _artifact_check_section(artifact_check_results)
@@ -83,6 +84,7 @@ def _render_report(
 - Actors: {", ".join(f"`{actor.id}`/{actor.role}" for actor in spec.actors)}
 - Trigger: `{spec.trigger.type}` from `{spec.trigger.source}` to `{spec.trigger.target}` at {spec.trigger.distance_m:g} m
 - Intended criticality: `{spec.intended_criticality.type}`, target min TTC {spec.intended_criticality.target_min_ttc_s:g} s
+{template_resolution_section}
 {timing_section}
 
 ## Generated Artifacts
@@ -169,6 +171,45 @@ def _timing_section(spec: ScenarioSpec) -> str:
     if derivation:
         lines.append(f"- Trigger-time estimate formula: `{derivation}`")
     return "\n".join(lines)
+
+
+def _template_resolution_section(spec: ScenarioSpec) -> str:
+    resolution = spec.metadata.get("template_resolution")
+    if not isinstance(resolution, dict):
+        return ""
+    parameters = resolution.get("parameters", ())
+    if not isinstance(parameters, list):
+        parameters = ()
+    lines = [
+        "",
+        "## Template Resolution",
+        "",
+        f"- Template: `{resolution.get('template_id', spec.scenario_type)}`",
+        f"- Seed: `{_format_template_seed(resolution.get('seed'))}`",
+        f"- Variant index: `{resolution.get('variant_index', 0)}`",
+        f"- Sampled: `{resolution.get('sampled', False)}`",
+    ]
+    if parameters:
+        lines.append("- Resolved parameters:")
+        for parameter in parameters:
+            if not isinstance(parameter, dict):
+                continue
+            name = parameter.get("name", "parameter")
+            value = parameter.get("value", "n/a")
+            source = parameter.get("source", "unknown")
+            unit = parameter.get("unit")
+            suffix = f" {unit}" if unit else ""
+            lines.append(f"  - `{name}` = `{value}{suffix}` ({source})")
+    unsupported = resolution.get("unsupported_fields", ())
+    if unsupported:
+        lines.append(f"- Unsupported intent parameter fields: `{', '.join(str(field) for field in unsupported)}`")
+    return "\n".join(lines)
+
+
+def _format_template_seed(seed: object) -> str:
+    if seed is None:
+        return "none"
+    return str(seed)
 
 
 def _format_seconds(value_s: float | None) -> str:

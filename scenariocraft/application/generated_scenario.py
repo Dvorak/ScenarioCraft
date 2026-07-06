@@ -10,10 +10,19 @@ from scenariocraft.application.contracts import (
     ScenarioWorkflowStatus,
 )
 from scenariocraft.application.demo_cases import PreparedDemoCase, prepare_demo_case
-from scenariocraft.core.checks import run_artifact_consistency_checks, run_pedestrian_occlusion_checks
+from scenariocraft.core.checks import (
+    run_artifact_consistency_checks,
+    run_lead_vehicle_braking_checks,
+    run_pedestrian_occlusion_checks,
+)
 from scenariocraft.core.checks.runtime_pipeline import run_and_write_runtime_consistency_checks
 from scenariocraft.core.build import BuildResult, build_openscenario
-from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
+from scenariocraft.core.templates import (
+    family_declarations,
+    generate_default_pedestrian_occlusion_spec,
+    registered_templates,
+    resolve_scenario_intent,
+)
 from scenariocraft.rendering import generate_2d_preview, generate_validation_report
 from scenariocraft.external_tools import (
     AsamQcResult,
@@ -26,6 +35,20 @@ from scenariocraft.external_tools import (
 from scenariocraft.core.schemas import ScenarioSpec
 from scenariocraft.core.checks import SemanticValidationResult
 from scenariocraft.core.checks import validate_semantics
+from scenariocraft.providers.intent import IntentRequest
+from scenariocraft.providers.intent import IntentProposal
+
+
+class IntentGenerationOutcomeError(ValueError):
+    """Raised when an intent provider returns a terminal non-generation outcome."""
+
+    def __init__(self, proposal: IntentProposal) -> None:
+        self.proposal = proposal
+        if proposal.status == "clarification_required":
+            message = proposal.clarification_question or proposal.rationale
+        else:
+            message = proposal.refusal_reason or proposal.rationale
+        super().__init__(message)
 
 
 def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> ScenarioWorkflowResult:
@@ -33,7 +56,7 @@ def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> Scenari
     options = request.options
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    canonical_spec = _generate_spec(request)
+    canonical_spec, intent_proposal = _generate_spec_with_intent(request)
     prepared_case = _prepare_case(request, canonical_spec, output_dir)
     spec = prepared_case.experiment_spec if prepared_case is not None else canonical_spec
 
@@ -130,6 +153,7 @@ def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> Scenari
         status=status,
         artifacts=artifacts,
         spec=spec,
+        intent_proposal=intent_proposal,
         original_spec=prepared_case.original_spec if prepared_case is not None else canonical_spec,
         prepared_case=prepared_case,
         build_result=build_result,
@@ -145,12 +169,49 @@ def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> Scenari
     )
 
 
-def _generate_spec(request: ScenarioWorkflowRequest) -> ScenarioSpec:
+def _generate_spec_with_intent(request: ScenarioWorkflowRequest) -> tuple[ScenarioSpec, IntentProposal | None]:
+    if request.provider_name in {"openai-compatible", "openai_compatible"}:
+        if request.intent_provider is None:
+            raise ValueError("Intent provider is required for provider=openai-compatible.")
+        proposal = request.intent_provider.propose_intent(_intent_request(request))
+        if proposal.status != "supported" or proposal.intent is None:
+            raise IntentGenerationOutcomeError(proposal)
+        return resolve_scenario_intent(proposal.intent), proposal
     if request.provider_name != "mock":
         raise ValueError(f"Unsupported provider: {request.provider_name}")
-    return generate_default_pedestrian_occlusion_spec(
-        request.scenario_text,
-        **request.template_parameters,
+    return (
+        generate_default_pedestrian_occlusion_spec(
+            request.scenario_text,
+            **request.template_parameters,
+        ),
+        None,
+    )
+
+
+def _generate_spec(request: ScenarioWorkflowRequest) -> ScenarioSpec:
+    spec, _proposal = _generate_spec_with_intent(request)
+    return spec
+
+
+def _intent_request(request: ScenarioWorkflowRequest) -> IntentRequest:
+    templates = registered_templates()
+    return IntentRequest(
+        user_text=request.scenario_text,
+        available_templates=tuple(sorted(templates)),
+        template_contract_summary={
+            template_id: {
+                "description": template.description,
+                "required_actors": list(template.required_actors),
+                "supported_operations": list(template.supported_operations),
+                "capability": template.capability.to_dict(),
+            }
+            for template_id, template in sorted(templates.items())
+        },
+        metadata={
+            "provider_name": request.provider_name,
+            "template_parameters": request.template_parameters,
+            "family_taxonomy": {template_id: family.to_dict() for template_id, family in family_declarations().items()},
+        },
     )
 
 
@@ -188,6 +249,8 @@ def _geometry_check_results(
         return prepared_case.initial_geometry_check_results
     if not options.run_geometry_checks:
         return ()
+    if spec.scenario_type == "lead_vehicle_braking":
+        return run_lead_vehicle_braking_checks(spec)
     return run_pedestrian_occlusion_checks(spec)
 
 

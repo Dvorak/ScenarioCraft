@@ -54,6 +54,19 @@ class _StoryboardBuildPlan:
     pedestrian_start_trigger_name: str
 
 
+@dataclass(frozen=True)
+class _ActorEventBuildPlan:
+    group_name: str
+    maneuver_name: str
+    event_name: str
+    event_priority: str
+    action_name: str
+    start_trigger_name: str
+    path_ref: str | None = None
+    action_type: str = "follow_trajectory"
+    action_metadata: dict[str, object] | None = None
+
+
 class ScenarioBuilder(ABC):
     @abstractmethod
     def build(self, spec: ScenarioSpec, output_dir: Path) -> BuildResult:
@@ -119,6 +132,32 @@ class ScenariogenerationBuilder(ScenarioBuilder):
             ego_group.add_actor(ego.id)
             ego_group.add_maneuver(ego_maneuver)
             act.add_maneuver_group(ego_group)
+        if spec.scenario_type == "lead_vehicle_braking":
+            _add_xosc_lead_braking_group(act, spec, xosc)
+            story = xosc.Story(plan.story_name)
+            story.add_act(act)
+            stop_time_s = _scenario_stop_time_s(spec)
+            stop_trigger = xosc.ValueTrigger(
+                plan.stop_trigger_name or _stop_trigger_name(stop_time_s),
+                0,
+                xosc.ConditionEdge.rising,
+                xosc.SimulationTimeCondition(stop_time_s, xosc.Rule.greaterThan),
+                triggeringpoint="stop",
+            )
+            storyboard = xosc.StoryBoard(init, stop_trigger)
+            storyboard.add_story(story)
+            scenario = xosc.Scenario(
+                spec.scenario_name,
+                "scenarioCraft",
+                xosc.ParameterDeclarations(),
+                entities,
+                storyboard,
+                xosc.RoadNetwork(URBAN_TWO_WAY_PARKING_FILENAME) if xodr_path is not None else xosc.RoadNetwork(),
+                xosc.Catalog(),
+                osc_minor_version=3,
+            )
+            scenario.write_xml(str(xosc_path))
+            return BuildResult(xosc_path=xosc_path, xodr_path=xodr_path, builder="scenariogeneration")
         event = xosc.Event(plan.pedestrian_event_name, _xosc_priority(plan.pedestrian_event_priority, xosc))
         trajectory = _actor_trajectory(spec, pedestrian, plan.pedestrian_path_ref)
         if trajectory is not None:
@@ -224,6 +263,22 @@ def _xosc_speed_action(speed_mps: float, xosc: object) -> object:
     )
 
 
+def _xosc_braking_speed_action(spec: ScenarioSpec, plan: _ActorEventBuildPlan, xosc: object) -> object:
+    metadata = plan.action_metadata or {}
+    target_speed_mps = float(metadata.get("target_speed_mps", 0.0))
+    dynamics_shape = str(metadata.get("dynamics_shape", "linear"))
+    dynamics_dimension = str(metadata.get("dynamics_dimension", "rate"))
+    dynamics_value = float(metadata.get("dynamics_value", abs(_lead_deceleration_mps2(spec))))
+    return xosc.AbsoluteSpeedAction(
+        target_speed_mps,
+        xosc.TransitionDynamics(
+            getattr(xosc.DynamicsShapes, dynamics_shape, xosc.DynamicsShapes.linear),
+            getattr(xosc.DynamicsDimension, dynamics_dimension, xosc.DynamicsDimension.rate),
+            dynamics_value,
+        ),
+    )
+
+
 def _xosc_follow_trajectory_action(trajectory: BuilderTrajectory, xosc: object) -> object:
     xosc_trajectory = xosc.Trajectory(trajectory.name, False)
     positions = [
@@ -282,6 +337,55 @@ def _xosc_pedestrian_start_trigger(
         time_group.add_condition(_xosc_simulation_time_trigger("relative_distance_time_alignment", trigger_time_s, xosc))
         trigger.add_conditiongroup(time_group)
     return trigger
+
+
+def _xosc_start_trigger(
+    spec: ScenarioSpec,
+    xosc: object,
+    *,
+    trigger_name: str | None = None,
+    include_timing_alignment_trigger: bool = True,
+) -> object:
+    return _xosc_pedestrian_start_trigger(
+        spec,
+        xosc,
+        trigger_name=trigger_name,
+        include_timing_alignment_trigger=include_timing_alignment_trigger,
+    )
+
+
+def _add_xosc_lead_braking_group(act: object, spec: ScenarioSpec, xosc: object) -> None:
+    lead = spec.actor_by_id("lead_vehicle")
+    if lead is None:
+        return
+    plan = _actor_event_build_plan(
+        spec,
+        "lead_vehicle",
+        _ActorEventBuildPlan(
+            group_name="lead_vehicle_braking",
+            maneuver_name="lead_vehicle_braking_maneuver",
+            event_name="lead_vehicle_starts_braking",
+            event_priority="override",
+            action_name="lead_vehicle_brakes",
+            start_trigger_name="lead_vehicle_brake_relative_distance",
+            action_type="absolute_speed",
+            action_metadata={
+                "target_speed_mps": 0.0,
+                "dynamics_shape": "linear",
+                "dynamics_dimension": "rate",
+                "dynamics_value": abs(_lead_deceleration_mps2(spec)),
+            },
+        ),
+    )
+    event = xosc.Event(plan.event_name, _xosc_priority(plan.event_priority, xosc))
+    event.add_action(plan.action_name, _xosc_braking_speed_action(spec, plan, xosc))
+    event.add_trigger(_xosc_start_trigger(spec, xosc, trigger_name=plan.start_trigger_name))
+    maneuver = xosc.Maneuver(plan.maneuver_name)
+    maneuver.add_event(event)
+    maneuver_group = xosc.ManeuverGroup(plan.group_name, maxexecution=1, selecttriggeringentities=False)
+    maneuver_group.add_actor(lead.id)
+    maneuver_group.add_maneuver(maneuver)
+    act.add_maneuver_group(maneuver_group)
 
 
 def _xosc_pedestrian_start_condition(spec: ScenarioSpec, xosc: object, *, trigger_name: str | None) -> object:
@@ -466,6 +570,29 @@ def _storyboard_first_action(event: object | None, actions: dict[str, object]) -
     return actions.get(event.action_refs[0]) if event.action_refs else None
 
 
+def _actor_event_build_plan(spec: ScenarioSpec, actor_id: str, default: _ActorEventBuildPlan) -> _ActorEventBuildPlan:
+    storyboard = spec.storyboard
+    if storyboard is None:
+        return default
+    groups = {group.id: group for group in storyboard.maneuver_groups}
+    events = {event.id: event for event in storyboard.events}
+    actions = {action.id: action for action in storyboard.actions}
+    group = _storyboard_group_for_actor(groups.values(), actor_id)
+    event = _storyboard_first_event(group, events)
+    action = _storyboard_first_action(event, actions)
+    return _ActorEventBuildPlan(
+        group_name=group.id if group is not None else default.group_name,
+        maneuver_name=f"{group.id}_maneuver" if group is not None else default.maneuver_name,
+        event_name=event.id if event is not None else default.event_name,
+        event_priority=event.priority if event is not None else default.event_priority,
+        action_name=action.id if action is not None else default.action_name,
+        start_trigger_name=event.start_trigger_ref if event is not None else default.start_trigger_name,
+        path_ref=action.path_ref if action is not None else default.path_ref,
+        action_type=action.type if action is not None else default.action_type,
+        action_metadata=dict(action.metadata) if action is not None else default.action_metadata,
+    )
+
+
 def _ego_driving_trajectory(spec: ScenarioSpec, ego: ActorSpec | None) -> BuilderTrajectory | None:
     if ego is None or spec.layout is None:
         return None
@@ -499,6 +626,13 @@ def _actor_trajectory(spec: ScenarioSpec, actor: ActorSpec | None, path_id: str 
     )
 def _pedestrian_traversal_speed_mps(pedestrian: ActorSpec | None) -> float:
     return pedestrian.speed_mps if pedestrian and pedestrian.speed_mps else 1.5
+
+
+def _lead_deceleration_mps2(spec: ScenarioSpec) -> float:
+    template_metadata = spec.metadata.get("lead_vehicle_braking", {})
+    if isinstance(template_metadata, dict) and template_metadata.get("lead_deceleration_mps2") is not None:
+        return float(template_metadata["lead_deceleration_mps2"])
+    return -4.0
 
 
 def _layout_initial_poses(spec: ScenarioSpec) -> dict[str, BuilderInitialPose] | None:
@@ -575,6 +709,11 @@ def _build_xml_tree(
     story = ET.SubElement(storyboard, "Story", {"name": plan.story_name})
     act = ET.SubElement(story, "Act", {"name": plan.act_name})
     _append_ego_driving_maneuver_group(act, spec, plan)
+    if spec.scenario_type == "lead_vehicle_braking":
+        _append_lead_vehicle_braking_maneuver_group(act, spec)
+        ET.SubElement(act, "StopTrigger")
+        _append_stop_trigger(storyboard, spec, trigger_name=plan.stop_trigger_name)
+        return root
     maneuver_group = ET.SubElement(act, "ManeuverGroup", {"maximumExecutionCount": "1", "name": plan.pedestrian_group_name})
     ET.SubElement(maneuver_group, "Actors", {"selectTriggeringEntities": "false"})
     event = ET.SubElement(ET.SubElement(maneuver_group, "Maneuver", {"name": plan.pedestrian_maneuver_name}), "Event", {
@@ -617,6 +756,41 @@ def _append_ego_driving_maneuver_group(
     })
     _append_follow_trajectory_action(event, trajectory, action_name=plan.ego_action_name)
     _append_simulation_time_start_trigger(event, plan.ego_start_trigger_name, 0.0)
+
+
+def _append_lead_vehicle_braking_maneuver_group(parent: ET.Element, spec: ScenarioSpec) -> None:
+    lead = spec.actor_by_id("lead_vehicle")
+    if lead is None:
+        return
+    plan = _actor_event_build_plan(
+        spec,
+        "lead_vehicle",
+        _ActorEventBuildPlan(
+            group_name="lead_vehicle_braking",
+            maneuver_name="lead_vehicle_braking_maneuver",
+            event_name="lead_vehicle_starts_braking",
+            event_priority="override",
+            action_name="lead_vehicle_brakes",
+            start_trigger_name="lead_vehicle_brake_relative_distance",
+            action_type="absolute_speed",
+            action_metadata={
+                "target_speed_mps": 0.0,
+                "dynamics_shape": "linear",
+                "dynamics_dimension": "rate",
+                "dynamics_value": abs(_lead_deceleration_mps2(spec)),
+            },
+        ),
+    )
+    maneuver_group = ET.SubElement(parent, "ManeuverGroup", {"maximumExecutionCount": "1", "name": plan.group_name})
+    actors = ET.SubElement(maneuver_group, "Actors", {"selectTriggeringEntities": "false"})
+    ET.SubElement(actors, "EntityRef", {"entityRef": lead.id})
+    maneuver = ET.SubElement(maneuver_group, "Maneuver", {"name": plan.maneuver_name})
+    event = ET.SubElement(maneuver, "Event", {
+        "name": plan.event_name,
+        "priority": _normalized_priority(plan.event_priority),
+    })
+    _append_braking_speed_action(event, spec, plan)
+    _append_trigger(event, spec, trigger_name=plan.start_trigger_name)
 
 
 def _append_entity(parent: ET.Element, actor: ActorSpec) -> None:
@@ -669,6 +843,22 @@ def _append_speed_action(parent: ET.Element, speed_mps: float) -> None:
     })
     target = ET.SubElement(speed_action, "SpeedActionTarget")
     ET.SubElement(target, "AbsoluteTargetSpeed", {"value": str(speed_mps)})
+
+
+def _append_braking_speed_action(parent: ET.Element, spec: ScenarioSpec, plan: _ActorEventBuildPlan) -> None:
+    metadata = plan.action_metadata or {}
+    action = ET.SubElement(parent, "Action", {"name": plan.action_name})
+    private_action = ET.SubElement(action, "PrivateAction")
+    longitudinal = ET.SubElement(private_action, "LongitudinalAction")
+    speed_action = ET.SubElement(longitudinal, "SpeedAction")
+    dynamics_value = float(metadata.get("dynamics_value", abs(_lead_deceleration_mps2(spec))))
+    ET.SubElement(speed_action, "SpeedActionDynamics", {
+        "dynamicsShape": str(metadata.get("dynamics_shape", "linear")),
+        "value": str(dynamics_value),
+        "dynamicsDimension": str(metadata.get("dynamics_dimension", "rate")),
+    })
+    target = ET.SubElement(speed_action, "SpeedActionTarget")
+    ET.SubElement(target, "AbsoluteTargetSpeed", {"value": str(float(metadata.get("target_speed_mps", 0.0)))})
 
 
 def _append_follow_trajectory_action(

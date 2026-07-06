@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 from scenariocraft.application import (
@@ -12,6 +13,8 @@ from scenariocraft.application.orchestrator import run_bounded_orchestrator
 from scenariocraft.references import XoscMetadata, extract_xosc_metadata
 from scenariocraft.core.repair.providers import FakeRepairProvider
 from scenariocraft.external_tools import EsminiResult, run_esmini
+from scenariocraft.providers import OpenAIIntentProvider, OpenAIIntentProviderConfigurationError
+from scenariocraft.providers.openai_intent import local_openai_compatible_env
 from scenariocraft.core.schemas import ScenarioSpec
 from scenariocraft.core.schemas.common import ScenarioSpecError
 from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
@@ -32,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
         (output_dir / "input.txt").write_text(scenario_text, encoding="utf-8")
         try:
             _progress(f"Generating ScenarioSpec with provider={args.provider}")
-            spec = _generate_spec(args.provider, scenario_text, _template_parameters(args))
+            spec = _generate_spec(args.provider, scenario_text, _template_parameters(args), _intent_provider(args))
         except (ScenarioSpecError, TypeError, ValueError) as exc:
             (output_dir / "generation_error.txt").write_text(f"{exc}\n", encoding="utf-8")
             print(f"Scenario generation failed: {exc}")
@@ -67,6 +70,7 @@ def main(argv: list[str] | None = None) -> int:
                 scenario_text=scenario_text,
                 output_dir=output_dir,
                 provider_name=args.provider,
+                intent_provider=_intent_provider(args),
                 template_parameters=_template_parameters(args),
                 options=ScenarioWorkflowOptions(
                     run_preview=True,
@@ -125,7 +129,27 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate and validate a deterministic scenarioCraft scenario.")
     parser.add_argument("--input", default="examples/pedestrian_occlusion.txt", help="Path to natural-language scenario text.")
     parser.add_argument("--out", default="outputs/demo", help="Output artifact directory.")
-    parser.add_argument("--provider", default="mock", choices=["mock"], help="Scenario generator provider.")
+    parser.add_argument(
+        "--provider",
+        default="mock",
+        choices=["mock", "openai-compatible"],
+        help="Scenario generator provider.",
+    )
+    parser.add_argument(
+        "--intent-model",
+        default=None,
+        help="OpenAI-compatible model for provider=openai-compatible. Overrides SCENARIOCRAFT_INTENT_MODEL.",
+    )
+    parser.add_argument(
+        "--openai-base-url",
+        default=None,
+        help="OpenAI-compatible base URL for local providers such as Ollama, LM Studio, or vLLM.",
+    )
+    parser.add_argument(
+        "--openai-api-key",
+        default=None,
+        help="API key for OpenAI-compatible intent provider. Local endpoints may accept a placeholder key.",
+    )
     parser.add_argument(
         "--load-xosc",
         default=None,
@@ -187,6 +211,19 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="Maximum PatchSpec repair rounds for --use-orchestrator.",
     )
     return parser.parse_args(argv)
+
+
+def _intent_provider(args: argparse.Namespace) -> object | None:
+    if args.provider not in {"openai-compatible"}:
+        return None
+    env = local_openai_compatible_env()
+    model = args.intent_model or env["model"] or ""
+    base_url = args.openai_base_url or env["base_url"]
+    api_key = args.openai_api_key or env["api_key"]
+    try:
+        return OpenAIIntentProvider(model=model, api_key=api_key, base_url=base_url)
+    except OpenAIIntentProviderConfigurationError as exc:
+        raise ValueError(str(exc)) from exc
 
 
 def _run_loaded_xosc(args: argparse.Namespace, output_dir: Path) -> int:
@@ -341,7 +378,24 @@ def _display_path(path: Path) -> str:
         return str(path)
 
 
-def _generate_spec(provider: str, scenario_text: str, template_parameters: dict[str, object]) -> ScenarioSpec:
+def _generate_spec(
+    provider: str,
+    scenario_text: str,
+    template_parameters: dict[str, object],
+    intent_provider: object | None,
+) -> ScenarioSpec:
+    if provider in {"openai-compatible"}:
+        request = ScenarioWorkflowRequest(
+            scenario_text=scenario_text,
+            output_dir=Path("outputs/_intent_provider_unused"),
+            provider_name=provider,
+            intent_provider=intent_provider,
+            template_parameters=template_parameters,
+            options=ScenarioWorkflowOptions(run_preview=False, run_report=False),
+        )
+        from scenariocraft.application.generated_scenario import _generate_spec as generate_spec_from_request
+
+        return generate_spec_from_request(request)
     if provider != "mock":
         raise ValueError(f"Unsupported provider: {provider}")
     return generate_default_pedestrian_occlusion_spec(scenario_text, **template_parameters)
