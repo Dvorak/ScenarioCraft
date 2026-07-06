@@ -4,12 +4,14 @@ from pathlib import Path
 
 import streamlit as st
 
-from scenariocraft.application.demo_cases import DEMO_CASES
+from scenariocraft.application.controlled_cases import CONTROLLED_CASES, controlled_case_prompt_variant
 
 
-DEFAULT_SCENARIO_TEXT = (
-    "A rainy urban pedestrian occlusion scenario where the ego vehicle approaches a parked van "
-    "and a pedestrian suddenly crosses from behind it."
+DEFAULT_CONTROLLED_CASE_ID = CONTROLLED_CASES[0].case_id
+DEFAULT_CONTROLLED_PROMPT_VARIANT_INDEX = 0
+DEFAULT_SCENARIO_TEXT = controlled_case_prompt_variant(
+    DEFAULT_CONTROLLED_CASE_ID,
+    DEFAULT_CONTROLLED_PROMPT_VARIANT_INDEX,
 )
 DEFAULT_OUTPUT_ROOT = Path("outputs/web_demo")
 DEFAULT_OUTPUT_DIR = DEFAULT_OUTPUT_ROOT / "latest"
@@ -30,11 +32,11 @@ WEB_PREVIEW_PRESENTATION_STYLE = "clean_split"
 PREVIEW_VISUAL_CAPTION = "Renderer-aligned ScenarioSpec layout · world +x → left · world +y → down"
 RUNTIME_VISUAL_CAPTION = "Raw OpenSCENARIO + OpenDRIVE runtime view · world +x → left · world +y → down"
 WORKSPACE_PAGES = ("Workspace", "Advanced")
-WORKSPACE_PROVIDER = "mock"
-WORKSPACE_PROVIDER_OPTIONS = ("Demo / mock", "Local LLM")
+WORKSPACE_PROVIDER = "controlled_case"
+WORKSPACE_PROVIDER_OPTIONS = ("Local LLM", "Controlled Case")
 WORKSPACE_PROVIDER_VALUES = {
-    "Demo / mock": "mock",
     "Local LLM": "openai-compatible",
+    "Controlled Case": WORKSPACE_PROVIDER,
 }
 WORKSPACE_GENERATE_ICON = ":material/send:"
 WORKSPACE_REPAIR_ICON = ":material/build:"
@@ -59,13 +61,18 @@ def ensure_session_state() -> None:
         "playback_result": None,
         "runtime_check_results": (),
         "repair_history": [],
-        "selected_demo_case_id": DEMO_CASES[0].case_id,
+        "selected_demo_case_id": DEFAULT_CONTROLLED_CASE_ID,
+        "workspace_prompt_variant_indices": {
+            case.case_id: DEFAULT_CONTROLLED_PROMPT_VARIANT_INDEX for case in CONTROLLED_CASES
+        },
         "demo_experiment_trace": None,
         "workspace_original_spec": None,
         "workspace_prepared_case": None,
         "workspace_execution": None,
-        "workspace_provider_label": WORKSPACE_PROVIDER_OPTIONS[0],
+        "workspace_provider_label": "Controlled Case",
         "workspace_intent_proposal": None,
+        "workspace_candidate_trace": None,
+        "workspace_revision_text": "",
         "output_root": str(DEFAULT_OUTPUT_ROOT),
         "output_dir": str(DEFAULT_OUTPUT_DIR),
         "external_root": str(DEFAULT_EXTERNAL_ROOT),
@@ -109,3 +116,4 @@ def reset_generated_scenario_state() -> None:
     st.session_state.report_text = ""
     st.session_state.demo_experiment_trace = None
     st.session_state.workspace_intent_proposal = None
+    st.session_state.workspace_candidate_trace = None

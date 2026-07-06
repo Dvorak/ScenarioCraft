@@ -7,10 +7,13 @@ from pathlib import Path
 import streamlit as st
 
 from scenariocraft.external_tools import AsamQcResult, EsminiPlaybackResult
+from scenariocraft.application.controlled_cases import CONTROLLED_CASES
 from scenariocraft.core.metrics import compute_timing_metrics
 from scenariocraft.core.schemas import ScenarioSpec
 from scenariocraft.core.checks import SemanticValidationResult
 from scenariocraft.application.demo_cases import PreparedDemoCase
+from scenariocraft.application.demo_cases import DEMO_CASES
+from scenariocraft.core.templates import family_asset_readiness_report
 from scenariocraft.web.view_models import DemoExperimentTraceViewModel
 
 
@@ -21,6 +24,7 @@ def render_advanced_page(
     intent_proposal: object,
     semantic_result: object,
     prepared_case: PreparedDemoCase | None,
+    candidate_trace: object | None,
     qc_result: object,
     playback_result: object,
     runtime_check_results: object,
@@ -43,6 +47,11 @@ def render_advanced_page(
     spec = _parse_spec(spec_json)
     columns = st.columns([0.48, 0.52], gap="large", vertical_alignment="top")
     with columns[0]:
+        with st.container(border=True, key="advanced_capability_tree_card"):
+            _render_card_heading("Capability Tree", "Supported families, provider path, and deterministic fallbacks.")
+            _render_capability_tree_summary()
+            _render_loop_model_summary()
+            _render_candidate_acceptance_trace(candidate_trace)
         with st.container(border=True, key="advanced_intent_spec_card"):
             _render_card_heading("Intent & Spec", "Request interpretation and typed ScenarioSpec contract.")
             _render_summary_rows(
@@ -109,17 +118,95 @@ def render_advanced_page(
                         st.info("Runtime checks have not run.")
         with lower[1]:
             with st.container(border=True, key="advanced_repair_card"):
-                _render_card_heading("Repair Trace", "PatchSpec proposal and deterministic application history.")
+                _render_card_heading("Patch Repair Trace", "PatchSpec proposal and deterministic application history.")
                 if isinstance(demo_trace, DemoExperimentTraceViewModel):
                     _render_summary_rows((("Status", "Trace available"), ("Provider", "FakeRepairProvider")))
                 else:
-                    _render_summary_rows((("Status", "No repair trace"), ("PatchSpec", "Not proposed")))
-                with st.expander("Repair Trace Detail", expanded=False):
+                    _render_summary_rows((("Status", "No patch repair trace"), ("PatchSpec", "Not proposed")))
+                with st.expander("Patch Repair Trace Detail", expanded=False):
                     if isinstance(demo_trace, DemoExperimentTraceViewModel):
                         render_demo_trace(demo_trace)
                     else:
-                        st.info("No repair trace.")
+                        st.info("No PatchSpec repair trace.")
     return updated_spec_json
+
+
+def _render_capability_tree_summary() -> None:
+    _render_summary_rows(
+        (
+            ("Provider-backed generation", "Local/OpenAI-compatible ScenarioIntent"),
+            ("Controlled Case coverage", f"{len(CONTROLLED_CASES)} executable golden families"),
+            ("Repair Experiments", f"{len(DEMO_CASES)} developer fault cases"),
+        )
+    )
+    readiness = family_asset_readiness_report()
+    rows = "".join(
+        '<div class="advanced-summary-row">'
+        f'<span>{escape(template_id)}</span>'
+        f'<strong>{"ready" if item.executable else "not ready"}</strong>'
+        '</div>'
+        for template_id, item in sorted(readiness.items())
+    )
+    st.markdown(
+        '<div class="advanced-summary-list advanced-readiness-list">'
+        f"{rows}"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def _render_loop_model_summary() -> None:
+    _render_summary_rows(
+        (
+            ("Candidate Generation Loop", "new candidate acceptance"),
+            ("Scenario Revision Loop", "variant from existing scenario"),
+            ("PatchSpec Repair Loop", "minimal patch after failure evidence"),
+        )
+    )
+
+
+def _render_candidate_acceptance_trace(candidate_trace: object | None) -> None:
+    if candidate_trace is None:
+        _render_summary_rows((("Candidate Acceptance", "not run"),))
+        return
+    template_id = getattr(candidate_trace, "template_id", "n/a")
+    acceptance_status = getattr(candidate_trace, "acceptance_status", "n/a")
+    check_summary = getattr(candidate_trace, "check_summary", {}) or {}
+    failed = check_summary.get("failed", "n/a") if isinstance(check_summary, dict) else "n/a"
+    _render_summary_rows(
+        (
+            ("Candidate Acceptance", str(acceptance_status)),
+            ("Accepted template", str(template_id)),
+            ("Failed checks", str(failed)),
+        )
+    )
+    resolved_parameters = getattr(candidate_trace, "resolved_parameters", {}) or {}
+    if not isinstance(resolved_parameters, dict) or not resolved_parameters:
+        return
+    rows = "".join(
+        '<div class="advanced-summary-row">'
+        f'<span>{escape(str(name))}</span>'
+        f'<strong>{escape(_parameter_display(parameter))}</strong>'
+        '</div>'
+        for name, parameter in sorted(resolved_parameters.items())
+    )
+    st.markdown(
+        '<div class="advanced-summary-list advanced-candidate-parameters">'
+        f"{rows}"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def _parameter_display(parameter: object) -> str:
+    if not isinstance(parameter, dict):
+        return str(parameter)
+    value = parameter.get("value")
+    source = parameter.get("source")
+    unit = parameter.get("unit")
+    suffix = f" {unit}" if unit else ""
+    source_text = f" · {source}" if source else ""
+    return f"{value}{suffix}{source_text}"
 
 
 def _render_pipeline_timeline(
@@ -139,7 +226,11 @@ def _render_pipeline_timeline(
         ("Metrics", "passed" if spec_available else "neutral", "Timing and criticality measurements"),
         ("Quality", _qc_state(qc_result), "OSC Quality, currently ASAM QC"),
         ("Simulation", _simulation_state(playback_result, runtime_check_results), "Simulation evidence, currently esmini"),
-        ("Repair", "passed" if isinstance(demo_trace, DemoExperimentTraceViewModel) else "neutral", "PatchSpec repair trace"),
+        (
+            "Patch Repair",
+            "passed" if isinstance(demo_trace, DemoExperimentTraceViewModel) else "neutral",
+            "PatchSpec repair trace for accepted specs or artifact failures",
+        ),
     )
     nodes = "".join(
         '<div class="advanced-pipeline-node" tabindex="0" '

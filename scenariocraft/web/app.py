@@ -13,14 +13,13 @@ from scenariocraft.application import (
     run_generated_scenario_workflow,
 )
 from scenariocraft.application.demo_cases import (
-    DEMO_CASES,
     DemoCaseExecution,
     PreparedDemoCase,
     execute_prepared_demo_case,
-    get_demo_case,
     prepare_demo_case,
     run_demo_case,
 )
+from scenariocraft.application.controlled_cases import get_controlled_case
 from scenariocraft.application.generated_scenario import IntentGenerationOutcomeError
 from scenariocraft.core.build import BuildResult, build_openscenario
 from scenariocraft.rendering import generate_2d_preview
@@ -111,6 +110,8 @@ def _render_workspace(output_dir: Path) -> None:
         selected_demo_case_id=st.session_state.selected_demo_case_id,
         prepared_case=_prepared_case(),
         intent_proposal=st.session_state.workspace_intent_proposal,
+        candidate_trace=st.session_state.workspace_candidate_trace,
+        revision_text=st.session_state.workspace_revision_text,
         last_error=st.session_state.last_error,
         last_info=st.session_state.last_info,
         semantic_result=st.session_state.semantic_result,
@@ -123,7 +124,9 @@ def _render_workspace(output_dir: Path) -> None:
         set_scenario_text=lambda value: setattr(st.session_state, "scenario_text", value),
         set_provider_label=lambda value: setattr(st.session_state, "workspace_provider_label", value),
         set_selected_demo_case_id=lambda value: setattr(st.session_state, "selected_demo_case_id", value),
+        set_revision_text=lambda value: setattr(st.session_state, "workspace_revision_text", value),
         generate_selected_case=_generate_selected_case,
+        revise_current_scenario=_revise_current_scenario,
         execute_workspace_repair=_execute_workspace_repair,
     )
 
@@ -135,6 +138,7 @@ def _render_advanced_page(output_dir: Path) -> None:
         intent_proposal=st.session_state.workspace_intent_proposal,
         semantic_result=st.session_state.semantic_result,
         prepared_case=_prepared_case(),
+        candidate_trace=st.session_state.workspace_candidate_trace,
         qc_result=st.session_state.qc_result,
         playback_result=st.session_state.playback_result,
         runtime_check_results=st.session_state.runtime_check_results,
@@ -281,7 +285,13 @@ def _is_load_mode() -> bool:
     return st.session_state.workflow_mode == "Load existing .xosc"
 
 
-def _generate_selected_case(provider_name: str, case_id: str | None) -> None:
+def _generate_selected_case(
+    provider_name: str,
+    case_id: str | None,
+    *,
+    revision_request: str | None = None,
+    base_scenario_type: str | None = None,
+) -> None:
     output_dir = _new_web_output_dir()
     st.session_state.workspace_intent_proposal = None
     intent_provider = _intent_provider(provider_name)
@@ -294,7 +304,9 @@ def _generate_selected_case(provider_name: str, case_id: str | None) -> None:
                 output_dir=output_dir,
                 provider_name=provider_name,
                 intent_provider=intent_provider,
-                demo_case_id=case_id if provider_name == WORKSPACE_PROVIDER else None,
+                controlled_case_id=case_id if provider_name == WORKSPACE_PROVIDER else None,
+                revision_request=revision_request,
+                base_scenario_type=base_scenario_type,
                 options=ScenarioWorkflowOptions(
                     run_preview=True,
                     run_semantics=True,
@@ -330,7 +342,13 @@ def _generate_selected_case(provider_name: str, case_id: str | None) -> None:
 
     _apply_workflow_result(result)
     prepared = result.prepared_case
-    display_name = prepared.case.display_name if isinstance(prepared, PreparedDemoCase) else result.spec.scenario_name
+    display_name = (
+        get_controlled_case(case_id).display_name
+        if provider_name == WORKSPACE_PROVIDER and case_id is not None
+        else prepared.case.display_name
+        if isinstance(prepared, PreparedDemoCase)
+        else result.spec.scenario_name
+    )
     _info(f"Prepared {display_name}.")
 
 
@@ -353,6 +371,7 @@ def _apply_workflow_result(result: ScenarioWorkflowResult) -> None:
     _set_spec(result.spec)
     st.session_state.output_dir = str(result.artifacts.output_dir)
     st.session_state.workspace_intent_proposal = result.intent_proposal
+    st.session_state.workspace_candidate_trace = result.candidate_trace
     st.session_state.workspace_original_spec = result.original_spec
     st.session_state.workspace_prepared_case = (
         result.prepared_case if isinstance(result.prepared_case, PreparedDemoCase) else None
@@ -367,6 +386,32 @@ def _apply_workflow_result(result: ScenarioWorkflowResult) -> None:
     st.session_state.playback_result = result.playback_result
     st.session_state.runtime_check_results = result.runtime_check_results
     st.session_state.report_text = result.report_text
+
+
+def _revise_current_scenario(provider_name: str, revision_request: str) -> None:
+    current_spec = _current_spec(show_error=False)
+    if current_spec is None:
+        _error("Generate an accepted ScenarioSpec before requesting a revision.")
+        return
+    revision = revision_request.strip()
+    if not revision:
+        _error("Scenario Revision Loop requires a revision request.")
+        return
+    if provider_name not in {"openai-compatible", "openai_compatible"}:
+        _error("Scenario Revision Loop uses the generation provider. Switch Provider to Local LLM.")
+        return
+    base_request = st.session_state.scenario_text.strip()
+    st.session_state.scenario_text = f"{base_request}\n\nRevision request: {revision}"
+    st.session_state.workspace_revision_text = ""
+    st.session_state.workspace_prepared_case = None
+    st.session_state.workspace_execution = None
+    st.session_state.demo_experiment_trace = None
+    _generate_selected_case(
+        provider_name,
+        None,
+        revision_request=revision,
+        base_scenario_type=current_spec.scenario_type,
+    )
 
 
 def _execute_workspace_repair(output_dir: Path) -> DemoCaseExecution | None:

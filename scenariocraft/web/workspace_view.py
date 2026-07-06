@@ -5,7 +5,13 @@ from pathlib import Path
 
 import streamlit as st
 
-from scenariocraft.application.demo_cases import DEMO_CASES, PreparedDemoCase, get_demo_case
+from scenariocraft.application.controlled_cases import (
+    CONTROLLED_CASES,
+    controlled_case_options,
+    controlled_case_prompt_variant,
+    get_controlled_case,
+)
+from scenariocraft.application.demo_cases import PreparedDemoCase
 from scenariocraft.core.schemas import ScenarioSpec
 from scenariocraft.web.state import (
     WORKSPACE_GENERATE_ICON,
@@ -27,7 +33,26 @@ from scenariocraft.web.workspace_components import (
 
 
 def workspace_case_options() -> tuple[tuple[str, str], ...]:
-    return tuple((case.case_id, case.display_name) for case in DEMO_CASES)
+    return controlled_case_options()
+
+
+def _prompt_variant_index(case_id: str) -> int:
+    indices = st.session_state.setdefault(
+        "workspace_prompt_variant_indices",
+        {case.case_id: 0 for case in CONTROLLED_CASES},
+    )
+    return int(indices.get(case_id, 0))
+
+
+def _set_prompt_variant_index(case_id: str, index: int) -> None:
+    indices = dict(
+        st.session_state.get(
+            "workspace_prompt_variant_indices",
+            {case.case_id: 0 for case in CONTROLLED_CASES},
+        )
+    )
+    indices[case_id] = int(index)
+    st.session_state["workspace_prompt_variant_indices"] = indices
 
 
 def render_workspace(
@@ -38,6 +63,8 @@ def render_workspace(
     selected_demo_case_id: str,
     prepared_case: PreparedDemoCase | None,
     intent_proposal: object,
+    candidate_trace: object | None,
+    revision_text: str,
     last_error: str,
     last_info: str,
     semantic_result: object,
@@ -50,7 +77,9 @@ def render_workspace(
     set_scenario_text: Callable[[str], None],
     set_provider_label: Callable[[str], None],
     set_selected_demo_case_id: Callable[[str], None],
+    set_revision_text: Callable[[str], None],
     generate_selected_case: Callable[[str, str | None], None],
+    revise_current_scenario: Callable[[str, str], None],
     execute_workspace_repair: Callable[[Path], object],
 ) -> None:
     repair_visible = build_workspace_repair_view_model(prepared_case).visible
@@ -65,13 +94,18 @@ def render_workspace(
                 selected_demo_case_id=selected_demo_case_id,
                 prepared_case=prepared_case,
                 intent_proposal=intent_proposal,
+                candidate_trace=candidate_trace,
+                revision_text=revision_text,
                 last_error=last_error,
                 last_info=last_info,
                 set_scenario_text=set_scenario_text,
                 set_provider_label=set_provider_label,
                 set_selected_demo_case_id=set_selected_demo_case_id,
+                set_revision_text=set_revision_text,
                 generate_selected_case=generate_selected_case,
+                revise_current_scenario=revise_current_scenario,
                 execute_workspace_repair=execute_workspace_repair,
+                current_spec=current_spec,
             )
             render_workspace_status_panel(
                 current_spec=current_spec,
@@ -100,13 +134,18 @@ def _render_workspace_request(
     selected_demo_case_id: str,
     prepared_case: PreparedDemoCase | None,
     intent_proposal: object,
+    candidate_trace: object | None,
+    revision_text: str,
     last_error: str,
     last_info: str,
     set_scenario_text: Callable[[str], None],
     set_provider_label: Callable[[str], None],
     set_selected_demo_case_id: Callable[[str], None],
+    set_revision_text: Callable[[str], None],
     generate_selected_case: Callable[[str, str | None], None],
+    revise_current_scenario: Callable[[str, str], None],
     execute_workspace_repair: Callable[[Path], object],
+    current_spec: Callable[[], ScenarioSpec | None],
 ) -> None:
     with st.container(border=True, key="workspace_request"):
         st.markdown("### Scenario Request")
@@ -128,12 +167,12 @@ def _render_workspace_request(
             if provider_label not in provider_options:
                 provider_label = WORKSPACE_PROVIDER_OPTIONS[0]
             provider_name = WORKSPACE_PROVIDER_VALUES[provider_label]
-            show_demo_case = provider_name == WORKSPACE_PROVIDER
+            show_controlled_case = provider_name == WORKSPACE_PROVIDER
             tools = st.columns(
-                [0.32, 0.68, 0.12, 0.12]
-                if repair.can_repair and show_demo_case
-                else [0.32, 0.68, 0.12]
-                if show_demo_case
+                [0.28, 0.56, 0.10, 0.10, 0.10]
+                if repair.can_repair and show_controlled_case
+                else [0.28, 0.56, 0.10, 0.10]
+                if show_controlled_case
                 else [1.0, 0.12, 0.12]
                 if repair.can_repair
                 else [1.0, 0.12],
@@ -148,21 +187,57 @@ def _render_workspace_request(
                 )
                 set_provider_label(selected_provider_label)
                 provider_name = WORKSPACE_PROVIDER_VALUES[selected_provider_label]
-                show_demo_case = provider_name == WORKSPACE_PROVIDER
+                show_controlled_case = provider_name == WORKSPACE_PROVIDER
             action_index = 1
-            selected_case_id = selected_demo_case_id if show_demo_case else None
-            if show_demo_case:
+            selected_case_id = selected_demo_case_id if show_controlled_case else None
+            if show_controlled_case:
                 case_ids = [case_id for case_id, _ in workspace_case_options()]
+                if selected_demo_case_id not in case_ids:
+                    selected_demo_case_id = case_ids[0]
+                    set_selected_demo_case_id(selected_demo_case_id)
                 with tools[1]:
                     selected_case_id = st.selectbox(
-                        "Demo Case",
+                        "Controlled Case",
                         case_ids,
                         index=case_ids.index(selected_demo_case_id),
-                        format_func=lambda case_id: get_demo_case(case_id).display_name,
+                        format_func=lambda case_id: get_controlled_case(case_id).display_name,
                         label_visibility="collapsed",
                     )
+                    if selected_case_id != selected_demo_case_id:
+                        set_selected_demo_case_id(selected_case_id)
+                        set_scenario_text(
+                            controlled_case_prompt_variant(
+                                selected_case_id,
+                                _prompt_variant_index(selected_case_id),
+                            )
+                        )
+                        st.session_state["workspace_intent_proposal"] = None
+                        st.session_state["last_error"] = ""
+                        st.session_state["last_info"] = "Controlled Case request updated."
+                        st.rerun()
                     set_selected_demo_case_id(selected_case_id)
                 action_index = 2
+                with tools[action_index]:
+                    if st.button(
+                        "Shuffle prompt",
+                        icon=":material/refresh:",
+                        help="Use another natural-language phrasing for this controlled case",
+                        key="workspace_shuffle_prompt",
+                        width="stretch",
+                    ):
+                        case = get_controlled_case(selected_case_id)
+                        next_index = (_prompt_variant_index(selected_case_id) + 1) % len(
+                            case.source_text_variants
+                        )
+                        _set_prompt_variant_index(selected_case_id, next_index)
+                        set_scenario_text(
+                            controlled_case_prompt_variant(selected_case_id, next_index)
+                        )
+                        st.session_state["workspace_intent_proposal"] = None
+                        st.session_state["last_error"] = ""
+                        st.session_state["last_info"] = "Controlled Case request phrasing updated."
+                        st.rerun()
+                action_index = 3
             with tools[action_index]:
                 if st.button(
                     "Generate",
@@ -186,6 +261,56 @@ def _render_workspace_request(
                         execute_workspace_repair(output_dir)
                         st.rerun()
         _render_intent_summary(intent_proposal, set_scenario_text=set_scenario_text)
+        _render_candidate_trace_caption(candidate_trace)
+        _render_revision_controls(
+            provider_name=provider_name,
+            revision_text=revision_text,
+            set_revision_text=set_revision_text,
+            revise_current_scenario=revise_current_scenario,
+            has_current_spec=current_spec() is not None,
+        )
+
+
+def _render_candidate_trace_caption(candidate_trace: object | None) -> None:
+    if candidate_trace is None:
+        return
+    status = getattr(candidate_trace, "acceptance_status", "")
+    template_id = getattr(candidate_trace, "template_id", "")
+    if status and template_id:
+        st.caption(f"Candidate Generation Loop · {status} · {template_id}")
+
+
+def _render_revision_controls(
+    *,
+    provider_name: str,
+    revision_text: str,
+    set_revision_text: Callable[[str], None],
+    revise_current_scenario: Callable[[str, str], None],
+    has_current_spec: bool,
+) -> None:
+    if not has_current_spec:
+        return
+    st.markdown("#### Scenario Revision Loop")
+    updated_revision = st.text_area(
+        "Revision request",
+        value=revision_text,
+        height=78,
+        placeholder="Describe a variant, e.g. shorter gap, rainy weather, slower pedestrian...",
+    )
+    set_revision_text(updated_revision)
+    provider_ready = provider_name in {"openai-compatible", "openai_compatible"}
+    if not provider_ready:
+        st.caption("Switch Provider to Local LLM to create a revised candidate.")
+    if st.button(
+        "Create Variant",
+        icon=":material/alt_route:",
+        help="Run Scenario Revision Loop through the generation provider; this does not use PatchSpec repair.",
+        disabled=not provider_ready or not updated_revision.strip(),
+        key="workspace_revision_create",
+        width="stretch",
+    ):
+        revise_current_scenario(provider_name, updated_revision)
+        st.rerun()
 
 
 def _render_intent_summary(intent_proposal: object, *, set_scenario_text: Callable[[str], None]) -> None:

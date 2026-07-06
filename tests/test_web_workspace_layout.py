@@ -7,6 +7,7 @@ from streamlit.testing.v1 import AppTest
 from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 from scenariocraft.core.repair.providers import FakeRepairProvider
 from scenariocraft.external_tools import AsamQcResult, EsminiResult
+from scenariocraft.application.controlled_cases import CONTROLLED_CASES
 from scenariocraft.application.demo_cases import (
     DEMO_CASES,
     execute_prepared_demo_case,
@@ -37,8 +38,8 @@ def test_workspace_navigation_and_media_contract() -> None:
     assert WORKSPACE_DESKTOP_HEIGHT == "clamp(720px, calc(100dvh - 6.5rem), 960px)"
     assert WORKSPACE_MEDIA_TITLES == ("Preview 2D Semantic", "Playback Esmini")
     assert WORKSPACE_MEDIA_ASPECT_RATIO == "16 / 9"
-    assert WORKSPACE_PROVIDER == "mock"
-    assert WORKSPACE_PROVIDER_OPTIONS == ("Demo / mock", "Local LLM")
+    assert WORKSPACE_PROVIDER == "controlled_case"
+    assert WORKSPACE_PROVIDER_OPTIONS == ("Local LLM", "Controlled Case")
     assert WORKSPACE_GENERATE_ICON == ":material/send:"
     assert WORKSPACE_REPAIR_ICON == ":material/build:"
     assert WEB_PREVIEW_PRESENTATION_STYLE == "clean_split"
@@ -53,16 +54,19 @@ def test_workspace_media_copy_uses_playback_esmini_naming() -> None:
     assert "esmini Runtime Screenshot" not in source
 
 
-def test_workspace_is_default_and_has_one_demo_case_selector() -> None:
+def test_workspace_is_default_and_has_one_controlled_case_selector() -> None:
     app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=10).run()
 
     assert not app.exception
-    assert [item.label for item in app.selectbox] == ["Provider", "Demo Case"]
+    assert [item.label for item in app.selectbox] == ["Provider", "Controlled Case"]
     assert set(app.selectbox[0].options) == set(WORKSPACE_PROVIDER_OPTIONS)
-    assert set(app.selectbox[1].options) == {case.display_name for case in DEMO_CASES}
-    assert [button.label for button in app.button] == ["Generate"]
-    assert app.button[0].help == "Generate from text with selected provider"
-    assert app.button[0].icon == WORKSPACE_GENERATE_ICON
+    assert set(app.selectbox[1].options) == {case.display_name for case in CONTROLLED_CASES}
+    assert [button.label for button in app.button] == ["Shuffle prompt", "Generate"]
+    generate_button = next(button for button in app.button if button.label == "Generate")
+    shuffle_button = next(button for button in app.button if button.label == "Shuffle prompt")
+    assert generate_button.help == "Generate from text with selected provider"
+    assert generate_button.icon == WORKSPACE_GENERATE_ICON
+    assert shuffle_button.help == "Use another natural-language phrasing for this controlled case"
     markdown = [item.value for item in app.markdown]
     assert not any('class="workspace-pipeline-strip"' in item for item in markdown)
     assert "### Preview 2D Semantic" in markdown
@@ -191,6 +195,55 @@ def test_workspace_refinement_suggestion_updates_request_without_generating(monk
     assert app.session_state["spec"] is None
 
 
+def test_workspace_revision_loop_uses_generation_provider_without_patch_repair(monkeypatch, tmp_path: Path) -> None:
+    from scenariocraft.core.schemas import ScenarioIntent
+    from scenariocraft.providers.intent import IntentProposal
+
+    class RevisionIntentProvider:
+        provider_name = "openai_compatible"
+
+        def __init__(self) -> None:
+            self.requests = []
+
+        def propose_intent(self, request):
+            self.requests.append(request)
+            return IntentProposal(
+                intent=ScenarioIntent(
+                    template_id="lead_vehicle_braking",
+                    parameters={
+                        "scenario_name": f"revision_candidate_{len(self.requests)}",
+                        "initial_gap_m": 30.0,
+                    },
+                ),
+                rationale="The request describes lead vehicle braking.",
+                provider_name=self.provider_name,
+            )
+
+    provider = RevisionIntentProvider()
+    from scenariocraft.providers.openai_intent import OpenAIIntentProvider
+
+    monkeypatch.setattr(OpenAIIntentProvider, "from_env", classmethod(lambda cls: provider))
+    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app.session_state["output_root"] = str(tmp_path)
+    app.text_area[0].set_value("An ego vehicle follows a lead vehicle that suddenly brakes.")
+    app.selectbox[0].select("Local LLM").run()
+    next(button for button in app.button if button.label == "Generate").click().run()
+
+    assert app.session_state["spec"].scenario_name == "revision_candidate_1"
+    assert any("Scenario Revision Loop" in item.value for item in app.markdown)
+    revision_area = app.text_area[1]
+    revision_area.set_value("Make this a shorter-gap variant.")
+    next(button for button in app.button if button.label == "Create Variant").click().run()
+
+    assert not app.exception
+    assert app.session_state["spec"].scenario_name == "revision_candidate_2"
+    assert "Make this a shorter-gap variant." in provider.requests[-1].user_text
+    assert provider.requests[-1].metadata["revision_request"] == "Make this a shorter-gap variant."
+    assert provider.requests[-1].metadata["base_scenario_type"] == "lead_vehicle_braking"
+    assert app.session_state["demo_experiment_trace"] is None
+    assert "Patch Repair" not in [button.label for button in app.button]
+
+
 def test_workspace_playback_panel_explains_preview_fallback_after_generation(tmp_path: Path) -> None:
     app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
@@ -250,7 +303,7 @@ def test_advanced_page_retains_diagnostic_artifact_sections() -> None:
     assert '<span class="advanced-page-marker" aria-hidden="true"></span>' in markdown
     assert any('class="advanced-pipeline-timeline"' in item for item in markdown)
     timeline_markup = next(item for item in markdown if 'class="advanced-pipeline-timeline"' in item)
-    for stage in ("Intent", "Spec", "Build", "Checks", "Metrics", "Quality", "Simulation", "Repair"):
+    for stage in ("Intent", "Spec", "Build", "Checks", "Metrics", "Quality", "Simulation", "Patch Repair"):
         assert stage in timeline_markup
     assert "</div>" not in markdown
     assert any('class="advanced-card-heading"' in item and "Intent &amp; Spec" in item for item in markdown)
@@ -263,31 +316,80 @@ def test_advanced_page_retains_diagnostic_artifact_sections() -> None:
         "validation_report.md",
         "Check Evidence",
         "External Evidence JSON",
-        "Repair Trace Detail",
+        "Patch Repair Trace Detail",
     }.issubset(labels)
     assert "Semantic / Geometry Validation" not in labels
     assert "ASAM QC" not in labels
     assert "esmini / Media Provenance" not in labels
 
 
-def test_workspace_repair_appears_only_until_successful_revalidation(tmp_path: Path) -> None:
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
-    app.session_state["output_root"] = str(tmp_path)
-    app.selectbox[1].select("geometry_van_in_ego_lane")
-    next(button for button in app.button if button.label == "Generate").click().run()
-
-    assert "### Repair required" in [item.value for item in app.markdown]
-    assert "### Scenario Brief" in [item.value for item in app.markdown]
-    repair_button = next(button for button in app.button if button.label == "Repair")
-    assert repair_button.disabled is False
-    assert repair_button.help == "Repair and revalidate scenario"
-    assert repair_button.icon == WORKSPACE_REPAIR_ICON
-
-    repair_button.click().run()
+def test_advanced_page_exposes_capability_tree_and_family_readiness() -> None:
+    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=10).run()
+    app.session_state["active_page"] = "Advanced"
     app.run()
 
-    assert not app.exception
+    markdown = [item.value for item in app.markdown]
+    assert any('class="advanced-card-heading"' in item and "Capability Tree" in item for item in markdown)
+    assert any("Candidate Generation Loop" in item for item in markdown)
+    assert any("Scenario Revision Loop" in item for item in markdown)
+    assert any("PatchSpec Repair Loop" in item for item in markdown)
+    assert any("Provider-backed generation" in item for item in markdown)
+    assert any("Controlled Case coverage" in item for item in markdown)
+    readiness_markup = "\n".join(markdown)
+    for family_id in (
+        "pedestrian_occlusion",
+        "lead_vehicle_braking",
+        "cut_in",
+        "crossing_vehicle",
+        "oncoming_turn_across_path",
+    ):
+        assert family_id in readiness_markup
+    assert "Repair Experiments" in readiness_markup
+
+
+def test_advanced_page_exposes_candidate_acceptance_trace(monkeypatch, tmp_path: Path) -> None:
+    from scenariocraft.core.schemas import ScenarioIntent
+    from scenariocraft.providers.intent import IntentProposal
+
+    class StaticIntentProvider:
+        provider_name = "openai_compatible"
+
+        def propose_intent(self, request):
+            return IntentProposal(
+                intent=ScenarioIntent(
+                    template_id="lead_vehicle_braking",
+                    parameters={"scenario_name": "trace_lead_braking", "initial_gap_m": 31.0},
+                ),
+                rationale="The request describes lead vehicle braking.",
+                provider_name=self.provider_name,
+            )
+
+    from scenariocraft.providers.openai_intent import OpenAIIntentProvider
+
+    monkeypatch.setattr(OpenAIIntentProvider, "from_env", classmethod(lambda cls: StaticIntentProvider()))
+    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app.session_state["output_root"] = str(tmp_path)
+    app.text_area[0].set_value("An ego vehicle follows a lead vehicle that suddenly brakes.")
+    app.selectbox[0].select("Local LLM").run()
+    next(button for button in app.button if button.label == "Generate").click().run()
+    app.session_state["active_page"] = "Advanced"
+    app.run()
+
+    markdown = "\n".join(item.value for item in app.markdown)
+    assert "Candidate Acceptance" in markdown
+    assert "accepted" in markdown
+    assert "lead_vehicle_braking" in markdown
+    assert "initial_gap_m" in markdown
+
+
+def test_workspace_controlled_cases_do_not_expose_repair_experiment_actions(tmp_path: Path) -> None:
+    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app.session_state["output_root"] = str(tmp_path)
+    next(button for button in app.button if button.label == "Generate").click().run()
+
     assert "### Repair required" not in [item.value for item in app.markdown]
+    assert "### Artifact mismatch" not in [item.value for item in app.markdown]
+    assert "### Scenario Brief" in [item.value for item in app.markdown]
     assert "Repair" not in [button.label for button in app.button]
 
 
@@ -306,15 +408,14 @@ def test_workspace_brief_uses_explicit_timing_metric_labels(tmp_path: Path) -> N
     assert "Pedestrian to conflict:" in captions
 
 
-def test_artifact_detection_only_does_not_render_repair_action(tmp_path: Path) -> None:
+def test_workspace_repair_experiments_are_not_controlled_case_options(tmp_path: Path) -> None:
     app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
-    app.selectbox[1].select("artifact_xosc_actor_pose_drift")
-    next(button for button in app.button if button.label == "Generate").click().run()
 
     assert not app.exception
-    assert "### Artifact mismatch" in [item.value for item in app.markdown]
-    assert [button.label for button in app.button] == ["Generate"]
+    controlled_options = set(app.selectbox[1].options)
+    assert not controlled_options.intersection({case.display_name for case in DEMO_CASES})
+    assert [button.label for button in app.button] == ["Shuffle prompt", "Generate"]
 
 
 def test_workspace_css_hides_streamlit_chrome_and_scopes_icon_controls() -> None:
@@ -389,10 +490,10 @@ def test_workspace_status_is_one_textual_four_stage_grid() -> None:
     assert "Current simulator: esmini" in status_markup
 
 
-def test_workspace_uses_only_registered_demo_cases() -> None:
+def test_workspace_uses_only_registered_controlled_cases() -> None:
     options = workspace_case_options()
 
-    assert options == tuple((case.case_id, case.display_name) for case in DEMO_CASES)
+    assert options == tuple((case.case_id, case.display_name) for case in CONTROLLED_CASES)
     assert "Missing pedestrian" not in {label for _, label in options}
     assert "Low criticality" not in {label for _, label in options}
 
