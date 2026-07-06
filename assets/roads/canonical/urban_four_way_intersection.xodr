@@ -1,0 +1,76 @@
+<?xml version="1.0" ?>
+<OpenDRIVE>
+  <header revMajor="1" revMinor="6" name="urban_four_way_intersection" version="1.00" date="2026-07-06T00:00:00" north="50" south="-50" east="50" west="-50" vendor="ScenarioCraft"/>
+  <road name="east_west_main" length="100" id="1" junction="1">
+    <type s="0" type="town"/>
+    <planView>
+      <geometry s="0" x="-50" y="1.75" hdg="0" length="100">
+        <line/>
+      </geometry>
+    </planView>
+    <lanes>
+      <laneSection s="0">
+        <center>
+          <lane id="0" type="none" level="false">
+            <roadMark sOffset="0" type="broken" weight="standard" color="yellow" width="0.12"/>
+          </lane>
+        </center>
+        <left>
+          <lane id="1" type="driving" level="false">
+            <width sOffset="0" a="3.5" b="0" c="0" d="0"/>
+            <roadMark sOffset="0" type="broken" weight="standard" color="white" width="0.12"/>
+          </lane>
+        </left>
+        <right>
+          <lane id="-1" type="driving" level="false">
+            <width sOffset="0" a="3.5" b="0" c="0" d="0"/>
+            <roadMark sOffset="0" type="solid" weight="standard" color="white" width="0.12"/>
+          </lane>
+        </right>
+      </laneSection>
+    </lanes>
+  </road>
+  <road name="north_south_cross" length="100" id="2" junction="1">
+    <type s="0" type="town"/>
+    <planView>
+      <geometry s="0" x="0" y="-50" hdg="1.570796" length="100">
+        <line/>
+      </geometry>
+    </planView>
+    <lanes>
+      <laneSection s="0">
+        <center>
+          <lane id="0" type="none" level="false">
+            <roadMark sOffset="0" type="broken" weight="standard" color="yellow" width="0.12"/>
+          </lane>
+        </center>
+        <left>
+          <lane id="1" type="driving" level="false">
+            <width sOffset="0" a="3.5" b="0" c="0" d="0"/>
+            <roadMark sOffset="0" type="broken" weight="standard" color="white" width="0.12"/>
+          </lane>
+        </left>
+        <right>
+          <lane id="-1" type="driving" level="false">
+            <width sOffset="0" a="3.5" b="0" c="0" d="0"/>
+            <roadMark sOffset="0" type="solid" weight="standard" color="white" width="0.12"/>
+          </lane>
+        </right>
+      </laneSection>
+    </lanes>
+  </road>
+  <junction name="urban_four_way_intersection_junction" id="1">
+    <connection id="west_to_east_straight" incomingRoad="1" connectingRoad="1" contactPoint="start">
+      <laneLink from="-1" to="-1"/>
+    </connection>
+    <connection id="south_to_north_straight" incomingRoad="2" connectingRoad="2" contactPoint="start">
+      <laneLink from="-1" to="-1"/>
+    </connection>
+    <connection id="east_to_west_oncoming" incomingRoad="1" connectingRoad="1" contactPoint="start">
+      <laneLink from="1" to="1"/>
+    </connection>
+    <connection id="oncoming_turn_across_path" incomingRoad="1" connectingRoad="2" contactPoint="start">
+      <laneLink from="1" to="-1"/>
+    </connection>
+  </junction>
+</OpenDRIVE>

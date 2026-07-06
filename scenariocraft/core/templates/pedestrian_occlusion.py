@@ -137,7 +137,11 @@ class PedestrianOcclusionTemplate:
         template_parameters = _parameters_from_mapping(parameters, intent if isinstance(intent, ScenarioIntent) else None)
         timing = _derive_timing(template_parameters)
         layout = _derive_layout(template_parameters)
-        metadata = {"generator": "mock", "source_text": source_text}
+        metadata = {
+            "generator": "mock",
+            "source_text": source_text,
+            "road_asset_id": "urban_two_way_parking",
+        }
         return ScenarioSpec(
             scenario_name=scenario_name,
             scenario_type=self.template_id,

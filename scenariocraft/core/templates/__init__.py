@@ -6,6 +6,8 @@ from scenariocraft.core.templates.capability import (
     TemplateCapability,
 )
 from scenariocraft.core.templates.defaults import generate_default_pedestrian_occlusion_spec
+from scenariocraft.core.templates.crossing_vehicle import CrossingVehicleTemplate
+from scenariocraft.core.templates.cut_in import CutInTemplate
 from scenariocraft.core.templates.family_taxonomy import (
     FamilyDeclaration,
     FamilyStatus,
@@ -14,13 +16,22 @@ from scenariocraft.core.templates.family_taxonomy import (
     family_declarations,
     planned_family_ids,
 )
+from scenariocraft.core.templates.family_assets import (
+    FamilyAssetReadiness,
+    family_asset_readiness,
+    family_asset_readiness_report,
+)
 from scenariocraft.core.templates.lead_vehicle_braking import LeadVehicleBrakingTemplate
+from scenariocraft.core.templates.oncoming_turn_across_path import OncomingTurnAcrossPathTemplate
 from scenariocraft.core.templates.pedestrian_occlusion import PedestrianOcclusionTemplate
 from scenariocraft.core.templates.registry import get_template, registered_templates
 from scenariocraft.core.templates.resolver import resolve_scenario_intent, resolve_template_parameters
 
 __all__ = [
     "LeadVehicleBrakingTemplate",
+    "OncomingTurnAcrossPathTemplate",
+    "CutInTemplate",
+    "CrossingVehicleTemplate",
     "ParameterDomain",
     "PedestrianOcclusionTemplate",
     "ResolvedParameter",
@@ -28,8 +39,11 @@ __all__ = [
     "ScenarioTemplate",
     "TemplateCapability",
     "FamilyDeclaration",
+    "FamilyAssetReadiness",
     "FamilyStatus",
     "executable_family_ids",
+    "family_asset_readiness",
+    "family_asset_readiness_report",
     "family_declaration",
     "family_declarations",
     "generate_default_pedestrian_occlusion_spec",

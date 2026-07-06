@@ -129,6 +129,7 @@ class LeadVehicleBrakingTemplate:
         metadata = {
             "generator": "template",
             "source_text": source_text,
+            "road_asset_id": "urban_two_way_parking",
             "lead_vehicle_braking": {
                 "initial_gap_m": template_parameters.initial_gap_m,
                 "lead_deceleration_mps2": template_parameters.lead_deceleration_mps2,

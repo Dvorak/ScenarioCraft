@@ -38,7 +38,7 @@ URBAN_TWO_WAY_PARKING_LANES: tuple[OpenDriveLaneSpec, ...] = (
 
 
 def canonical_urban_two_way_parking_asset_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "assets" / "roads" / URBAN_TWO_WAY_PARKING_FILENAME
+    return Path(__file__).resolve().parents[3] / "assets" / "roads" / "canonical" / URBAN_TWO_WAY_PARKING_FILENAME
 
 
 def write_urban_two_way_parking_xodr(path: Path) -> Path:

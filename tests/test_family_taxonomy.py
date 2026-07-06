@@ -24,19 +24,25 @@ def test_family_taxonomy_declares_five_golden_families_with_status() -> None:
     )
     assert declarations["pedestrian_occlusion"].status == "mature"
     assert declarations["lead_vehicle_braking"].status == "early"
-    assert declarations["cut_in"].status == "planned"
-    assert declarations["crossing_vehicle"].status == "planned"
-    assert declarations["oncoming_turn_across_path"].status == "planned"
+    assert declarations["cut_in"].status == "early"
+    assert declarations["crossing_vehicle"].status == "early"
+    assert declarations["oncoming_turn_across_path"].status == "early"
     assert set(FamilyStatus.__args__) == {"mature", "early", "planned"}
 
 
 def test_planned_families_are_recognized_but_not_executable() -> None:
-    assert planned_family_ids() == ("cut_in", "crossing_vehicle", "oncoming_turn_across_path")
-    assert executable_family_ids() == ("pedestrian_occlusion", "lead_vehicle_braking")
+    assert planned_family_ids() == ()
+    assert executable_family_ids() == (
+        "pedestrian_occlusion",
+        "lead_vehicle_braking",
+        "cut_in",
+        "crossing_vehicle",
+        "oncoming_turn_across_path",
+    )
     assert set(registered_templates()) == set(executable_family_ids())
 
     with pytest.raises(ValueError, match="Unknown scenario template"):
-        resolve_scenario_intent(ScenarioIntent(template_id="cut_in"))
+        resolve_scenario_intent(ScenarioIntent(template_id="unknown_family"))
 
 
 def test_implemented_template_capabilities_align_with_family_taxonomy() -> None:
