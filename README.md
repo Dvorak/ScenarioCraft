@@ -64,6 +64,11 @@ http://localhost:8501
 
 The Workspace page is the fastest way to generate the demo scenario, inspect the semantic preview, run repair cases, and view verified runtime media when esmini is configured.
 
+Workspace can also use a configured local OpenAI-compatible model for
+natural-language to `ScenarioIntent` routing. If a request is vague or outside
+the registered template families, ScenarioCraft shows clarification or
+refinement suggestions instead of silently generating the nearest scenario.
+
 ### 5. Run from the CLI
 
 Generate the default scenario:
@@ -159,7 +164,50 @@ export OPENAI_API_KEY=...
 
 The OpenAI repair provider is an integration adapter. It proposes structured `PatchSpec` JSON only; deterministic ScenarioCraft code validates, applies, rebuilds, and rechecks the result.
 
+### Local LLM Intent Provider
+
+ScenarioCraft can route natural-language requests through an OpenAI-compatible
+local model endpoint such as Ollama:
+
+```bash
+ollama pull qwen2.5:7b
+ollama serve
+export SCENARIOCRAFT_LOCAL_LLM_BASE_URL=http://localhost:11434/v1
+export SCENARIOCRAFT_LOCAL_LLM_API_KEY=local
+export SCENARIOCRAFT_LOCAL_LLM_MODEL=qwen2.5:7b
+.venv/bin/just web
+```
+
+The model proposes `ScenarioIntent` JSON only. Registered template capability
+manifests remain the routing surface, and deterministic ScenarioCraft code
+resolves, builds, checks, and reports the final scenario.
+
 The default demo and tests use deterministic mock/fake providers and do not require an API key.
+
+### Local LLM
+
+The Web `Local LLM` provider uses any OpenAI-compatible endpoint. Ollama is the
+simplest local option:
+
+```bash
+ollama pull qwen2.5:7b
+ollama serve
+```
+
+In the shell that starts ScenarioCraft Web:
+
+```bash
+export SCENARIOCRAFT_LOCAL_LLM_BASE_URL=http://localhost:11434/v1
+export SCENARIOCRAFT_LOCAL_LLM_API_KEY=local
+export SCENARIOCRAFT_LOCAL_LLM_MODEL=qwen2.5:7b
+.venv/bin/just web
+```
+
+If you select `Local LLM` in the Workspace without these variables,
+ScenarioCraft checks whether Ollama appears to be running locally and shows the
+matching export commands. The provider still outputs only structured
+`ScenarioIntent`; deterministic ScenarioCraft code resolves, builds, checks,
+and reports the scenario.
 
 Generated artifacts go under `outputs/`, which is gitignored.
 
