@@ -21,6 +21,7 @@ from scenariocraft.application.demo_cases import (
     prepare_demo_case,
     run_demo_case,
 )
+from scenariocraft.application.generated_scenario import IntentGenerationOutcomeError
 from scenariocraft.core.build import BuildResult, build_openscenario
 from scenariocraft.rendering import generate_2d_preview
 from scenariocraft.external_tools import (
@@ -31,6 +32,8 @@ from scenariocraft.external_tools import (
     run_esmini,
     run_esmini_playback,
 )
+from scenariocraft.providers import OpenAIIntentProvider, OpenAIIntentProviderConfigurationError
+from scenariocraft.providers.openai_intent import local_llm_configuration_hint
 from scenariocraft.core.schemas import ScenarioSpec
 from scenariocraft.core.checks import SemanticValidationResult
 from scenariocraft.core.checks import validate_semantics
@@ -55,6 +58,8 @@ from scenariocraft.web.state import (
     WORKSPACE_MEDIA_TITLES,
     WORKSPACE_PAGES,
     WORKSPACE_PROVIDER,
+    WORKSPACE_PROVIDER_OPTIONS,
+    WORKSPACE_PROVIDER_VALUES,
     WORKSPACE_REPAIR_ICON,
     ensure_session_state,
     reset_generated_scenario_state,
@@ -102,8 +107,12 @@ def _render_workspace(output_dir: Path) -> None:
     render_workspace(
         output_dir,
         scenario_text=st.session_state.scenario_text,
+        provider_label=st.session_state.workspace_provider_label,
         selected_demo_case_id=st.session_state.selected_demo_case_id,
         prepared_case=_prepared_case(),
+        intent_proposal=st.session_state.workspace_intent_proposal,
+        last_error=st.session_state.last_error,
+        last_info=st.session_state.last_info,
         semantic_result=st.session_state.semantic_result,
         qc_result=st.session_state.qc_result,
         esmini_result=st.session_state.esmini_result,
@@ -112,6 +121,7 @@ def _render_workspace(output_dir: Path) -> None:
         generated_view_model=_generated_view_model,
         ensure_preview=_ensure_preview,
         set_scenario_text=lambda value: setattr(st.session_state, "scenario_text", value),
+        set_provider_label=lambda value: setattr(st.session_state, "workspace_provider_label", value),
         set_selected_demo_case_id=lambda value: setattr(st.session_state, "selected_demo_case_id", value),
         generate_selected_case=_generate_selected_case,
         execute_workspace_repair=_execute_workspace_repair,
@@ -122,6 +132,7 @@ def _render_advanced_page(output_dir: Path) -> None:
     st.session_state.spec_json = render_advanced_page(
         output_dir,
         spec_json=st.session_state.spec_json,
+        intent_proposal=st.session_state.workspace_intent_proposal,
         semantic_result=st.session_state.semantic_result,
         prepared_case=_prepared_case(),
         qc_result=st.session_state.qc_result,
@@ -270,15 +281,20 @@ def _is_load_mode() -> bool:
     return st.session_state.workflow_mode == "Load existing .xosc"
 
 
-def _generate_selected_case(provider_name: str, case_id: str) -> None:
+def _generate_selected_case(provider_name: str, case_id: str | None) -> None:
     output_dir = _new_web_output_dir()
+    st.session_state.workspace_intent_proposal = None
+    intent_provider = _intent_provider(provider_name)
+    if provider_name in {"openai-compatible", "openai_compatible"} and intent_provider is None:
+        return
     try:
         result = run_generated_scenario_workflow(
             ScenarioWorkflowRequest(
                 scenario_text=st.session_state.scenario_text,
                 output_dir=output_dir,
                 provider_name=provider_name,
-                demo_case_id=case_id,
+                intent_provider=intent_provider,
+                demo_case_id=case_id if provider_name == WORKSPACE_PROVIDER else None,
                 options=ScenarioWorkflowOptions(
                     run_preview=True,
                     run_semantics=True,
@@ -303,6 +319,11 @@ def _generate_selected_case(provider_name: str, case_id: str) -> None:
                 ),
             )
         )
+    except IntentGenerationOutcomeError as exc:
+        st.session_state.output_dir = str(output_dir)
+        st.session_state.workspace_intent_proposal = exc.proposal
+        _info(f"Intent {exc.proposal.status.replace('_', ' ')}: {exc}")
+        return
     except Exception as exc:
         _error(f"Scenario generation or case preparation failed: {exc}")
         return
@@ -313,9 +334,25 @@ def _generate_selected_case(provider_name: str, case_id: str) -> None:
     _info(f"Prepared {display_name}.")
 
 
+def _intent_provider(provider_name: str) -> OpenAIIntentProvider | None:
+    if provider_name not in {"openai-compatible", "openai_compatible"}:
+        return None
+    try:
+        return OpenAIIntentProvider.from_env()
+    except OpenAIIntentProviderConfigurationError as exc:
+        hint = local_llm_configuration_hint()
+        _error(
+            "Local LLM provider is not ready.\n\n"
+            f"{hint.message}\n\n"
+            f"Detail: {exc}"
+        )
+        return None
+
+
 def _apply_workflow_result(result: ScenarioWorkflowResult) -> None:
     _set_spec(result.spec)
     st.session_state.output_dir = str(result.artifacts.output_dir)
+    st.session_state.workspace_intent_proposal = result.intent_proposal
     st.session_state.workspace_original_spec = result.original_spec
     st.session_state.workspace_prepared_case = (
         result.prepared_case if isinstance(result.prepared_case, PreparedDemoCase) else None

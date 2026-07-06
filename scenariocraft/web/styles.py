@@ -74,6 +74,32 @@ def inject_css() -> None:
             flex: 0 0 var(--workspace-desktop-height) !important;
             min-height: 0;
         }
+        [data-testid="stHorizontalBlock"]:has(.st-key-workspace_left_normal) {
+            gap: 1rem;
+        }
+        [data-testid="stHorizontalBlock"]:has(.st-key-workspace_left_repair) {
+            gap: 1rem;
+        }
+        [data-testid="stHorizontalBlock"]:has(.st-key-workspace_left_normal)
+        > [data-testid="stColumn"]:has(.st-key-workspace_left_normal) {
+            flex: 0 1 clamp(26rem, 32vw, 34rem) !important;
+            width: clamp(26rem, 32vw, 34rem) !important;
+            min-width: 24rem;
+        }
+        [data-testid="stHorizontalBlock"]:has(.st-key-workspace_left_repair)
+        > [data-testid="stColumn"]:has(.st-key-workspace_left_repair) {
+            flex: 0 1 clamp(30rem, 36vw, 38rem) !important;
+            width: clamp(30rem, 36vw, 38rem) !important;
+            min-width: 27rem;
+        }
+        [data-testid="stHorizontalBlock"]:has(.st-key-workspace_left_normal)
+        > [data-testid="stColumn"]:has(.st-key-workspace_right),
+        [data-testid="stHorizontalBlock"]:has(.st-key-workspace_left_repair)
+        > [data-testid="stColumn"]:has(.st-key-workspace_right) {
+            flex: 1 1 0 !important;
+            width: auto !important;
+            min-width: 0;
+        }
         .st-key-workspace_left_normal,
         .st-key-workspace_left_repair {
             display: flex;
@@ -174,15 +200,16 @@ def inject_css() -> None:
         }
         .st-key-workspace_preview_stage [data-testid="stImage"] img,
         .st-key-workspace_playback_stage [data-testid="stImage"] img {
-            width: 100% !important;
-            height: 100% !important;
+            width: min(100%, 980px) !important;
+            height: auto !important;
             max-width: 100% !important;
             max-height: 100% !important;
             object-fit: contain;
         }
         .st-key-workspace_playback_stage [data-testid="stVideo"] video {
-            width: 100%;
-            height: 100%;
+            width: min(100%, 980px);
+            height: auto;
+            max-height: 100%;
             object-fit: contain;
         }
         .st-key-workspace_toolbar [data-testid="stHorizontalBlock"] {

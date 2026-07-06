@@ -18,6 +18,7 @@ def render_advanced_page(
     output_dir: Path,
     *,
     spec_json: str,
+    intent_proposal: object,
     semantic_result: object,
     prepared_case: PreparedDemoCase | None,
     qc_result: object,
@@ -46,10 +47,14 @@ def render_advanced_page(
             _render_card_heading("Intent & Spec", "Request interpretation and typed ScenarioSpec contract.")
             _render_summary_rows(
                 (
-                    ("Intent source", "Demo case / provider path"),
+                    ("Intent source", _intent_source_label(intent_proposal)),
                     ("ScenarioSpec", "Available" if spec is not None else "Not generated"),
+                    ("Template resolution", _template_resolution_label(spec)),
                 )
             )
+            if intent_proposal is not None:
+                _render_intent_proposal(intent_proposal)
+            _render_template_resolution(spec)
             with st.expander("ScenarioSpec JSON", expanded=False):
                 updated_spec_json = st.text_area(
                     "ScenarioSpec JSON",
@@ -159,6 +164,52 @@ def _parse_spec(spec_json: str) -> ScenarioSpec | None:
         return ScenarioSpec.from_json(spec_json)
     except Exception:
         return None
+
+
+def _intent_source_label(intent_proposal: object) -> str:
+    if intent_proposal is None:
+        return "Demo case / mock path"
+    provider = str(getattr(intent_proposal, "provider_name", "provider"))
+    intent = getattr(intent_proposal, "intent", None)
+    if intent is None:
+        return f"{provider} refusal"
+    template_id = str(getattr(intent, "template_id", "ScenarioIntent"))
+    return f"{template_id} via {provider}"
+
+
+def _render_intent_proposal(intent_proposal: object) -> None:
+    intent = getattr(intent_proposal, "intent", None)
+    rationale = str(getattr(intent_proposal, "rationale", "") or "")
+    with st.expander("ScenarioIntent", expanded=False):
+        if intent is None:
+            st.error(str(getattr(intent_proposal, "refusal_reason", "") or rationale or "Intent unavailable."))
+        else:
+            st.json(intent.to_dict())
+        if rationale:
+            st.caption(rationale)
+
+
+def _template_resolution_label(spec: ScenarioSpec | None) -> str:
+    if spec is None:
+        return "Not generated"
+    resolution = spec.metadata.get("template_resolution")
+    if not isinstance(resolution, dict):
+        return "Unavailable"
+    seed = resolution.get("seed")
+    sampled = bool(resolution.get("sampled", False))
+    if sampled:
+        return f"Seed {seed}"
+    return "Canonical defaults"
+
+
+def _render_template_resolution(spec: ScenarioSpec | None) -> None:
+    if spec is None:
+        return
+    resolution = spec.metadata.get("template_resolution")
+    if not isinstance(resolution, dict):
+        return
+    with st.expander("Template Resolution", expanded=False):
+        st.json(resolution)
 
 
 def _render_card_heading(title: str, detail: str) -> None:

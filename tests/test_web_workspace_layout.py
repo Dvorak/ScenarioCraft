@@ -19,6 +19,7 @@ from scenariocraft.web.app import (
     WORKSPACE_MEDIA_ASPECT_RATIO,
     WORKSPACE_PAGES,
     WORKSPACE_PROVIDER,
+    WORKSPACE_PROVIDER_OPTIONS,
     WORKSPACE_REPAIR_ICON,
     WEB_PREVIEW_PRESENTATION_STYLE,
     workspace_case_options,
@@ -37,6 +38,7 @@ def test_workspace_navigation_and_media_contract() -> None:
     assert WORKSPACE_MEDIA_TITLES == ("Preview 2D Semantic", "Playback Esmini")
     assert WORKSPACE_MEDIA_ASPECT_RATIO == "16 / 9"
     assert WORKSPACE_PROVIDER == "mock"
+    assert WORKSPACE_PROVIDER_OPTIONS == ("Demo / mock", "Local LLM")
     assert WORKSPACE_GENERATE_ICON == ":material/send:"
     assert WORKSPACE_REPAIR_ICON == ":material/build:"
     assert WEB_PREVIEW_PRESENTATION_STYLE == "clean_split"
@@ -55,10 +57,11 @@ def test_workspace_is_default_and_has_one_demo_case_selector() -> None:
     app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=10).run()
 
     assert not app.exception
-    assert [item.label for item in app.selectbox] == ["Demo Case"]
-    assert set(app.selectbox[0].options) == {case.display_name for case in DEMO_CASES}
+    assert [item.label for item in app.selectbox] == ["Provider", "Demo Case"]
+    assert set(app.selectbox[0].options) == set(WORKSPACE_PROVIDER_OPTIONS)
+    assert set(app.selectbox[1].options) == {case.display_name for case in DEMO_CASES}
     assert [button.label for button in app.button] == ["Generate"]
-    assert app.button[0].help == "Generate selected scenario"
+    assert app.button[0].help == "Generate from text with selected provider"
     assert app.button[0].icon == WORKSPACE_GENERATE_ICON
     markdown = [item.value for item in app.markdown]
     assert not any('class="workspace-pipeline-strip"' in item for item in markdown)
@@ -67,6 +70,125 @@ def test_workspace_is_default_and_has_one_demo_case_selector() -> None:
     assert "### 2D Semantic Preview" not in markdown
     assert "### esmini Runtime Playback" not in markdown
     assert "Playback Esmini has not been generated." in [item.value for item in app.info]
+
+
+def test_workspace_local_llm_provider_uses_text_without_demo_case_selector(monkeypatch, tmp_path: Path) -> None:
+    from scenariocraft.core.schemas import ScenarioIntent
+    from scenariocraft.providers.intent import IntentProposal
+
+    class StaticIntentProvider:
+        provider_name = "openai_compatible"
+
+        def propose_intent(self, request):
+            return IntentProposal(
+                intent=ScenarioIntent(
+                    template_id="lead_vehicle_braking",
+                    parameters={"scenario_name": "web_local_llm_lead_braking", "initial_gap_m": 33.0},
+                ),
+                rationale="The text describes a lead vehicle braking scenario.",
+                provider_name=self.provider_name,
+            )
+
+    from scenariocraft.providers.openai_intent import OpenAIIntentProvider
+
+    monkeypatch.setattr(OpenAIIntentProvider, "from_env", classmethod(lambda cls: StaticIntentProvider()))
+    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app.session_state["output_root"] = str(tmp_path)
+    app.text_area[0].set_value("生成一个城市道路同车道跟驰场景，前车突然急刹。")
+    app.selectbox[0].select("Local LLM").run()
+
+    assert [item.label for item in app.selectbox] == ["Provider"]
+    next(button for button in app.button if button.label == "Generate").click().run()
+
+    assert not app.exception
+    assert app.session_state["spec"].scenario_type == "lead_vehicle_braking"
+    assert app.session_state["workspace_intent_proposal"].intent.template_id == "lead_vehicle_braking"
+    assert "Intent · lead_vehicle_braking via openai_compatible" in [item.value for item in app.caption]
+
+
+def test_workspace_local_llm_unsupported_intent_does_not_generate_spec(monkeypatch, tmp_path: Path) -> None:
+    from scenariocraft.providers.intent import IntentProposal, RefinementSuggestion
+
+    class UnsupportedIntentProvider:
+        provider_name = "openai_compatible"
+
+        def propose_intent(self, request):
+            return IntentProposal(
+                intent=None,
+                rationale="The prompt describes an unsupported highway cut-in.",
+                provider_name=self.provider_name,
+                status="unsupported",
+                refusal_reason="No cut-in template is registered.",
+                nearest_template_candidates=("lead_vehicle_braking",),
+                refinement_suggestions=(
+                    RefinementSuggestion(
+                        template_id="lead_vehicle_braking",
+                        label="Lead vehicle braking",
+                        suggested_request="An urban scenario where ego follows a lead vehicle that suddenly brakes.",
+                        reason="Closest registered vehicle-interaction family.",
+                    ),
+                ),
+            )
+
+    from scenariocraft.providers.openai_intent import OpenAIIntentProvider
+
+    monkeypatch.setattr(OpenAIIntentProvider, "from_env", classmethod(lambda cls: UnsupportedIntentProvider()))
+    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app.session_state["output_root"] = str(tmp_path)
+    app.text_area[0].set_value("Generate a highway cut-in with three lanes.")
+    app.selectbox[0].select("Local LLM").run()
+
+    next(button for button in app.button if button.label == "Generate").click().run()
+
+    assert not app.exception
+    assert app.session_state["spec"] is None
+    assert app.session_state["workspace_intent_proposal"].status == "unsupported"
+    captions = [item.value for item in app.caption]
+    assert any("Intent unsupported" in item for item in captions)
+    assert any("Nearest templates: lead_vehicle_braking" in item for item in captions)
+    assert any(button.label == "Use: Lead vehicle braking" for button in app.button)
+
+
+def test_workspace_refinement_suggestion_updates_request_without_generating(monkeypatch, tmp_path: Path) -> None:
+    from scenariocraft.providers.intent import IntentProposal, RefinementSuggestion
+
+    class ClarifyingIntentProvider:
+        provider_name = "openai_compatible"
+
+        def propose_intent(self, request):
+            return IntentProposal(
+                intent=None,
+                rationale="The request only says urban scenario.",
+                provider_name=self.provider_name,
+                status="clarification_required",
+                clarification_question="Which interaction should this urban scenario focus on?",
+                nearest_template_candidates=("pedestrian_occlusion", "lead_vehicle_braking"),
+                refinement_suggestions=(
+                    RefinementSuggestion(
+                        template_id="pedestrian_occlusion",
+                        label="Pedestrian occlusion",
+                        suggested_request=(
+                            "An urban pedestrian occlusion scenario where ego approaches a parked van and a "
+                            "pedestrian crosses from behind it."
+                        ),
+                        reason="Adds a supported interaction family and actors.",
+                    ),
+                ),
+            )
+
+    from scenariocraft.providers.openai_intent import OpenAIIntentProvider
+
+    monkeypatch.setattr(OpenAIIntentProvider, "from_env", classmethod(lambda cls: ClarifyingIntentProvider()))
+    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app.session_state["output_root"] = str(tmp_path)
+    app.text_area[0].set_value("urban scenario")
+    app.selectbox[0].select("Local LLM").run()
+    next(button for button in app.button if button.label == "Generate").click().run()
+
+    next(button for button in app.button if button.label == "Use: Pedestrian occlusion").click().run()
+
+    assert app.session_state["scenario_text"].startswith("An urban pedestrian occlusion scenario")
+    assert app.session_state["spec"] is None
 
 
 def test_workspace_playback_panel_explains_preview_fallback_after_generation(tmp_path: Path) -> None:
@@ -151,7 +273,7 @@ def test_advanced_page_retains_diagnostic_artifact_sections() -> None:
 def test_workspace_repair_appears_only_until_successful_revalidation(tmp_path: Path) -> None:
     app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
-    app.selectbox[0].select("geometry_van_in_ego_lane")
+    app.selectbox[1].select("geometry_van_in_ego_lane")
     next(button for button in app.button if button.label == "Generate").click().run()
 
     assert "### Repair required" in [item.value for item in app.markdown]
@@ -187,7 +309,7 @@ def test_workspace_brief_uses_explicit_timing_metric_labels(tmp_path: Path) -> N
 def test_artifact_detection_only_does_not_render_repair_action(tmp_path: Path) -> None:
     app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
-    app.selectbox[0].select("artifact_xosc_actor_pose_drift")
+    app.selectbox[1].select("artifact_xosc_actor_pose_drift")
     next(button for button in app.button if button.label == "Generate").click().run()
 
     assert not app.exception
@@ -215,6 +337,8 @@ def test_workspace_css_hides_streamlit_chrome_and_scopes_icon_controls() -> None
     assert ".st-key-workspace_left_normal" in css
     assert ".st-key-workspace_left_repair" in css
     assert ".st-key-workspace_right" in css
+    assert "clamp(26rem, 32vw, 34rem)" in css
+    assert "clamp(30rem, 36vw, 38rem)" in css
     assert "grid-template-rows: repeat(2, minmax(0, 1fr))" in css
     assert ".st-key-workspace_preview_stage" in css
     assert ".st-key-workspace_playback_stage" in css
@@ -222,6 +346,7 @@ def test_workspace_css_hides_streamlit_chrome_and_scopes_icon_controls() -> None
     assert ".st-key-workspace_playback_stage [data-testid=\"stImageContainer\"]" in css
     assert ".st-key-workspace_preview_stage [data-testid=\"stFullScreenFrame\"] > div" in css
     assert "width: 100%" in css
+    assert "width: min(100%, 980px)" in css
     assert "justify-content: center" in css
     assert f"--workspace-media-aspect-ratio: {WORKSPACE_MEDIA_ASPECT_RATIO}" in css
     assert "object-fit: contain" in css

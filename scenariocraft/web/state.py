@@ -31,6 +31,11 @@ PREVIEW_VISUAL_CAPTION = "Renderer-aligned ScenarioSpec layout · world +x → l
 RUNTIME_VISUAL_CAPTION = "Raw OpenSCENARIO + OpenDRIVE runtime view · world +x → left · world +y → down"
 WORKSPACE_PAGES = ("Workspace", "Advanced")
 WORKSPACE_PROVIDER = "mock"
+WORKSPACE_PROVIDER_OPTIONS = ("Demo / mock", "Local LLM")
+WORKSPACE_PROVIDER_VALUES = {
+    "Demo / mock": "mock",
+    "Local LLM": "openai-compatible",
+}
 WORKSPACE_GENERATE_ICON = ":material/send:"
 WORKSPACE_REPAIR_ICON = ":material/build:"
 WORKSPACE_DESKTOP_HEIGHT = "clamp(720px, calc(100dvh - 6.5rem), 960px)"
@@ -59,6 +64,8 @@ def ensure_session_state() -> None:
         "workspace_original_spec": None,
         "workspace_prepared_case": None,
         "workspace_execution": None,
+        "workspace_provider_label": WORKSPACE_PROVIDER_OPTIONS[0],
+        "workspace_intent_proposal": None,
         "output_root": str(DEFAULT_OUTPUT_ROOT),
         "output_dir": str(DEFAULT_OUTPUT_DIR),
         "external_root": str(DEFAULT_EXTERNAL_ROOT),
@@ -101,3 +108,4 @@ def reset_generated_scenario_state() -> None:
     st.session_state.runtime_check_results = ()
     st.session_state.report_text = ""
     st.session_state.demo_experiment_trace = None
+    st.session_state.workspace_intent_proposal = None
