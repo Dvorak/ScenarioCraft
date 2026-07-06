@@ -83,6 +83,36 @@ def test_openai_intent_provider_returns_valid_scenario_intent() -> None:
     assert proposal.intent is not None
     assert proposal.intent.template_id == "lead_vehicle_braking"
     assert proposal.intent.parameters["initial_gap_m"] == 30.0
+
+
+def test_openai_intent_provider_sends_revision_context_to_model() -> None:
+    payload = json.dumps(
+        {
+            "intent": {"template_id": "lead_vehicle_braking"},
+            "rationale": "The revision remains a same-lane lead vehicle braking variant.",
+        }
+    )
+    client = _FakeClient(payload)
+    provider = OpenAIIntentProvider(model="local-qwen", client=client)
+    request = IntentRequest(
+        user_text="Lead vehicle braking scenario.\n\nRevision request: Make the gap shorter.",
+        available_templates=("lead_vehicle_braking",),
+        template_contract_summary={
+            "lead_vehicle_braking": {"description": "Same-lane lead vehicle braking ahead of ego."},
+        },
+        metadata={
+            "revision_request": "Make the gap shorter.",
+            "base_scenario_type": "lead_vehicle_braking",
+        },
+    )
+
+    proposal = provider.propose_intent(request)
+
+    assert proposal.status == "supported"
+    messages = client.responses.calls[0]["input"]
+    assert "Scenario Revision Loop" in messages[0]["content"]
+    assert "base_scenario_type" in messages[0]["content"]
+    assert '"revision_request": "Make the gap shorter."' in messages[1]["content"]
     assert proposal.status == "supported"
     assert proposal.provider_name == "openai_compatible"
     assert proposal.refusal_reason is None
@@ -105,6 +135,44 @@ def test_openai_intent_provider_refuses_unknown_template() -> None:
     assert proposal.intent is None
     assert proposal.status == "unsupported"
     assert "unknown template_id" in proposal.refusal_reason
+
+
+def test_openai_intent_provider_coerces_semantic_template_alias() -> None:
+    payload = json.dumps(
+        {
+            "intent": {"template_id": "same_lane_following_lead_brake"},
+            "rationale": "The request describes following a lead vehicle that brakes.",
+        }
+    )
+    request = IntentRequest(
+        user_text="Ego follows a lead vehicle that brakes.",
+        available_templates=("pedestrian_occlusion", "lead_vehicle_braking"),
+        template_contract_summary={
+            "pedestrian_occlusion": {
+                "description": "Occluded crossing pedestrian near a parked van.",
+                "capability": {
+                    "aliases": ["pedestrian crosses from behind parked vehicle"],
+                    "semantic_slots": ["pedestrian", "occluder"],
+                    "supported_variants": [],
+                },
+            },
+            "lead_vehicle_braking": {
+                "description": "Same-lane lead vehicle braking ahead of ego.",
+                "capability": {
+                    "aliases": ["ego follows lead vehicle that brakes", "same lane emergency braking"],
+                    "semantic_slots": ["lead_vehicle", "following_relation", "braking_event"],
+                    "supported_variants": ["urban same-lane following"],
+                },
+            },
+        },
+    )
+    provider = OpenAIIntentProvider(model="local-qwen", client=_FakeClient(payload))
+
+    proposal = provider.propose_intent(request)
+
+    assert proposal.intent is not None
+    assert proposal.intent.template_id == "lead_vehicle_braking"
+    assert proposal.intent.metadata["provider_template_id"] == "same_lane_following_lead_brake"
 
 
 def test_openai_intent_provider_preserves_unsupported_with_nearest_candidates() -> None:
@@ -256,6 +324,23 @@ def test_openai_intent_provider_reads_local_llm_env_aliases(monkeypatch) -> None
     monkeypatch.setenv("SCENARIOCRAFT_LOCAL_LLM_API_KEY", "local")
     monkeypatch.setenv("SCENARIOCRAFT_LOCAL_LLM_BASE_URL", "http://localhost:11434/v1")
     monkeypatch.setenv("SCENARIOCRAFT_LOCAL_LLM_MODEL", "qwen2.5:7b")
+
+    provider = OpenAIIntentProvider.from_env(client=_FakeClient("{}"))
+
+    assert provider.model == "qwen2.5:7b"
+    assert provider.base_url == "http://localhost:11434/v1"
+
+
+def test_openai_intent_provider_auto_discovers_ollama_model(monkeypatch) -> None:
+    monkeypatch.delenv("SCENARIOCRAFT_LOCAL_LLM_API_KEY", raising=False)
+    monkeypatch.delenv("SCENARIOCRAFT_LOCAL_LLM_BASE_URL", raising=False)
+    monkeypatch.delenv("SCENARIOCRAFT_LOCAL_LLM_MODEL", raising=False)
+    monkeypatch.delenv("SCENARIOCRAFT_OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("SCENARIOCRAFT_OPENAI_BASE_URL", raising=False)
+    monkeypatch.delenv("SCENARIOCRAFT_INTENT_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    monkeypatch.setattr(openai_intent_module, "_ollama_model_names", lambda base_url, timeout_s: ("qwen2.5:7b",))
 
     provider = OpenAIIntentProvider.from_env(client=_FakeClient("{}"))
 

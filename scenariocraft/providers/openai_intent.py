@@ -132,6 +132,12 @@ _SYSTEM_PROMPT = """Return only a structured ScenarioIntent proposal.
 You are a semantic router onto ScenarioCraft's registered template capability
 tree. Use the supplied template descriptions, aliases, semantic slots, supported
 variants, unsupported boundary examples, and parameter domains.
+If request.metadata.revision_request is non-empty, treat the prompt as a
+Scenario Revision Loop request. Use request.metadata.base_scenario_type as the
+preferred existing family when the revision still fits that registered family.
+Do not return unsupported merely because a supported revision asks for a
+different parameter value; deterministic ScenarioCraft resolvers will clamp,
+default, sample, or reject concrete parameter candidates.
 Choose one available template when the request clearly matches that scenario
 family, even if optional parameters are missing. Deterministic resolvers will
 fill safe defaults or seeded samples.
@@ -182,10 +188,16 @@ class OpenAIIntentProvider:
         api_key = env["api_key"]
         base_url = env["base_url"]
         if not model:
-            raise OpenAIIntentProviderConfigurationError(
-                "SCENARIOCRAFT_LOCAL_LLM_MODEL or SCENARIOCRAFT_INTENT_MODEL is required for the "
-                "OpenAI-compatible intent provider."
-            )
+            hint = local_llm_configuration_hint(timeout_s=0.75)
+            if hint.reachable and hint.model_names:
+                model = hint.model_names[0]
+                base_url = base_url or hint.server_url
+                api_key = api_key or "local"
+            else:
+                raise OpenAIIntentProviderConfigurationError(
+                    "SCENARIOCRAFT_LOCAL_LLM_MODEL or SCENARIOCRAFT_INTENT_MODEL is required for the "
+                    "OpenAI-compatible intent provider when Ollama auto-discovery is unavailable."
+                )
         return cls(model=model, client=client, api_key=api_key, base_url=base_url)
 
     def propose_intent(self, request: IntentRequest) -> IntentProposal:
@@ -242,15 +254,24 @@ class OpenAIIntentProvider:
         intent_payload = payload.get("intent")
         if not isinstance(intent_payload, Mapping):
             return self._decline("OpenAI-compatible response omitted ScenarioIntent.")
-        try:
-            intent = ScenarioIntent.from_dict(dict(intent_payload))
-        except (ScenarioIntentError, TypeError, ValueError) as exc:
-            return self._decline(f"ScenarioIntent validation failed: {exc}")
-        if intent.template_id not in set(request.available_templates):
+        intent_payload = dict(intent_payload)
+        raw_template_id = str(intent_payload.get("template_id", ""))
+        coerced_template_id = _coerced_template_id(raw_template_id, request)
+        if coerced_template_id is None:
             return self._decline(
-                f"OpenAI-compatible response used unknown template_id: {intent.template_id}.",
+                f"OpenAI-compatible response used unknown template_id: {raw_template_id}.",
                 nearest_template_candidates=nearest_template_candidates,
             )
+        if coerced_template_id != raw_template_id:
+            metadata = intent_payload.get("metadata")
+            metadata = dict(metadata) if isinstance(metadata, Mapping) else {}
+            metadata["provider_template_id"] = raw_template_id
+            intent_payload["metadata"] = metadata
+            intent_payload["template_id"] = coerced_template_id
+        try:
+            intent = ScenarioIntent.from_dict(intent_payload)
+        except (ScenarioIntentError, TypeError, ValueError) as exc:
+            return self._decline(f"ScenarioIntent validation failed: {exc}")
         return IntentProposal(intent=intent, rationale=rationale.strip(), provider_name=self.provider_name)
 
     @staticmethod
@@ -406,6 +427,74 @@ def _nearest_candidates(value: object, request: IntentRequest) -> tuple[str, ...
         return ()
     available = set(request.available_templates)
     return tuple(str(candidate) for candidate in value if str(candidate) in available)
+
+
+def _coerced_template_id(raw_template_id: str, request: IntentRequest) -> str | None:
+    raw = _normalized_tokens(raw_template_id)
+    if not raw:
+        return None
+    exact = {_normalized_key(template_id): template_id for template_id in request.available_templates}
+    raw_key = _normalized_key(raw_template_id)
+    if raw_key in exact:
+        return exact[raw_key]
+
+    best_template: str | None = None
+    best_score = 0
+    for template_id in request.available_templates:
+        summary = request.template_contract_summary.get(template_id, {})
+        candidates = [template_id]
+        if isinstance(summary, Mapping):
+            description = summary.get("description")
+            if isinstance(description, str):
+                candidates.append(description)
+            capability = summary.get("capability")
+            if isinstance(capability, Mapping):
+                for key in ("interaction_family", "description"):
+                    value = capability.get(key)
+                    if isinstance(value, str):
+                        candidates.append(value)
+                for key in ("aliases", "semantic_slots", "supported_variants"):
+                    values = capability.get(key)
+                    if isinstance(values, list):
+                        candidates.extend(str(value) for value in values)
+        score = max((_token_overlap_score(raw, _normalized_tokens(candidate)) for candidate in candidates), default=0)
+        if score > best_score:
+            best_score = score
+            best_template = template_id
+    return best_template if best_score >= 2 else None
+
+
+def _normalized_key(value: str) -> str:
+    return "".join(_normalized_tokens(value))
+
+
+def _normalized_tokens(value: str) -> set[str]:
+    token = []
+    tokens: set[str] = set()
+    for char in value.lower():
+        if char.isalnum():
+            token.append(char)
+        else:
+            if token:
+                tokens.add(_stem_token("".join(token)))
+                token.clear()
+    if token:
+        tokens.add(_stem_token("".join(token)))
+    return {item for item in tokens if item not in {"scenario", "vehicle", "car", "urban"}}
+
+
+def _stem_token(token: str) -> str:
+    if token.endswith("ing") and len(token) > 5:
+        return token[:-3]
+    if token.endswith("ed") and len(token) > 4:
+        return token[:-2]
+    if token.endswith("s") and len(token) > 4:
+        return token[:-1]
+    return token
+
+
+def _token_overlap_score(left: set[str], right: set[str]) -> int:
+    return len(left & right)
 
 
 def _refinement_suggestions(value: object, request: IntentRequest) -> tuple[RefinementSuggestion, ...]:

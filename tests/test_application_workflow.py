@@ -175,6 +175,24 @@ class _ClarificationIntentProvider:
         )
 
 
+class _InvalidParameterIntentProvider:
+    provider_name = "invalid-parameter-intent"
+
+    def propose_intent(self, request):
+        return IntentProposal(
+            intent=ScenarioIntent(
+                template_id="lead_vehicle_braking",
+                parameters={
+                    "scenario_name": "invalid_parameter_candidate",
+                    "reaction_point_x_m": -4.0,
+                    "target_min_ttc_s": 10.0,
+                },
+            ),
+            rationale="The prompt describes lead vehicle braking but includes invalid generated parameters.",
+            provider_name=self.provider_name,
+        )
+
+
 def test_generated_scenario_workflow_uses_intent_provider_before_resolver(tmp_path: Path) -> None:
     provider = _StaticIntentProvider()
 
@@ -196,9 +214,15 @@ def test_generated_scenario_workflow_uses_intent_provider_before_resolver(tmp_pa
 
     assert provider.requests
     assert provider.requests[0].user_text == "Ego follows a slower lead vehicle that brakes ahead."
-    assert provider.requests[0].available_templates == ("lead_vehicle_braking", "pedestrian_occlusion")
+    assert provider.requests[0].available_templates == (
+        "crossing_vehicle",
+        "cut_in",
+        "lead_vehicle_braking",
+        "oncoming_turn_across_path",
+        "pedestrian_occlusion",
+    )
     family_taxonomy = provider.requests[0].metadata["family_taxonomy"]
-    assert family_taxonomy["cut_in"]["status"] == "planned"
+    assert family_taxonomy["cut_in"]["status"] == "early"
     assert family_taxonomy["lead_vehicle_braking"]["implemented"] is True
     assert result.spec.scenario_type == "lead_vehicle_braking"
     assert result.spec.scenario_name == "provider_backed_lead_braking"
@@ -206,6 +230,13 @@ def test_generated_scenario_workflow_uses_intent_provider_before_resolver(tmp_pa
     assert result.intent_proposal is not None
     assert result.intent_proposal.intent is not None
     assert result.intent_proposal.intent.template_id == "lead_vehicle_braking"
+    assert result.candidate_trace is not None
+    assert result.candidate_trace.loop_name == "Candidate Generation Loop"
+    assert result.candidate_trace.template_id == "lead_vehicle_braking"
+    assert result.candidate_trace.acceptance_status == "accepted"
+    assert result.candidate_trace.resolved_parameters["initial_gap_m"]["value"] == 32.0
+    assert result.candidate_trace.resolved_parameters["initial_gap_m"]["source"] == "user"
+    assert result.candidate_trace.check_summary["failed"] == 0
 
 
 def test_generated_scenario_workflow_stops_on_unsupported_intent_without_building(tmp_path: Path) -> None:
@@ -252,7 +283,34 @@ def test_generated_scenario_workflow_stops_on_clarification_required_without_bui
 
     assert proposal.status == "clarification_required"
     assert "pedestrian" in proposal.clarification_question
-    assert not (tmp_path / "scenario_spec.json").exists()
+
+
+def test_candidate_generation_loop_falls_back_from_invalid_provider_parameters(tmp_path: Path) -> None:
+    result = run_generated_scenario_workflow(
+        ScenarioWorkflowRequest(
+            scenario_text="An ego vehicle follows a lead vehicle that suddenly brakes.",
+            output_dir=tmp_path,
+            provider_name="openai-compatible",
+            intent_provider=_InvalidParameterIntentProvider(),
+            options=ScenarioWorkflowOptions(
+                run_preview=False,
+                run_semantics=False,
+                run_geometry_checks=False,
+                run_runtime_checks=False,
+                run_report=False,
+            ),
+        )
+    )
+
+    assert result.terminal_status == "passed"
+    assert result.spec.scenario_type == "lead_vehicle_braking"
+    assert result.intent_proposal is not None
+    assert result.intent_proposal.intent is not None
+    assert result.intent_proposal.intent.parameters == {"scenario_name": "invalid_parameter_candidate"}
+    assert "candidate_generation_fallback" in result.intent_proposal.intent.metadata
+    assert result.candidate_trace is not None
+    assert result.candidate_trace.resolved_parameters["reaction_point_x_m"]["source"] == "default"
+    assert (tmp_path / "scenario_spec.json").exists()
 
 
 def test_controlled_repair_case_skips_optional_integrations_until_repair(tmp_path: Path) -> None:

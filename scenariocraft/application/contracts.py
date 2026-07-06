@@ -61,7 +61,10 @@ class ScenarioWorkflowRequest:
     output_dir: Path
     provider_name: str = "mock"
     intent_provider: object | None = None
+    controlled_case_id: str | None = None
     demo_case_id: str | None = None
+    revision_request: str | None = None
+    base_scenario_type: str | None = None
     template_parameters: dict[str, object] = field(default_factory=dict)
     options: ScenarioWorkflowOptions = field(default_factory=ScenarioWorkflowOptions)
 
@@ -71,7 +74,10 @@ class ScenarioWorkflowRequest:
             "output_dir": str(self.output_dir),
             "provider_name": self.provider_name,
             "intent_provider": getattr(self.intent_provider, "provider_name", None),
+            "controlled_case_id": self.controlled_case_id,
             "demo_case_id": self.demo_case_id,
+            "revision_request": self.revision_request,
+            "base_scenario_type": self.base_scenario_type,
             "template_parameters": _json_value(self.template_parameters),
             "options": self.options.to_dict(),
         }
@@ -125,12 +131,41 @@ class ScenarioWorkflowStatus:
 
 
 @dataclass(frozen=True)
+class CandidateAcceptanceTrace:
+    """Structured evidence for the Candidate Generation Loop."""
+
+    template_id: str
+    acceptance_status: Literal["accepted", "rejected"]
+    seed: int | None
+    variant_index: int
+    sampled: bool
+    resolved_parameters: dict[str, dict[str, object]]
+    unsupported_fields: tuple[str, ...] = ()
+    check_summary: dict[str, object] = field(default_factory=dict)
+    loop_name: str = "Candidate Generation Loop"
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "loop_name": self.loop_name,
+            "template_id": self.template_id,
+            "acceptance_status": self.acceptance_status,
+            "seed": self.seed,
+            "variant_index": self.variant_index,
+            "sampled": self.sampled,
+            "resolved_parameters": _json_value(self.resolved_parameters),
+            "unsupported_fields": list(self.unsupported_fields),
+            "check_summary": _json_value(self.check_summary),
+        }
+
+
+@dataclass(frozen=True)
 class ScenarioWorkflowResult:
     request: ScenarioWorkflowRequest
     status: ScenarioWorkflowStatus
     artifacts: ScenarioArtifactPaths
     spec: ScenarioSpec
     intent_proposal: IntentProposal | None = None
+    candidate_trace: CandidateAcceptanceTrace | None = None
     original_spec: ScenarioSpec | None = None
     prepared_case: object | None = None
     build_result: BuildResult | None = None
@@ -158,6 +193,7 @@ class ScenarioWorkflowResult:
             "status": self.status.to_dict(),
             "artifacts": self.artifacts.to_dict(),
             "intent_proposal": _json_value(self.intent_proposal),
+            "candidate_trace": _json_value(self.candidate_trace),
             "spec": self.spec.to_dict(),
             "original_spec": self.original_spec.to_dict() if self.original_spec is not None else None,
             "prepared_case": _prepared_case_to_dict(self.prepared_case),

@@ -9,7 +9,10 @@ from scenariocraft.core.loop.types import RepairRunResult
 from scenariocraft.core.checks import (
     run_and_write_runtime_consistency_checks,
     run_artifact_consistency_checks,
+    run_crossing_vehicle_checks,
+    run_cut_in_checks,
     run_lead_vehicle_braking_checks,
+    run_oncoming_turn_across_path_checks,
     run_pedestrian_occlusion_checks,
     run_pedestrian_occlusion_timing_checks,
 )
@@ -302,6 +305,12 @@ def run_bounded_orchestrator(
 
 
 def _scenario_validation_results(spec: ScenarioSpec) -> tuple[CheckResult, ...]:
+    if spec.scenario_type == "cut_in":
+        return run_cut_in_checks(spec)
+    if spec.scenario_type == "crossing_vehicle":
+        return run_crossing_vehicle_checks(spec)
+    if spec.scenario_type == "oncoming_turn_across_path":
+        return run_oncoming_turn_across_path_checks(spec)
     if spec.scenario_type == "lead_vehicle_braking":
         return run_lead_vehicle_braking_checks(spec)
     geometry_results = run_pedestrian_occlusion_checks(spec)
