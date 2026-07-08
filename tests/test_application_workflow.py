@@ -11,7 +11,8 @@ from scenariocraft.application import (
     run_external_scenario_workflow,
     run_generated_scenario_workflow,
 )
-from scenariocraft.application.generated_scenario import IntentGenerationOutcomeError
+from scenariocraft.application.controlled_cases import CONTROLLED_CASES
+from scenariocraft.application.candidate_generation import IntentGenerationOutcomeError
 from scenariocraft.core.schemas import ScenarioIntent
 from scenariocraft.providers.intent import IntentProposal
 
@@ -309,8 +310,42 @@ def test_candidate_generation_loop_falls_back_from_invalid_provider_parameters(t
     assert result.intent_proposal.intent.parameters == {"scenario_name": "invalid_parameter_candidate"}
     assert "candidate_generation_fallback" in result.intent_proposal.intent.metadata
     assert result.candidate_trace is not None
+    assert result.candidate_trace.fallback is not None
+    assert result.candidate_trace.fallback["reason"] == "reaction_point_x_m must be >= 8."
+    assert result.candidate_trace.fallback["discarded_parameters"] == {
+        "reaction_point_x_m": -4.0,
+        "target_min_ttc_s": 10.0,
+    }
     assert result.candidate_trace.resolved_parameters["reaction_point_x_m"]["source"] == "default"
     assert (tmp_path / "scenario_spec.json").exists()
+
+
+def test_controlled_golden_family_candidates_are_accepted_when_family_checks_pass(tmp_path: Path) -> None:
+    for case in CONTROLLED_CASES:
+        result = run_generated_scenario_workflow(
+            ScenarioWorkflowRequest(
+                scenario_text=case.source_text,
+                output_dir=tmp_path / case.case_id,
+                provider_name="controlled_case",
+                controlled_case_id=case.case_id,
+                options=ScenarioWorkflowOptions(
+                    run_preview=False,
+                    run_semantics=True,
+                    run_geometry_checks=True,
+                    run_artifact_checks=True,
+                    run_runtime_checks=False,
+                    run_report=False,
+                    run_asam_qc=False,
+                    run_esmini=False,
+                    run_playback=False,
+                ),
+            )
+        )
+
+        assert result.terminal_status == "passed", case.case_id
+        assert result.candidate_trace is not None
+        assert result.candidate_trace.acceptance_status == "accepted", case.case_id
+        assert result.candidate_trace.check_summary["failed"] == 0, case.case_id
 
 
 def test_controlled_repair_case_skips_optional_integrations_until_repair(tmp_path: Path) -> None:

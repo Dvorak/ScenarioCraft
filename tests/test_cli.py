@@ -109,7 +109,7 @@ def test_cli_layout_free_spec_succeeds_without_template_aware_checks(monkeypatch
         return replace(spec, layout=None, spatial_relations=())
 
     monkeypatch.setattr(
-        "scenariocraft.application.generated_scenario.generate_default_pedestrian_occlusion_spec",
+        "scenariocraft.application.candidate_generation.generate_default_pedestrian_occlusion_spec",
         layout_free_default_spec,
     )
 

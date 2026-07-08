@@ -1,34 +1,25 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 
+from scenariocraft.application.candidate_generation import (
+    build_candidate_acceptance_trace,
+    generate_spec_with_intent,
+)
 from scenariocraft.application.contracts import (
-    CandidateAcceptanceTrace,
     ScenarioArtifactPaths,
     ScenarioWorkflowOptions,
     ScenarioWorkflowRequest,
     ScenarioWorkflowResult,
     ScenarioWorkflowStatus,
 )
-from scenariocraft.application.controlled_cases import controlled_case_intent
 from scenariocraft.application.demo_cases import PreparedDemoCase, prepare_demo_case
 from scenariocraft.core.checks import (
     run_artifact_consistency_checks,
-    run_crossing_vehicle_checks,
-    run_cut_in_checks,
-    run_lead_vehicle_braking_checks,
-    run_oncoming_turn_across_path_checks,
-    run_pedestrian_occlusion_checks,
+    run_family_checks,
 )
 from scenariocraft.core.checks.runtime_pipeline import run_and_write_runtime_consistency_checks
 from scenariocraft.core.build import BuildResult, build_openscenario
-from scenariocraft.core.templates import (
-    family_declarations,
-    generate_default_pedestrian_occlusion_spec,
-    registered_templates,
-    resolve_scenario_intent,
-)
 from scenariocraft.rendering import generate_2d_preview, generate_validation_report
 from scenariocraft.external_tools import (
     AsamQcResult,
@@ -38,23 +29,9 @@ from scenariocraft.external_tools import (
     run_esmini,
     run_esmini_playback,
 )
-from scenariocraft.core.schemas import ScenarioIntent, ScenarioSpec
+from scenariocraft.core.schemas import ScenarioSpec
 from scenariocraft.core.checks import SemanticValidationResult
 from scenariocraft.core.checks import validate_semantics
-from scenariocraft.providers.intent import IntentRequest
-from scenariocraft.providers.intent import IntentProposal
-
-
-class IntentGenerationOutcomeError(ValueError):
-    """Raised when an intent provider returns a terminal non-generation outcome."""
-
-    def __init__(self, proposal: IntentProposal) -> None:
-        self.proposal = proposal
-        if proposal.status == "clarification_required":
-            message = proposal.clarification_question or proposal.rationale
-        else:
-            message = proposal.refusal_reason or proposal.rationale
-        super().__init__(message)
 
 
 def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> ScenarioWorkflowResult:
@@ -62,7 +39,7 @@ def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> Scenari
     options = request.options
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    canonical_spec, intent_proposal = _generate_spec_with_intent(request)
+    canonical_spec, intent_proposal = generate_spec_with_intent(request)
     prepared_case = _prepare_case(request, canonical_spec, output_dir)
     spec = prepared_case.experiment_spec if prepared_case is not None else canonical_spec
 
@@ -154,9 +131,10 @@ def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> Scenari
         playback_path=Path(playback_result.playback_path) if playback_result and playback_result.playback_path else None,
     )
     status = _workflow_status(prepared_case, semantic_result, geometry_results, artifact_results, skip_optional)
-    candidate_trace = _candidate_acceptance_trace(
+    candidate_trace = build_candidate_acceptance_trace(
         spec,
         status=status,
+        intent_proposal=intent_proposal,
         semantic_result=semantic_result,
         geometry_results=geometry_results,
         artifact_results=artifact_results,
@@ -181,99 +159,6 @@ def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> Scenari
         playback_result=playback_result,
         xosc_text=xosc_text,
         report_text=report_text,
-    )
-
-
-def _generate_spec_with_intent(request: ScenarioWorkflowRequest) -> tuple[ScenarioSpec, IntentProposal | None]:
-    if request.provider_name == "controlled_case":
-        if not request.controlled_case_id:
-            raise ValueError("controlled_case_id is required for provider=controlled_case.")
-        return resolve_scenario_intent(controlled_case_intent(request.controlled_case_id)), None
-    if request.provider_name in {"openai-compatible", "openai_compatible"}:
-        if request.intent_provider is None:
-            raise ValueError("Intent provider is required for provider=openai-compatible.")
-        proposal = request.intent_provider.propose_intent(_intent_request(request))
-        if proposal.status != "supported" or proposal.intent is None:
-            raise IntentGenerationOutcomeError(proposal)
-        spec, accepted_proposal = _resolve_provider_candidate(proposal)
-        return spec, accepted_proposal
-    if request.provider_name != "mock":
-        raise ValueError(f"Unsupported provider: {request.provider_name}")
-    return (
-        generate_default_pedestrian_occlusion_spec(
-            request.scenario_text,
-            **request.template_parameters,
-        ),
-        None,
-    )
-
-
-def _resolve_provider_candidate(proposal: IntentProposal) -> tuple[ScenarioSpec, IntentProposal]:
-    if proposal.intent is None:
-        raise IntentGenerationOutcomeError(proposal)
-    try:
-        return resolve_scenario_intent(proposal.intent), proposal
-    except (TypeError, ValueError) as exc:
-        fallback_intent = _fallback_intent_without_generated_parameters(proposal.intent, str(exc))
-        fallback_proposal = IntentProposal(
-            intent=fallback_intent,
-            rationale=(
-                proposal.rationale
-                + " Candidate Generation Loop ignored provider-generated parameter values that failed "
-                + f"template capability validation: {exc}"
-            ),
-            provider_name=proposal.provider_name,
-            status="supported",
-        )
-        return resolve_scenario_intent(fallback_intent), fallback_proposal
-
-
-def _fallback_intent_without_generated_parameters(intent: ScenarioIntent, reason: str) -> ScenarioIntent:
-    preserved_parameters = {
-        key: value
-        for key, value in intent.parameters.items()
-        if key in {"scenario_name", "source_text", "seed", "variant_index"}
-    }
-    metadata = {
-        **intent.metadata,
-        "candidate_generation_fallback": {
-            "reason": reason,
-            "discarded_parameters": {
-                key: value
-                for key, value in intent.parameters.items()
-                if key not in preserved_parameters
-            },
-        },
-    }
-    return replace(intent, parameters=preserved_parameters, metadata=metadata)
-
-
-def _generate_spec(request: ScenarioWorkflowRequest) -> ScenarioSpec:
-    spec, _proposal = _generate_spec_with_intent(request)
-    return spec
-
-
-def _intent_request(request: ScenarioWorkflowRequest) -> IntentRequest:
-    templates = registered_templates()
-    return IntentRequest(
-        user_text=request.scenario_text,
-        available_templates=tuple(sorted(templates)),
-        template_contract_summary={
-            template_id: {
-                "description": template.description,
-                "required_actors": list(template.required_actors),
-                "supported_operations": list(template.supported_operations),
-                "capability": template.capability.to_dict(),
-            }
-            for template_id, template in sorted(templates.items())
-        },
-        metadata={
-            "provider_name": request.provider_name,
-            "template_parameters": request.template_parameters,
-            "revision_request": request.revision_request,
-            "base_scenario_type": request.base_scenario_type,
-            "family_taxonomy": {template_id: family.to_dict() for template_id, family in family_declarations().items()},
-        },
     )
 
 
@@ -311,15 +196,7 @@ def _geometry_check_results(
         return prepared_case.initial_geometry_check_results
     if not options.run_geometry_checks:
         return ()
-    if spec.scenario_type == "cut_in":
-        return run_cut_in_checks(spec)
-    if spec.scenario_type == "crossing_vehicle":
-        return run_crossing_vehicle_checks(spec)
-    if spec.scenario_type == "oncoming_turn_across_path":
-        return run_oncoming_turn_across_path_checks(spec)
-    if spec.scenario_type == "lead_vehicle_braking":
-        return run_lead_vehicle_braking_checks(spec)
-    return run_pedestrian_occlusion_checks(spec)
+    return run_family_checks(spec)
 
 
 def _artifact_check_results(
@@ -368,53 +245,6 @@ def _workflow_status(
     if semantic_result is not None and not semantic_result.passed:
         return ScenarioWorkflowStatus("validation_failed", "Semantic validation failed.", tuple(warnings))
     return ScenarioWorkflowStatus("passed", "Generated scenario workflow completed.", tuple(warnings))
-
-
-def _candidate_acceptance_trace(
-    spec: ScenarioSpec,
-    *,
-    status: ScenarioWorkflowStatus,
-    semantic_result: SemanticValidationResult | None,
-    geometry_results: tuple,
-    artifact_results: tuple,
-    runtime_results: tuple,
-) -> CandidateAcceptanceTrace:
-    resolution = spec.metadata.get("template_resolution", {})
-    parameters = resolution.get("parameters", []) if isinstance(resolution, dict) else []
-    resolved_parameters: dict[str, dict[str, object]] = {}
-    if isinstance(parameters, list):
-        for parameter in parameters:
-            if not isinstance(parameter, dict):
-                continue
-            name = parameter.get("name")
-            if isinstance(name, str):
-                resolved_parameters[name] = {
-                    key: value
-                    for key, value in parameter.items()
-                    if key in {"value", "source", "unit"}
-                }
-    check_results = tuple(geometry_results) + tuple(artifact_results) + tuple(runtime_results)
-    failed_names = tuple(str(result.name) for result in check_results if not getattr(result, "passed", False))
-    semantic_failed = semantic_result is not None and not semantic_result.passed
-    failed_count = len(failed_names) + (1 if semantic_failed else 0)
-    check_summary: dict[str, object] = {
-        "semantic": "passed" if semantic_result is not None and semantic_result.passed else "failed" if semantic_failed else "not_run",
-        "total": len(check_results) + (1 if semantic_result is not None else 0),
-        "failed": failed_count,
-        "failed_checks": list(failed_names),
-    }
-    if semantic_failed:
-        check_summary["failed_checks"] = ["semantic_validation", *list(failed_names)]
-    return CandidateAcceptanceTrace(
-        template_id=str(resolution.get("template_id") if isinstance(resolution, dict) else spec.scenario_type),
-        acceptance_status="accepted" if status.terminal_status == "passed" else "rejected",
-        seed=resolution.get("seed") if isinstance(resolution, dict) and resolution.get("seed") is not None else None,
-        variant_index=int(resolution.get("variant_index", 0)) if isinstance(resolution, dict) else 0,
-        sampled=bool(resolution.get("sampled", False)) if isinstance(resolution, dict) else False,
-        resolved_parameters=resolved_parameters,
-        unsupported_fields=tuple(resolution.get("unsupported_fields", ())) if isinstance(resolution, dict) else (),
-        check_summary=check_summary,
-    )
 
 
 def _missing_qc_result(xosc_path: Path, output_dir: Path) -> AsamQcResult:

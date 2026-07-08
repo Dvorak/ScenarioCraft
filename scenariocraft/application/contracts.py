@@ -141,6 +141,7 @@ class CandidateAcceptanceTrace:
     sampled: bool
     resolved_parameters: dict[str, dict[str, object]]
     unsupported_fields: tuple[str, ...] = ()
+    fallback: dict[str, object] | None = None
     check_summary: dict[str, object] = field(default_factory=dict)
     loop_name: str = "Candidate Generation Loop"
 
@@ -154,6 +155,7 @@ class CandidateAcceptanceTrace:
             "sampled": self.sampled,
             "resolved_parameters": _json_value(self.resolved_parameters),
             "unsupported_fields": list(self.unsupported_fields),
+            "fallback": _json_value(self.fallback),
             "check_summary": _json_value(self.check_summary),
         }
 
