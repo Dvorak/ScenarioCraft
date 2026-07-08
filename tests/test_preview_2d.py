@@ -2,6 +2,8 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from matplotlib.colors import to_rgba
+from matplotlib.patches import Polygon
 
 from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec, get_template
 from scenariocraft.rendering import estimate_ttc_s, generate_2d_preview
@@ -60,6 +62,48 @@ def test_clean_split_preview_has_separate_unannotated_scene_and_grouped_legend()
     scene_height = scene_ax.get_position().height
     legend_height = legend_ax.get_position().height
     assert scene_height > legend_height * 2
+    plt.close(fig)
+
+
+def test_clean_split_preview_draws_actor_footprints_as_rotatable_shapes() -> None:
+    from matplotlib import pyplot as plt
+
+    spec = get_template("crossing_vehicle").instantiate()
+    fig, scene_ax, _legend_ax = _render_preview_figure(
+        spec,
+        display_orientation="esmini_top_camera_raw",
+        presentation_style="clean_split",
+    )
+
+    actor_colors = {to_rgba("#151515"), to_rgba("#0ea5e9")}
+    actor_polygons = [
+        patch
+        for patch in scene_ax.patches
+        if isinstance(patch, Polygon) and patch.get_facecolor() in actor_colors
+    ]
+    assert len(actor_polygons) >= 2
+    plt.close(fig)
+
+
+def test_annotated_preview_preserves_multisegment_layout_paths() -> None:
+    from matplotlib import pyplot as plt
+
+    spec = get_template("oncoming_turn_across_path").instantiate()
+    assert spec.layout is not None
+    expected_path = spec.layout.paths["oncoming_turn_path"]
+
+    fig, scene_ax, _legend_ax = _render_preview_figure(
+        spec,
+        display_orientation="semantic_canonical",
+        presentation_style="annotated",
+    )
+
+    turn_lines = [line for line in scene_ax.lines if line.get_color() == "#f97316"]
+    assert any(
+        list(line.get_xdata()) == [point.x_m for point in expected_path.points]
+        and list(line.get_ydata()) == [point.y_m for point in expected_path.points]
+        for line in turn_lines
+    )
     plt.close(fig)
 
 

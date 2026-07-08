@@ -13,14 +13,18 @@ matplotlib.use("Agg")
 
 from matplotlib import pyplot as plt
 from matplotlib.lines import Line2D
-from matplotlib.patches import FancyArrow, FancyArrowPatch, Rectangle
+from matplotlib.patches import FancyArrow, FancyArrowPatch, Polygon, Rectangle
 
 from scenariocraft.core.roads import road_preview_surface_kind
 from scenariocraft.core.schemas import FootprintSpec, LayoutSpec, PathSpec, Point2D, Pose2D, RoadBandSpec, ScenarioSpec
-
-PREVIEW_DISPLAY_ORIENTATIONS = {"semantic_canonical", "esmini_top_camera_raw"}
-PREVIEW_PRESENTATION_STYLES = {"annotated", "clean_split"}
-CLEAN_PREVIEW_ASPECT_RATIO = 16 / 9
+from scenariocraft.rendering.preview_style import (
+    CLEAN_PREVIEW_ASPECT_RATIO,
+    PREVIEW_DISPLAY_ORIENTATIONS,
+    PREVIEW_PRESENTATION_STYLES,
+    actor_color,
+    path_color,
+    road_band_color,
+)
 
 
 def generate_2d_preview(
@@ -157,7 +161,7 @@ def _draw_layout_background(ax: object) -> None:
 
 
 def _road_surface_style(spec: ScenarioSpec) -> str:
-    preview_surface_kind = road_preview_surface_kind(_road_asset_id(spec))
+    preview_surface_kind = road_preview_surface_kind(spec.road_asset_id())
     if preview_surface_kind == "intersection_cross":
         return "intersection"
     if preview_surface_kind == "road_bands" and spec.layout is not None and spec.layout.road_bands:
@@ -165,13 +169,6 @@ def _road_surface_style(spec: ScenarioSpec) -> str:
     if spec.layout is not None and spec.layout.road_bands:
         return "road_bands"
     return "legacy"
-
-
-def _road_asset_id(spec: ScenarioSpec) -> str | None:
-    value = spec.metadata.get("road_asset_id")
-    if isinstance(value, str) and value:
-        return value
-    return None
 
 
 def _draw_intersection_road_surface(ax: object, spec: ScenarioSpec) -> None:
@@ -277,14 +274,7 @@ def _draw_layout_road_bands(ax: object, layout: LayoutSpec, *, show_labels: bool
 
 
 def _road_band_color(band: RoadBandSpec) -> str:
-    colors = {
-        "sidewalk": "#d8d2c4",
-        "parking_strip": "#9aa3ad",
-        "driving_lane": "#b8bec3",
-        "center_divider": "#f8fafc",
-        "shoulder": "#aeb6bf",
-    }
-    return colors[band.kind]
+    return road_band_color(band)
 
 
 def _road_band_direction_arrow(ax: object, band: RoadBandSpec) -> None:
@@ -455,10 +445,11 @@ def _draw_layout_actors(ax: object, spec: ScenarioSpec, *, show_labels: bool = T
             height=footprint.width_m,
             color=color,
             label=label,
+            heading_rad=pose.heading_rad,
             show_detail=show_labels,
         )
         if actor.initial_speed_kph is not None and actor.initial_speed_kph > 0:
-            _direction_arrow(ax, pose, color="#f8fafc")
+            _direction_arrow(ax, pose, footprint.length_m, color="#f8fafc")
 
 
 def _draw_layout_scenario_marks(ax: object, spec: ScenarioSpec, *, show_labels: bool = True) -> None:
@@ -468,9 +459,17 @@ def _draw_layout_scenario_marks(ax: object, spec: ScenarioSpec, *, show_labels: 
             continue
         color = _path_color(path_name)
         linestyle = "-" if path_name == "ego_path" else (0, (4, 4))
+        ax.plot(
+            [point.x_m for point in path.points],
+            [point.y_m for point in path.points],
+            color=color,
+            linewidth=2.0 if path_name != "ego_path" else 1.2,
+            linestyle=linestyle,
+            alpha=0.95 if path_name != "ego_path" else 0.7,
+            zorder=4,
+        )
         if show_labels and path_name != "ego_path":
-            start = path.points[0]
-            end = path.points[-1]
+            start, end = _last_nonzero_segment(path.points)
             ax.add_patch(
                 FancyArrowPatch(
                     (start.x_m, start.y_m),
@@ -483,16 +482,6 @@ def _draw_layout_scenario_marks(ax: object, spec: ScenarioSpec, *, show_labels: 
                     color=color,
                     zorder=6,
                 )
-            )
-        else:
-            ax.plot(
-                [point.x_m for point in path.points],
-                [point.y_m for point in path.points],
-                color=color,
-                linewidth=2.0 if path_name != "ego_path" else 1.2,
-                linestyle=linestyle,
-                alpha=0.95 if path_name != "ego_path" else 0.7,
-                zorder=4,
             )
     for point_name, point in spec.layout.points.items():
         marker = "D" if point_name == "trigger_point" else "o"
@@ -514,11 +503,20 @@ def _draw_layout_scenario_marks(ax: object, spec: ScenarioSpec, *, show_labels: 
             ax.text(point.x_m + 0.9, point.y_m - 0.85, label, fontsize=8.5, color=text_color, va="top")
 
 
-def _direction_arrow(ax: object, pose: Pose2D, color: str) -> None:
+def _last_nonzero_segment(points: tuple[Point2D, ...]) -> tuple[Point2D, Point2D]:
+    for start, end in zip(reversed(points[:-1]), reversed(points[1:])):
+        if math.hypot(end.x_m - start.x_m, end.y_m - start.y_m) > 1e-9:
+            return start, end
+    return points[0], points[-1]
+
+
+def _direction_arrow(ax: object, pose: Pose2D, vehicle_length_m: float, color: str) -> None:
     length = 7.2
     dx = length * math.cos(pose.heading_rad)
     dy = length * math.sin(pose.heading_rad)
-    ax.add_patch(FancyArrow(pose.x_m + 2.4, pose.y_m, dx, dy, width=0.12, head_width=0.95, head_length=1.4, color=color))
+    start_x = pose.x_m + (vehicle_length_m / 2 + 0.4) * math.cos(pose.heading_rad)
+    start_y = pose.y_m + (vehicle_length_m / 2 + 0.4) * math.sin(pose.heading_rad)
+    ax.add_patch(FancyArrow(start_x, start_y, dx, dy, width=0.12, head_width=0.95, head_length=1.4, color=color))
 
 
 def _layout_pose(layout: LayoutSpec, actor_id: str) -> Pose2D | None:
@@ -570,21 +568,7 @@ def _layout_plot_limits(layout: LayoutSpec) -> tuple[tuple[float, float], tuple[
 
 
 def _actor_color(actor_id: str, role: str, actor_type: str) -> str:
-    if role == "ego" or actor_id == "ego":
-        return "#151515"
-    if actor_id == "parked_van" or actor_type == "van":
-        return "#2563eb"
-    if actor_type == "pedestrian":
-        return "#f97316"
-    if role == "lead_vehicle":
-        return "#d9d6c8"
-    if role == "cut_in_actor" or actor_id == "cut_in_vehicle":
-        return "#ef4444"
-    if role == "crossing_vehicle":
-        return "#0ea5e9"
-    if role == "oncoming_vehicle":
-        return "#f97316"
-    return "#64748b"
+    return actor_color(actor_id, role, actor_type)
 
 
 def _actor_scene_label(actor_id: str) -> str:
@@ -596,19 +580,7 @@ def _actor_scene_label(actor_id: str) -> str:
 
 
 def _path_color(path_name: str) -> str:
-    if path_name == "ego_path":
-        return "#f8fafc"
-    if path_name == "pedestrian_crossing_path":
-        return "#ef4444"
-    if "cut_in" in path_name:
-        return "#ef4444"
-    if "crossing" in path_name:
-        return "#0ea5e9"
-    if "turn" in path_name:
-        return "#f97316"
-    if "lead" in path_name:
-        return "#d9d6c8"
-    return "#64748b"
+    return path_color(path_name)
 
 
 def _actor_legend_items(spec: ScenarioSpec) -> tuple[tuple[str, str, str], ...]:
@@ -805,13 +777,13 @@ def _vehicle(
     color: str,
     label: str | None,
     *,
+    heading_rad: float = 0.0,
     show_detail: bool = True,
 ) -> None:
     ax.add_patch(
-        Rectangle(
-            (x - width / 2, y - height / 2),
-            width,
-            height,
+        Polygon(
+            _oriented_box_points(x, y, width, height, heading_rad),
+            closed=True,
             facecolor=color,
             edgecolor="#0f172a",
             linewidth=1.2,
@@ -820,10 +792,15 @@ def _vehicle(
     )
     if show_detail:
         ax.add_patch(
-            Rectangle(
-                (x - width * 0.18, y - height * 0.36),
-                width * 0.28,
-                height * 0.72,
+            Polygon(
+                _oriented_box_points(
+                    x - width * 0.04 * math.cos(heading_rad),
+                    y - width * 0.04 * math.sin(heading_rad),
+                    width * 0.28,
+                    height * 0.72,
+                    heading_rad,
+                ),
+                closed=True,
                 facecolor="white",
                 alpha=0.14,
                 edgecolor="none",
@@ -831,4 +808,34 @@ def _vehicle(
             )
         )
     if label:
-        ax.text(x, y, label, ha="center", va="center", fontsize=9, color="white", weight="bold", zorder=7)
+        ax.text(
+            x,
+            y,
+            label,
+            ha="center",
+            va="center",
+            fontsize=9,
+            color="white",
+            weight="bold",
+            rotation=math.degrees(heading_rad),
+            rotation_mode="anchor",
+            zorder=7,
+        )
+
+
+def _oriented_box_points(
+    x: float,
+    y: float,
+    length_m: float,
+    width_m: float,
+    heading_rad: float,
+) -> tuple[tuple[float, float], ...]:
+    cos_h = math.cos(heading_rad)
+    sin_h = math.sin(heading_rad)
+    local_corners = (
+        (-length_m / 2, -width_m / 2),
+        (length_m / 2, -width_m / 2),
+        (length_m / 2, width_m / 2),
+        (-length_m / 2, width_m / 2),
+    )
+    return tuple((x + lx * cos_h - ly * sin_h, y + lx * sin_h + ly * cos_h) for lx, ly in local_corners)

@@ -174,8 +174,8 @@ def _timing_section(spec: ScenarioSpec) -> str:
 
 
 def _template_resolution_section(spec: ScenarioSpec) -> str:
-    resolution = spec.metadata.get("template_resolution")
-    if not isinstance(resolution, dict):
+    resolution = spec.template_resolution_metadata()
+    if not resolution:
         return ""
     parameters = resolution.get("parameters", ())
     if not isinstance(parameters, list):
