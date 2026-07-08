@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 
-from scenariocraft.core.schemas import PathSpec, Pose2D, RoadSpec
+from scenariocraft.core.schemas import PathSpec, Point2D, Pose2D, RoadSpec
 
 WORLD_POSITION_LAYOUT_ROAD_TYPES = {"urban_straight", "urban_intersection"}
 
@@ -76,9 +76,37 @@ def layout_path_to_builder_trajectory(
     elapsed_s = 0.0
     trajectory_points: list[BuilderTrajectoryPoint] = []
     previous = path.points[0]
-    trajectory_points.append(BuilderTrajectoryPoint(x=previous.x_m, y=previous.y_m, h=0.0, time_s=elapsed_s))
-    for point in path.points[1:]:
+    trajectory_points.append(
+        BuilderTrajectoryPoint(
+            x=previous.x_m,
+            y=previous.y_m,
+            h=_trajectory_heading(path.points, 0),
+            time_s=elapsed_s,
+        )
+    )
+    for index, point in enumerate(path.points[1:], start=1):
         elapsed_s += math.hypot(point.x_m - previous.x_m, point.y_m - previous.y_m) / traversal_speed_mps
-        trajectory_points.append(BuilderTrajectoryPoint(x=point.x_m, y=point.y_m, h=0.0, time_s=elapsed_s))
+        trajectory_points.append(
+            BuilderTrajectoryPoint(
+                x=point.x_m,
+                y=point.y_m,
+                h=_trajectory_heading(path.points, index),
+                time_s=elapsed_s,
+            )
+        )
         previous = point
     return BuilderTrajectory(name=path.name, points=tuple(trajectory_points))
+
+
+def _trajectory_heading(points: tuple[Point2D, ...], index: int) -> float:
+    if index < len(points) - 1:
+        return _segment_heading(points[index], points[index + 1])
+    return _segment_heading(points[index - 1], points[index])
+
+
+def _segment_heading(start: Point2D, end: Point2D) -> float:
+    dx = end.x_m - start.x_m
+    dy = end.y_m - start.y_m
+    if math.hypot(dx, dy) <= 1e-9:
+        return 0.0
+    return math.atan2(dy, dx)

@@ -32,8 +32,8 @@ def validate_semantics(spec: ScenarioSpec) -> SemanticValidationResult:
         SemanticCheck("trigger_defined", spec.trigger is not None, "Trigger condition is defined."),
         SemanticCheck(
             "ego_speed_plausible",
-            ego is not None and ego.initial_speed_kph is not None and 5 <= ego.initial_speed_kph <= spec.road.speed_limit_kph,
-            "Ego speed is plausible for the road speed limit.",
+            _ego_speed_plausible(spec, ego),
+            "Ego speed is plausible for the road context.",
         ),
         SemanticCheck(
             "intended_criticality_defined",
@@ -51,6 +51,17 @@ def validate_semantics(spec: ScenarioSpec) -> SemanticValidationResult:
     if spec.scenario_type == "pedestrian_occlusion":
         checks.extend(_pedestrian_occlusion_semantic_checks(spec))
     return SemanticValidationResult(passed=all(check.passed for check in checks), checks=checks)
+
+
+def _ego_speed_plausible(spec: ScenarioSpec, ego: object | None) -> bool:
+    if ego is None or not hasattr(ego, "initial_speed_kph"):
+        return False
+    speed = ego.initial_speed_kph
+    if speed is None:
+        return False
+    speed_limit = float(spec.road.speed_limit_kph)
+    upper_bound = max(speed_limit + 10.0, speed_limit * 1.2)
+    return 5.0 <= float(speed) <= upper_bound
 
 
 def _pedestrian_occlusion_semantic_checks(spec: ScenarioSpec) -> list[SemanticCheck]:

@@ -1,6 +1,9 @@
 from dataclasses import replace
+import math
 from pathlib import Path
 from xml.etree import ElementTree as ET
+
+import pytest
 
 from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
 from scenariocraft.core.schemas import ScenarioIntent
@@ -170,7 +173,8 @@ def test_layout_backed_builder_serializes_pedestrian_crossing_trajectory(tmp_pat
     crossing_points = spec.layout.paths["pedestrian_crossing_path"].points
     assert poses["pedestrian"][:2] == (crossing_points[0].x_m, crossing_points[0].y_m)
     assert [(x, y) for _, x, y, _ in vertices] == [(point.x_m, point.y_m) for point in crossing_points]
-    assert vertices[-1][1:] == (DEFAULT_CONFLICT_X_M, -1.0, 0.0)
+    assert vertices[-1][1:3] == (DEFAULT_CONFLICT_X_M, -1.0)
+    assert vertices[-1][3] == pytest.approx(-math.pi / 2)
     assert [time for time, _, _, _ in vertices] == [0.0, 3.733333333333333]
     root = ET.parse(result.xosc_path).getroot()
     assert root.find(".//Action[@name='pedestrian_follow_crossing_path']") is not None
@@ -196,6 +200,16 @@ def test_layout_backed_builder_serializes_ego_driving_trajectory(tmp_path) -> No
     start_condition = root.find(".//Event[@name='ego_drives_forward']/StartTrigger//SimulationTimeCondition")
     assert start_condition is not None
     assert start_condition.attrib == {"value": "0.0", "rule": "greaterThan"}
+
+
+def test_layout_trajectory_headings_follow_path_tangent(tmp_path) -> None:
+    spec = resolve_scenario_intent(ScenarioIntent(template_id="crossing_vehicle"))
+
+    result = build_openscenario(spec, tmp_path)
+    vertices = _trajectory_vertices(result.xosc_path, "crossing_vehicle_follow_crossing_path")
+
+    assert len(vertices) == 3
+    assert [heading for _time, _x, _y, heading in vertices] == [pytest.approx(math.pi / 2)] * 3
 
 
 def test_canonical_pedestrian_event_start_trigger_references_expected_actors_and_distance(tmp_path) -> None:
@@ -432,7 +446,8 @@ def test_changing_layout_path_endpoint_changes_generated_trajectory_endpoint(tmp
     result = build_openscenario(changed_spec, tmp_path)
     vertices = _pedestrian_trajectory_vertices(result.xosc_path)
 
-    assert vertices[-1][1:] == (DEFAULT_CONFLICT_X_M, -0.25, 0.0)
+    assert vertices[-1][1:3] == (DEFAULT_CONFLICT_X_M, -0.25)
+    assert vertices[-1][3] == pytest.approx(-math.pi / 2)
 
 
 def test_layout_path_point_order_is_preserved_in_generated_trajectory(tmp_path) -> None:

@@ -14,6 +14,7 @@ _EXPORTS = {
     "run_artifact_consistency_checks": "scenariocraft.core.checks.artifact_consistency",
     "run_crossing_vehicle_checks": "scenariocraft.core.checks.crossing_vehicle",
     "run_cut_in_checks": "scenariocraft.core.checks.cut_in",
+    "run_family_checks": "scenariocraft.core.checks.family",
     "run_and_write_runtime_consistency_checks": "scenariocraft.core.checks.runtime_pipeline",
     "run_pedestrian_occlusion_checks": "scenariocraft.core.checks.pedestrian_occlusion",
     "run_pedestrian_occlusion_timing_checks": "scenariocraft.core.checks.pedestrian_occlusion",

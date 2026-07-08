@@ -68,6 +68,31 @@ def test_scenario_spec_loads_legacy_json_without_layout_or_spatial_relations() -
     assert spec.storyboard is None
 
 
+def test_scenario_spec_metadata_accessors_are_shape_safe() -> None:
+    spec = ScenarioSpec(
+        scenario_name="metadata_contract",
+        scenario_type="lead_vehicle_braking",
+        road=RoadSpec("urban_straight", 1, 50),
+        weather=WeatherSpec(False, "dry"),
+        actors=[ActorSpec("ego", "car", "ego", initial_speed_kph=35)],
+        trigger=TriggerSpec("relative_distance", "ego", "lead_vehicle", 18),
+        intended_criticality=CriticalitySpec("near_miss", 1.5),
+        metadata={
+            "road_asset_id": "urban_two_way_parking",
+            "lead_vehicle_braking": {"lead_deceleration_mps2": "-4.5"},
+            "template_resolution": {"template_id": "lead_vehicle_braking"},
+            "malformed": "not a dict",
+        },
+    )
+
+    assert spec.road_asset_id() == "urban_two_way_parking"
+    assert spec.family_metadata() == {"lead_deceleration_mps2": "-4.5"}
+    assert spec.metadata_float("lead_vehicle_braking", "lead_deceleration_mps2") == -4.5
+    assert spec.template_resolution_metadata() == {"template_id": "lead_vehicle_braking"}
+    assert spec.metadata_section("malformed") == {}
+    assert spec.metadata_float("lead_vehicle_braking", "missing", 1.25) == 1.25
+
+
 def test_trigger_condition_round_trips_with_legacy_trigger_fields() -> None:
     spec = ScenarioSpec(
         scenario_name="semantic_trigger_demo",

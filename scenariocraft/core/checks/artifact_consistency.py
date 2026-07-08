@@ -10,6 +10,13 @@ from scenariocraft.core.roads import (
     URBAN_TWO_WAY_PARKING_FILENAME,
 )
 from scenariocraft.core.schemas import CheckResult, ScenarioSpec
+from scenariocraft.core.checks.xosc_artifact_reader import (
+    float_attr,
+    initial_world_positions,
+    logic_file_path,
+    parse_xosc,
+    trajectory_vertices,
+)
 
 POSITION_TOLERANCE_M = 1e-6
 HEADING_TOLERANCE_RAD = 1e-6
@@ -30,32 +37,32 @@ def run_artifact_consistency_checks(
     if spec.layout is None:
         return ()
 
-    root, parse_error = _parse_xosc(xosc_path)
-    logic_file_path = _logic_file_path(root)
+    root, parse_error = parse_xosc(xosc_path)
+    logic_file_path_value = logic_file_path(root)
     if spec.scenario_type == "lead_vehicle_braking":
         return (
             _lead_actor_poses_check(spec, root, parse_error),
             _lead_braking_action_check(spec, root, parse_error),
             _lead_braking_trigger_check(spec, root, parse_error),
-            _logic_file_relative_check(logic_file_path, parse_error),
-            _logic_file_target_exists_check(xosc_path, xodr_path, logic_file_path, parse_error),
-            _logic_file_canonical_check(spec, logic_file_path, parse_error),
+            _logic_file_relative_check(logic_file_path_value, parse_error),
+            _logic_file_target_exists_check(xosc_path, xodr_path, logic_file_path_value, parse_error),
+            _logic_file_canonical_check(spec, logic_file_path_value, parse_error),
         )
     if spec.scenario_type == "cut_in":
         return (
             _cut_in_actor_poses_check(spec, root, parse_error),
             _cut_in_trajectory_check(spec, root, parse_error),
-            _logic_file_relative_check(logic_file_path, parse_error),
-            _logic_file_target_exists_check(xosc_path, xodr_path, logic_file_path, parse_error),
-            _logic_file_canonical_check(spec, logic_file_path, parse_error),
+            _logic_file_relative_check(logic_file_path_value, parse_error),
+            _logic_file_target_exists_check(xosc_path, xodr_path, logic_file_path_value, parse_error),
+            _logic_file_canonical_check(spec, logic_file_path_value, parse_error),
         )
     if spec.scenario_type == "crossing_vehicle":
         return (
             _crossing_vehicle_actor_poses_check(spec, root, parse_error),
             _crossing_vehicle_trajectory_check(spec, root, parse_error),
-            _logic_file_relative_check(logic_file_path, parse_error),
-            _logic_file_target_exists_check(xosc_path, xodr_path, logic_file_path, parse_error),
-            _logic_file_canonical_check(spec, logic_file_path, parse_error),
+            _logic_file_relative_check(logic_file_path_value, parse_error),
+            _logic_file_target_exists_check(xosc_path, xodr_path, logic_file_path_value, parse_error),
+            _logic_file_canonical_check(spec, logic_file_path_value, parse_error),
             _intersection_layout_alignment_check(
                 spec,
                 xodr_path,
@@ -67,9 +74,9 @@ def run_artifact_consistency_checks(
         return (
             _oncoming_turn_actor_poses_check(spec, root, parse_error),
             _oncoming_turn_trajectory_check(spec, root, parse_error),
-            _logic_file_relative_check(logic_file_path, parse_error),
-            _logic_file_target_exists_check(xosc_path, xodr_path, logic_file_path, parse_error),
-            _logic_file_canonical_check(spec, logic_file_path, parse_error),
+            _logic_file_relative_check(logic_file_path_value, parse_error),
+            _logic_file_target_exists_check(xosc_path, xodr_path, logic_file_path_value, parse_error),
+            _logic_file_canonical_check(spec, logic_file_path_value, parse_error),
             _intersection_layout_alignment_check(
                 spec,
                 xodr_path,
@@ -82,17 +89,10 @@ def run_artifact_consistency_checks(
     return (
         _actor_poses_check(spec, root, parse_error),
         _pedestrian_trajectory_check(spec, root, parse_error),
-        _logic_file_relative_check(logic_file_path, parse_error),
-        _logic_file_target_exists_check(xosc_path, xodr_path, logic_file_path, parse_error),
-        _logic_file_canonical_check(spec, logic_file_path, parse_error),
+        _logic_file_relative_check(logic_file_path_value, parse_error),
+        _logic_file_target_exists_check(xosc_path, xodr_path, logic_file_path_value, parse_error),
+        _logic_file_canonical_check(spec, logic_file_path_value, parse_error),
     )
-
-
-def _parse_xosc(xosc_path: Path) -> tuple[ET.Element | None, str | None]:
-    try:
-        return ET.parse(xosc_path).getroot(), None
-    except (OSError, ET.ParseError) as exc:
-        return None, str(exc)
 
 
 def _actor_poses_check(
@@ -100,7 +100,7 @@ def _actor_poses_check(
     root: ET.Element | None,
     parse_error: str | None,
 ) -> CheckResult:
-    observed = _initial_world_positions(root)
+    observed = initial_world_positions(root)
     actor_ids = list(CANONICAL_ACTOR_IDS)
     expected_x: dict[str, float] = {}
     expected_y: dict[str, float] = {}
@@ -238,7 +238,7 @@ def _actor_pose_match_result(
     pass_message: str,
     failure_message: str,
 ) -> CheckResult:
-    observed = _initial_world_positions(root)
+    observed = initial_world_positions(root)
     expected_x: dict[str, float] = {}
     expected_y: dict[str, float] = {}
     observed_x: dict[str, float | None] = {}
@@ -294,8 +294,8 @@ def _lead_braking_action_check(
     dynamics = action.find(".//SpeedActionDynamics") if action is not None else None
     target_speed = action.find(".//AbsoluteTargetSpeed") if action is not None else None
     expected_deceleration = _lead_deceleration_mps2(spec)
-    observed_target_speed = _float_attr(target_speed, "value")
-    observed_dynamics_value = _float_attr(dynamics, "value")
+    observed_target_speed = float_attr(target_speed, "value")
+    observed_dynamics_value = float_attr(dynamics, "value")
     observed_dimension = dynamics.attrib.get("dynamicsDimension") if dynamics is not None else None
     observed_shape = dynamics.attrib.get("dynamicsShape") if dynamics is not None else None
     passed = (
@@ -334,7 +334,7 @@ def _lead_braking_trigger_check(
     event = root.find(".//Event[@name='lead_vehicle_starts_braking']") if root is not None else None
     trigger_source = event.find(".//TriggeringEntities/EntityRef") if event is not None else None
     condition = event.find(".//RelativeDistanceCondition") if event is not None else None
-    observed_distance = _float_attr(condition, "value")
+    observed_distance = float_attr(condition, "value")
     observed_target = condition.attrib.get("entityRef") if condition is not None else None
     observed_source = trigger_source.attrib.get("entityRef") if trigger_source is not None else None
     passed = (
@@ -371,7 +371,10 @@ def _pedestrian_trajectory_check(
     path_id = "pedestrian_crossing_path"
     expected_points = spec.layout.paths[path_id].points
     expected_vertices = [{"x_m": point.x_m, "y_m": point.y_m} for point in expected_points]
-    observed_vertices, times_parseable = _trajectory_vertices(root, action_name="pedestrian_follow_crossing_path")
+    observed_vertices, times_parseable = trajectory_vertices(
+        root,
+        action_name="pedestrian_follow_crossing_path",
+    )
     comparable_count = min(len(expected_vertices), len(observed_vertices))
     errors = [
         math.hypot(
@@ -477,7 +480,7 @@ def _layout_path_trajectory_check(
 ) -> CheckResult:
     expected_points = spec.layout.paths[path_id].points
     expected_vertices = [{"x_m": point.x_m, "y_m": point.y_m} for point in expected_points]
-    observed_vertices, times_parseable = _trajectory_vertices(root, action_name=action_name)
+    observed_vertices, times_parseable = trajectory_vertices(root, action_name=action_name)
     comparable_count = min(len(expected_vertices), len(observed_vertices))
     errors = [
         math.hypot(
@@ -638,7 +641,7 @@ def _intersection_layout_alignment_check(
         and junction_has_lane_links
     )
     measured: dict[str, object] = {
-        "road_asset_id": spec.metadata.get("road_asset_id"),
+        "road_asset_id": spec.road_asset_id(),
         "path_id": path_id,
         "conflict_point_x_m": conflict_point.x_m if conflict_point is not None else None,
         "conflict_point_y_m": conflict_point.y_m if conflict_point is not None else None,
@@ -692,78 +695,9 @@ def _expected_canonical_road_filename(spec: ScenarioSpec) -> str:
     return URBAN_TWO_WAY_PARKING_FILENAME
 
 
-def _initial_world_positions(root: ET.Element | None) -> dict[str, tuple[float, float, float]]:
-    if root is None:
-        return {}
-    positions: dict[str, tuple[float, float, float]] = {}
-    for private in root.findall(".//Init/Actions/Private"):
-        actor_id = private.attrib.get("entityRef")
-        world_position = private.find("./PrivateAction/TeleportAction/Position/WorldPosition")
-        if actor_id is None or world_position is None:
-            continue
-        try:
-            positions[actor_id] = (
-                float(world_position.attrib["x"]),
-                float(world_position.attrib["y"]),
-                float(world_position.attrib.get("h", "0")),
-            )
-        except (KeyError, ValueError):
-            continue
-    return positions
-
-
-def _trajectory_vertices(
-    root: ET.Element | None,
-    *,
-    action_name: str,
-) -> tuple[list[dict[str, float | None]], bool]:
-    if root is None:
-        return [], False
-    action = root.find(f".//Action[@name='{action_name}']")
-    if action is None:
-        return [], False
-    vertices: list[dict[str, float | None]] = []
-    times_parseable = True
-    for vertex in action.findall(".//FollowTrajectoryAction//Polyline/Vertex"):
-        world_position = vertex.find("./Position/WorldPosition")
-        try:
-            time_s = float(vertex.attrib["time"])
-        except (KeyError, ValueError):
-            time_s = None
-            times_parseable = False
-        try:
-            x_m = float(world_position.attrib["x"]) if world_position is not None else None
-            y_m = float(world_position.attrib["y"]) if world_position is not None else None
-        except (KeyError, ValueError):
-            x_m = None
-            y_m = None
-        vertices.append({"x_m": x_m, "y_m": y_m, "time_s": time_s})
-    return vertices, times_parseable and bool(vertices)
-
-
-def _logic_file_path(root: ET.Element | None) -> str | None:
-    if root is None:
-        return None
-    logic_file = root.find("./RoadNetwork/LogicFile")
-    if logic_file is None:
-        return None
-    return logic_file.attrib.get("filepath")
-
-
-def _float_attr(element: ET.Element | None, name: str) -> float | None:
-    if element is None:
-        return None
-    try:
-        return float(element.attrib[name])
-    except (KeyError, ValueError):
-        return None
-
-
 def _lead_deceleration_mps2(spec: ScenarioSpec) -> float:
-    metadata = spec.metadata.get("lead_vehicle_braking", {})
-    if isinstance(metadata, dict) and metadata.get("lead_deceleration_mps2") is not None:
-        return float(metadata["lead_deceleration_mps2"])
-    return -4.0
+    value = spec.metadata_float("lead_vehicle_braking", "lead_deceleration_mps2", -4.0)
+    return value if value is not None else -4.0
 
 
 def _result(

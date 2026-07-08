@@ -158,10 +158,8 @@ def _trigger_time_s(spec: ScenarioSpec) -> float | None:
 
 
 def _arrival_time_tolerance_s(spec: ScenarioSpec) -> float:
-    metadata = spec.metadata.get("crossing_vehicle", {})
-    if isinstance(metadata, dict) and metadata.get("arrival_time_tolerance_s") is not None:
-        return float(metadata["arrival_time_tolerance_s"])
-    return 0.35
+    value = spec.metadata_float("crossing_vehicle", "arrival_time_tolerance_s", 0.35)
+    return value if value is not None else 0.35
 
 
 def _point_on_axis_aligned_path(point: Point2D, path: tuple[Point2D, ...]) -> bool:

@@ -47,10 +47,8 @@ def pedestrian_traversal_speed_mps(pedestrian: ActorSpec | None) -> float:
 
 
 def lead_deceleration_mps2(spec: ScenarioSpec) -> float:
-    template_metadata = spec.metadata.get("lead_vehicle_braking", {})
-    if isinstance(template_metadata, dict) and template_metadata.get("lead_deceleration_mps2") is not None:
-        return float(template_metadata["lead_deceleration_mps2"])
-    return -4.0
+    value = spec.metadata_float("lead_vehicle_braking", "lead_deceleration_mps2", -4.0)
+    return value if value is not None else -4.0
 
 
 def layout_initial_poses(spec: ScenarioSpec) -> dict[str, BuilderInitialPose] | None:

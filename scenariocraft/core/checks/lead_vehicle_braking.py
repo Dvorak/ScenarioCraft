@@ -83,8 +83,7 @@ def _braking_trigger_timing_check(spec: ScenarioSpec) -> CheckResult:
 def _braking_semantics_check(spec: ScenarioSpec) -> CheckResult:
     lead_actor = spec.actor_by_id("lead_vehicle")
     relation_types = {relation.relation_type for relation in spec.spatial_relations}
-    metadata = spec.metadata.get("lead_vehicle_braking", {})
-    deceleration = metadata.get("lead_deceleration_mps2") if isinstance(metadata, dict) else None
+    deceleration = spec.metadata_float("lead_vehicle_braking", "lead_deceleration_mps2")
     action = _lead_braking_action(spec)
     passed = bool(
         lead_actor is not None

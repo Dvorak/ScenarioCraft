@@ -97,6 +97,48 @@ class ScenarioSpec:
     def actor_by_id(self, actor_id: str) -> ActorSpec | None:
         return next((actor for actor in self.actors if actor.id == actor_id), None)
 
+    def metadata_section(self, key: str) -> dict[str, Any]:
+        """Return a typed copy of a dict-valued metadata section.
+
+        `metadata` remains the additive JSON extension slot for template and
+        workflow annotations. Consumers should use this accessor instead of
+        scattering shape checks across checks, builders, and renderers.
+        """
+
+        value = self.metadata.get(key)
+        if isinstance(value, dict):
+            return dict(value)
+        return {}
+
+    def family_metadata(self) -> dict[str, Any]:
+        """Return metadata owned by this spec's scenario family."""
+
+        return self.metadata_section(self.scenario_type)
+
+    def template_resolution_metadata(self) -> dict[str, Any]:
+        """Return resolver metadata without exposing raw metadata shape."""
+
+        return self.metadata_section("template_resolution")
+
+    def metadata_float(self, section: str, key: str, default: float | None = None) -> float | None:
+        """Return a float from a metadata section, falling back on parse failure."""
+
+        value = self.metadata_section(section).get(key)
+        if value is None:
+            return default
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    def road_asset_id(self) -> str | None:
+        """Return the canonical road asset id declared by template resolution."""
+
+        value = self.metadata.get("road_asset_id")
+        if isinstance(value, str) and value:
+            return value
+        return None
+
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {
             "scenario_name": self.scenario_name,
