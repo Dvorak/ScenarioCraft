@@ -61,6 +61,8 @@ class GeneratedScenarioViewModel:
     pedestrian_time_to_conflict: str
     trigger_threshold_summary: str
     pedestrian_conflict_summary: str
+    brief_metrics: tuple[StatusCardViewModel, ...] = ()
+    context_summary: str = ""
     status_cards: list[StatusCardViewModel] = field(default_factory=list)
     diagnostics: list[str] = field(default_factory=list)
     recommendation: str = "Generate and validate the scenario."
@@ -77,6 +79,7 @@ class WorkspaceStatusItemViewModel:
 
 @dataclass(frozen=True)
 class WorkspaceStatusViewModel:
+    loop_label: str
     items: tuple[WorkspaceStatusItemViewModel, ...]
 
 
@@ -97,8 +100,16 @@ def build_workspace_status_view_model(
     semantic_result: SemanticValidationResult | None = None,
     qc_result: AsamQcResult | None = None,
     esmini_result: EsminiResult | None = None,
+    intent_proposal: object | None = None,
+    candidate_trace: object | None = None,
 ) -> WorkspaceStatusViewModel:
     generated = spec is not None
+    loop_label = _workspace_loop_label(
+        generated=generated,
+        prepared_case=prepared_case,
+        intent_proposal=intent_proposal,
+        candidate_trace=candidate_trace,
+    )
     if prepared_case is not None:
         validation_failed = bool(
             prepared_case.geometry_failures or prepared_case.artifact_failures
@@ -111,13 +122,32 @@ def build_workspace_status_view_model(
     else:
         validation_value = "Waiting" if generated else "Not run"
         validation_state = "waiting" if generated else "neutral"
-    return WorkspaceStatusViewModel(items=(
+    return WorkspaceStatusViewModel(loop_label=loop_label, items=(
         WorkspaceStatusItemViewModel(
-            "Scenario",
-            "Generated" if generated else "Not run",
+            "Intent",
+            _workspace_intent_value(generated, intent_proposal),
+            _workspace_intent_state(generated, intent_proposal),
+            "Typed ScenarioIntent from provider or controlled case.",
+            "ScenarioIntent",
+        ),
+        WorkspaceStatusItemViewModel(
+            "Family",
+            _workspace_family_value(spec, intent_proposal),
+            _workspace_family_state(generated, intent_proposal),
+            "Selected parameterized scenario family.",
+        ),
+        WorkspaceStatusItemViewModel(
+            "Spec",
+            "Ready" if generated else "Idle",
             "passed" if generated else "neutral",
             "Structured source: ScenarioSpec",
             "ScenarioSpec",
+        ),
+        WorkspaceStatusItemViewModel(
+            "Build",
+            "Ready" if generated else "Idle",
+            "passed" if generated else "neutral",
+            "Deterministic ScenarioSpec to XOSC/XODR build.",
         ),
         WorkspaceStatusItemViewModel(
             "Checks",
@@ -126,20 +156,103 @@ def build_workspace_status_view_model(
             _workspace_check_detail(prepared_case, semantic_result),
         ),
         WorkspaceStatusItemViewModel(
-            "OSC Quality",
-            _workspace_qc_value(qc_result, generated),
-            _workspace_qc_state(qc_result, generated),
-            _workspace_qc_detail(qc_result),
-            "ASAM QC",
-        ),
-        WorkspaceStatusItemViewModel(
-            "Simulation",
-            _workspace_esmini_value(esmini_result, generated),
-            _workspace_esmini_state(esmini_result, generated),
-            _workspace_esmini_detail(esmini_result),
-            "esmini",
+            "Evidence",
+            _workspace_evidence_value(qc_result, esmini_result, generated),
+            _workspace_evidence_state(qc_result, esmini_result, generated),
+            f"{_workspace_qc_detail(qc_result)} · {_workspace_esmini_detail(esmini_result)}",
         ),
     ))
+
+
+def _workspace_loop_label(
+    *,
+    generated: bool,
+    prepared_case: PreparedDemoCase | None,
+    intent_proposal: object | None,
+    candidate_trace: object | None,
+) -> str:
+    if prepared_case is not None:
+        failures = prepared_case.geometry_failures or prepared_case.artifact_failures
+        if failures and prepared_case.repair_required:
+            return "PatchSpec Repair · required"
+        if failures:
+            return "Candidate Generation · rejected"
+    if candidate_trace is not None:
+        status = getattr(candidate_trace, "acceptance_status", "")
+        if status:
+            return f"Candidate Generation · {str(status).replace('_', ' ')}"
+    if intent_proposal is not None:
+        status = str(getattr(intent_proposal, "status", "supported")).replace("_", " ")
+        return f"Candidate Generation · {status}"
+    if generated:
+        return "Candidate Generation · accepted"
+    return "Candidate Generation · idle"
+
+
+def _workspace_intent_value(generated: bool, intent_proposal: object | None) -> str:
+    if intent_proposal is None:
+        return "Ready" if generated else "Idle"
+    if getattr(intent_proposal, "intent", None) is None:
+        status = str(getattr(intent_proposal, "status", "unsupported"))
+        return "Needs input" if status == "clarification_required" else "Unsupported"
+    return "Ready"
+
+
+def _workspace_intent_state(generated: bool, intent_proposal: object | None) -> str:
+    if intent_proposal is None:
+        return "passed" if generated else "neutral"
+    if getattr(intent_proposal, "intent", None) is None:
+        return "waiting" if getattr(intent_proposal, "status", "") == "clarification_required" else "failed"
+    return "passed"
+
+
+def _workspace_family_value(spec: ScenarioSpec | None, intent_proposal: object | None) -> str:
+    if spec is not None:
+        return "Ready"
+    intent = getattr(intent_proposal, "intent", None)
+    if intent is not None and getattr(intent, "template_id", ""):
+        return "Selected"
+    return "Idle"
+
+
+def _workspace_family_state(generated: bool, intent_proposal: object | None) -> str:
+    if generated:
+        return "passed"
+    intent = getattr(intent_proposal, "intent", None)
+    return "waiting" if intent is not None else "neutral"
+
+
+def _workspace_evidence_value(
+    qc_result: AsamQcResult | None,
+    esmini_result: EsminiResult | None,
+    generated: bool,
+) -> str:
+    if not generated:
+        return "Idle"
+    qc_value = _workspace_qc_value(qc_result, generated)
+    esmini_value = _workspace_esmini_value(esmini_result, generated)
+    if "Failed" in {qc_value, esmini_value}:
+        return "Failed"
+    if "Passed" in {qc_value, esmini_value}:
+        return "Ready"
+    if "Unavailable" in {qc_value, esmini_value}:
+        return "Partial"
+    return "Waiting"
+
+
+def _workspace_evidence_state(
+    qc_result: AsamQcResult | None,
+    esmini_result: EsminiResult | None,
+    generated: bool,
+) -> str:
+    value = _workspace_evidence_value(qc_result, esmini_result, generated)
+    return {
+        "Ready": "passed",
+        "Failed": "failed",
+        "Partial": "waiting",
+        "Waiting": "waiting",
+        "Idle": "neutral",
+    }[value]
 
 
 def _workspace_check_detail(
@@ -510,7 +623,9 @@ def build_generated_scenario_view_model(
             ego_lead_time="n/a",
             pedestrian_time_to_conflict="n/a",
             trigger_threshold_summary="Trigger threshold: n/a",
-            pedestrian_conflict_summary="Pedestrian to conflict: n/a",
+        pedestrian_conflict_summary="",
+            brief_metrics=(),
+            context_summary="",
             status_cards=[
                 StatusCardViewModel("ScenarioSpec", "not generated", "Run the mock generator first."),
                 StatusCardViewModel("Semantic", "not run", "Validation has not started."),
@@ -535,14 +650,20 @@ def build_generated_scenario_view_model(
     recommendation = "Repair Scenario" if needs_repair else "Use as generated demo" if semantic_result is not None and semantic_result.passed else "Generate and validate"
     timing_metrics = compute_timing_metrics(spec)
     trigger_threshold = seconds_label(timing_metrics.trigger_threshold_time_s)
+    secondary = secondary_actor(spec)
     pedestrian_time = seconds_label(timing_metrics.pedestrian_time_to_conflict_s)
+    pedestrian_conflict_summary = (
+        f"Pedestrian to conflict: {pedestrian_time}"
+        if timing_metrics.pedestrian_time_to_conflict_s is not None
+        else ""
+    )
     return GeneratedScenarioViewModel(
-        title=spec.scenario_name,
+        title=human_label(spec.scenario_name),
         scenario_type=spec.scenario_type,
-        road_summary=f"{spec.road.type}, {spec.road.lanes_per_direction} lane(s) per direction, {spec.road.speed_limit_kph:g} km/h limit",
-        weather_summary="rain / wet road" if spec.weather.rain else f"dry / {spec.weather.road_condition}",
+        road_summary=road_summary_label(spec),
+        weather_summary=weather_summary_label(spec),
         actor_summary=[f"{actor.id} ({actor.role})" for actor in spec.actors[:8]],
-        trigger_summary=f"{spec.trigger.type}: {spec.trigger.source} to {spec.trigger.target} at {spec.trigger.distance_m:g} m",
+        trigger_summary=trigger_summary_label(spec),
         criticality_summary=f"{spec.intended_criticality.type}, target TTC {spec.intended_criticality.target_min_ttc_s:g} s",
         ego_speed=ego_speed_label(spec),
         pedestrian_speed=pedestrian_speed_label(spec),
@@ -552,11 +673,13 @@ def build_generated_scenario_view_model(
         ego_lead_time=seconds_label(timing_metrics.ego_lead_time_to_conflict_s),
         pedestrian_time_to_conflict=pedestrian_time,
         trigger_threshold_summary=(
-            f"Trigger threshold: {trigger_threshold} from {spec.trigger.type.replace('_', '-')} {spec.trigger.distance_m:g} m"
+            f"Trigger threshold: {trigger_threshold} · {spec.trigger.distance_m:g} m"
             if timing_metrics.trigger_threshold_time_s is not None
             else "Trigger threshold: n/a"
         ),
-        pedestrian_conflict_summary=f"Pedestrian to conflict: {pedestrian_time}",
+        pedestrian_conflict_summary=pedestrian_conflict_summary,
+        brief_metrics=brief_metric_cards(spec, timing_metrics),
+        context_summary=f"{road_summary_label(spec)} · {weather_summary_label(spec)}",
         status_cards=[
             StatusCardViewModel("ScenarioSpec", "generated", "Structured scenario intent is available."),
             StatusCardViewModel("Semantic", semantic_value, semantic_detail),
@@ -780,6 +903,92 @@ def compatibility_explanation(category: str) -> str:
         "unknown": "The current state is not classified yet.",
     }
     return explanations.get(category, explanations["unknown"])
+
+
+def human_label(value: str) -> str:
+    words = value.replace("_", " ").replace("-", " ").split()
+    if not words:
+        return "Scenario"
+    return " ".join(words).capitalize()
+
+
+def road_summary_label(spec: ScenarioSpec) -> str:
+    road_type = human_label(spec.road.type).lower()
+    return f"{road_type} · {spec.road.lanes_per_direction:g} lane(s)/direction · {spec.road.speed_limit_kph:g} km/h"
+
+
+def weather_summary_label(spec: ScenarioSpec) -> str:
+    rain = "rain" if spec.weather.rain else "dry"
+    return f"{rain} / {spec.weather.road_condition}"
+
+
+def trigger_summary_label(spec: ScenarioSpec) -> str:
+    source = human_label(spec.trigger.source)
+    target = human_label(spec.trigger.target)
+    trigger_type = spec.trigger.type.replace("_", "-")
+    return f"{trigger_type}: {source} to {target} at {spec.trigger.distance_m:g} m"
+
+
+def secondary_actor(spec: ScenarioSpec) -> object | None:
+    preferred_roles = (
+        "crossing_actor",
+        "lead_vehicle",
+        "cut_in_vehicle",
+        "crossing_vehicle",
+        "oncoming_vehicle",
+    )
+    for role in preferred_roles:
+        actor = spec.actor_by_role(role)
+        if actor is not None:
+            return actor
+    trigger_target = spec.actor_by_id(spec.trigger.target)
+    if trigger_target is not None and trigger_target.role != "ego":
+        return trigger_target
+    return next((actor for actor in spec.actors if actor.role != "ego" and actor.id != "ego"), None)
+
+
+def actor_speed_label(actor: object | None) -> str:
+    if actor is None:
+        return "n/a"
+    initial_speed = getattr(actor, "initial_speed_kph", None)
+    if initial_speed is not None:
+        return f"{initial_speed:g} km/h"
+    walking_speed = getattr(actor, "speed_mps", None)
+    if walking_speed is not None:
+        return f"{walking_speed:g} m/s"
+    return "n/a"
+
+
+def secondary_actor_label(actor: object | None) -> str:
+    if actor is None:
+        return "Actor"
+    role = str(getattr(actor, "role", ""))
+    if role == "crossing_actor" or getattr(actor, "type", "") == "pedestrian":
+        return "Pedestrian"
+    labels = {
+        "lead_vehicle": "Lead",
+        "cut_in_vehicle": "Cut-in",
+        "crossing_vehicle": "Crossing",
+        "oncoming_vehicle": "Oncoming",
+        "occluder": "Occluder",
+    }
+    if role in labels:
+        return labels[role]
+    return "Actor"
+
+
+def brief_metric_cards(spec: ScenarioSpec, timing_metrics: object) -> tuple[StatusCardViewModel, ...]:
+    secondary = secondary_actor(spec)
+    return (
+        StatusCardViewModel("Ego", ego_speed_label(spec), "Initial ego speed"),
+        StatusCardViewModel(secondary_actor_label(secondary), actor_speed_label(secondary), "Primary conflict actor"),
+        StatusCardViewModel("Target TTC", seconds_label(timing_metrics.target_ttc_s), "Design criticality target"),
+        StatusCardViewModel(
+            "Lead Time",
+            seconds_label(timing_metrics.ego_lead_time_to_conflict_s),
+            "Ego time from trigger point to conflict point",
+        ),
+    )
 
 
 def ego_speed_label(spec: ScenarioSpec) -> str:

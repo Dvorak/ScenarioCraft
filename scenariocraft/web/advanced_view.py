@@ -180,6 +180,16 @@ def _render_candidate_acceptance_trace(candidate_trace: object | None) -> None:
             ("Failed checks", str(failed)),
         )
     )
+    fallback = getattr(candidate_trace, "fallback", None)
+    if isinstance(fallback, dict) and fallback:
+        discarded = fallback.get("discarded_parameters")
+        discarded_count = len(discarded) if isinstance(discarded, dict) else 0
+        _render_summary_rows(
+            (
+                ("Candidate fallback", "provider parameters rejected"),
+                ("Discarded parameters", str(discarded_count)),
+            )
+        )
     resolved_parameters = getattr(candidate_trace, "resolved_parameters", {}) or {}
     if not isinstance(resolved_parameters, dict) or not resolved_parameters:
         return

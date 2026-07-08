@@ -359,10 +359,14 @@ def test_generated_view_model_summarizes_scenario():
 
     view_model = build_generated_scenario_view_model(spec)
 
-    assert view_model.title == "rainy_pedestrian_occlusion"
+    assert view_model.title == "Rainy pedestrian occlusion"
     assert view_model.scenario_type == "pedestrian_occlusion"
-    assert view_model.ego_speed == "35 km/h"
-    assert view_model.pedestrian_speed == "1.5 m/s"
+    assert [(card.label, card.value) for card in view_model.brief_metrics] == [
+        ("Ego", "35 km/h"),
+        ("Pedestrian", "1.5 m/s"),
+        ("Target TTC", "1.5 s"),
+        ("Lead Time", "2.4 s"),
+    ]
     assert view_model.status_cards[0].value == "generated"
 
 

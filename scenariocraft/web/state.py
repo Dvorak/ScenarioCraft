@@ -33,10 +33,10 @@ PREVIEW_VISUAL_CAPTION = "Renderer-aligned ScenarioSpec layout · world +x → l
 RUNTIME_VISUAL_CAPTION = "Raw OpenSCENARIO + OpenDRIVE runtime view · world +x → left · world +y → down"
 WORKSPACE_PAGES = ("Workspace", "Advanced")
 WORKSPACE_PROVIDER = "controlled_case"
-WORKSPACE_PROVIDER_OPTIONS = ("Local LLM", "Controlled Case")
+WORKSPACE_PROVIDER_OPTIONS = ("LLM", "Demo")
 WORKSPACE_PROVIDER_VALUES = {
-    "Local LLM": "openai-compatible",
-    "Controlled Case": WORKSPACE_PROVIDER,
+    "LLM": "openai-compatible",
+    "Demo": WORKSPACE_PROVIDER,
 }
 WORKSPACE_GENERATE_ICON = ":material/send:"
 WORKSPACE_REPAIR_ICON = ":material/build:"
@@ -69,7 +69,7 @@ def ensure_session_state() -> None:
         "workspace_original_spec": None,
         "workspace_prepared_case": None,
         "workspace_execution": None,
-        "workspace_provider_label": "Controlled Case",
+        "workspace_provider_label": "Demo",
         "workspace_intent_proposal": None,
         "workspace_candidate_trace": None,
         "workspace_revision_text": "",
@@ -117,3 +117,15 @@ def reset_generated_scenario_state() -> None:
     st.session_state.demo_experiment_trace = None
     st.session_state.workspace_intent_proposal = None
     st.session_state.workspace_candidate_trace = None
+
+
+def reset_workspace_candidate_state() -> None:
+    """Clear the currently displayed candidate when the request source changes."""
+
+    st.session_state.spec = None
+    st.session_state.spec_json = ""
+    st.session_state.workspace_original_spec = None
+    st.session_state.workspace_prepared_case = None
+    st.session_state.workspace_execution = None
+    st.session_state.workspace_revision_text = ""
+    reset_generated_scenario_state()

@@ -24,6 +24,8 @@ def render_workspace_status_panel(
     semantic_result: object,
     qc_result: object,
     esmini_result: object,
+    intent_proposal: object | None = None,
+    candidate_trace: object | None = None,
 ) -> None:
     with st.container(border=True, key="workspace_status"):
         st.markdown("### Status")
@@ -33,6 +35,8 @@ def render_workspace_status_panel(
             semantic_result=semantic_result,
             qc_result=qc_result,
             esmini_result=esmini_result,
+            intent_proposal=intent_proposal,
+            candidate_trace=candidate_trace,
         )
         items = "".join(
             f'<div class="status-item status-{escape(item.state)}" tabindex="0" '
@@ -43,7 +47,10 @@ def render_workspace_status_panel(
             for item in status.items
         )
         st.markdown(
-            f'<div class="workspace-status-grid" role="status">{items}</div>',
+            '<div class="workspace-loop-status" role="status">'
+            f'<div class="workspace-loop-title">{escape(status.loop_label)}</div>'
+            f'<div class="workspace-status-grid">{items}</div>'
+            "</div>",
             unsafe_allow_html=True,
         )
 
@@ -86,15 +93,28 @@ def render_workspace_brief_panel(
         if current_spec() is None:
             st.caption("Generate a scenario to see its semantic brief.")
             return
-        st.markdown(f"**{vm.title}**")
-        metrics = st.columns(4)
-        metrics[0].metric("Ego", vm.ego_speed)
-        metrics[1].metric("Pedestrian", vm.pedestrian_speed)
-        metrics[2].metric("Target TTC", vm.target_ttc)
-        metrics[3].metric("Lead Time", vm.ego_lead_time)
-        st.caption(f"{vm.road_summary} · {vm.weather_summary}")
-        st.caption(f"{vm.trigger_threshold_summary} · {vm.pedestrian_conflict_summary}")
-        st.caption(vm.trigger_summary)
+        metric_tiles = "".join(
+            '<div class="workspace-brief-metric" tabindex="0" '
+            f'title="{escape(card.detail)}" aria-label="{escape(card.label)}: {escape(card.value)}. {escape(card.detail)}">'
+            f'<span>{escape(card.label)}</span><strong>{escape(card.value)}</strong></div>'
+            for card in vm.brief_metrics
+        )
+        details = [vm.context_summary, vm.trigger_threshold_summary]
+        if vm.pedestrian_conflict_summary:
+            details.append(vm.pedestrian_conflict_summary)
+        if vm.trigger_summary and vm.trigger_summary != "n/a":
+            details.append(vm.trigger_summary)
+        detail_markup = "".join(
+            f'<span>{escape(detail)}</span>' for detail in details if detail
+        )
+        st.markdown(
+            '<div class="workspace-brief">'
+            f'<strong class="workspace-brief-title">{escape(vm.title)}</strong>'
+            f'<div class="workspace-brief-metrics">{metric_tiles}</div>'
+            f'<div class="workspace-brief-details">{detail_markup}</div>'
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
 
 def render_workspace_visuals_panel(

@@ -13,12 +13,14 @@ from scenariocraft.application.controlled_cases import (
 )
 from scenariocraft.application.demo_cases import PreparedDemoCase
 from scenariocraft.core.schemas import ScenarioSpec
+from scenariocraft.providers.openai_intent import local_llm_configuration_hint
 from scenariocraft.web.state import (
     WORKSPACE_GENERATE_ICON,
     WORKSPACE_PROVIDER,
     WORKSPACE_PROVIDER_OPTIONS,
     WORKSPACE_PROVIDER_VALUES,
     WORKSPACE_REPAIR_ICON,
+    reset_workspace_candidate_state,
 )
 from scenariocraft.web.view_models import (
     GeneratedScenarioViewModel,
@@ -83,7 +85,7 @@ def render_workspace(
     execute_workspace_repair: Callable[[Path], object],
 ) -> None:
     repair_visible = build_workspace_repair_view_model(prepared_case).visible
-    workspace = st.columns([0.36, 0.64] if repair_visible else [0.32, 0.68], gap="small", vertical_alignment="top")
+    workspace = st.columns([0.36, 0.64], gap="small", vertical_alignment="top")
     with workspace[0]:
         left_key = "workspace_left_repair" if repair_visible else "workspace_left_normal"
         with st.container(key=left_key):
@@ -113,6 +115,8 @@ def render_workspace(
                 semantic_result=semantic_result,
                 qc_result=qc_result,
                 esmini_result=esmini_result,
+                intent_proposal=intent_proposal,
+                candidate_trace=candidate_trace,
             )
             render_workspace_repair_panel(prepared_case)
             render_workspace_brief_panel(current_spec=current_spec, generated_view_model=generated_view_model)
@@ -159,8 +163,14 @@ def _render_workspace_request(
         set_scenario_text(updated_text)
         if last_error:
             st.error(last_error)
-        elif last_info:
-            st.caption(last_info)
+        else:
+            _render_micro_status(
+                provider_label=provider_label,
+                last_info=last_info,
+                intent_proposal=intent_proposal,
+                candidate_trace=candidate_trace,
+                has_current_spec=current_spec() is not None,
+            )
         repair = build_workspace_repair_view_model(prepared_case)
         with st.container(key="workspace_toolbar"):
             provider_options = list(WORKSPACE_PROVIDER_OPTIONS)
@@ -168,14 +178,17 @@ def _render_workspace_request(
                 provider_label = WORKSPACE_PROVIDER_OPTIONS[0]
             provider_name = WORKSPACE_PROVIDER_VALUES[provider_label]
             show_controlled_case = provider_name == WORKSPACE_PROVIDER
-            tools = st.columns(
-                [0.28, 0.56, 0.10, 0.10, 0.10]
-                if repair.can_repair and show_controlled_case
-                else [0.28, 0.56, 0.10, 0.10]
+            toolbar_weights = (
+                [0.18, 0.44, 0.12, 0.12, 0.14]
+                if show_controlled_case and repair.can_repair
+                else [0.18, 0.50, 0.14, 0.18]
                 if show_controlled_case
-                else [1.0, 0.12, 0.12]
+                else [0.20, 0.60, 0.10, 0.10]
                 if repair.can_repair
-                else [1.0, 0.12],
+                else [0.20, 0.62, 0.18]
+            )
+            tools = st.columns(
+                toolbar_weights,
                 vertical_alignment="bottom",
             )
             with tools[0]:
@@ -184,18 +197,23 @@ def _render_workspace_request(
                     provider_options,
                     index=provider_options.index(provider_label),
                     label_visibility="collapsed",
+                    help="LLM uses the configured local/OpenAI-compatible provider. Demo uses deterministic controlled cases.",
                 )
+                if selected_provider_label != provider_label:
+                    set_provider_label(selected_provider_label)
+                    st.session_state["last_error"] = ""
+                    st.session_state["last_info"] = "Provider updated."
+                    st.rerun()
                 set_provider_label(selected_provider_label)
                 provider_name = WORKSPACE_PROVIDER_VALUES[selected_provider_label]
                 show_controlled_case = provider_name == WORKSPACE_PROVIDER
-            action_index = 1
             selected_case_id = selected_demo_case_id if show_controlled_case else None
-            if show_controlled_case:
+            with tools[1]:
                 case_ids = [case_id for case_id, _ in workspace_case_options()]
-                if selected_demo_case_id not in case_ids:
-                    selected_demo_case_id = case_ids[0]
-                    set_selected_demo_case_id(selected_demo_case_id)
-                with tools[1]:
+                if show_controlled_case:
+                    if selected_demo_case_id not in case_ids:
+                        selected_demo_case_id = case_ids[0]
+                        set_selected_demo_case_id(selected_demo_case_id)
                     selected_case_id = st.selectbox(
                         "Controlled Case",
                         case_ids,
@@ -211,13 +229,17 @@ def _render_workspace_request(
                                 _prompt_variant_index(selected_case_id),
                             )
                         )
+                        reset_workspace_candidate_state()
                         st.session_state["workspace_intent_proposal"] = None
                         st.session_state["last_error"] = ""
                         st.session_state["last_info"] = "Controlled Case request updated."
                         st.rerun()
                     set_selected_demo_case_id(selected_case_id)
-                action_index = 2
-                with tools[action_index]:
+                else:
+                    _render_provider_status(provider_name)
+            next_action_index = 2
+            if show_controlled_case:
+                with tools[2]:
                     if st.button(
                         "Shuffle prompt",
                         icon=":material/refresh:",
@@ -233,12 +255,13 @@ def _render_workspace_request(
                         set_scenario_text(
                             controlled_case_prompt_variant(selected_case_id, next_index)
                         )
+                        reset_workspace_candidate_state()
                         st.session_state["workspace_intent_proposal"] = None
                         st.session_state["last_error"] = ""
                         st.session_state["last_info"] = "Controlled Case request phrasing updated."
                         st.rerun()
-                action_index = 3
-            with tools[action_index]:
+                next_action_index = 3
+            with tools[next_action_index]:
                 if st.button(
                     "Generate",
                     type="primary",
@@ -250,7 +273,7 @@ def _render_workspace_request(
                     generate_selected_case(provider_name, selected_case_id)
                     st.rerun()
             if repair.can_repair:
-                with tools[action_index + 1]:
+                with tools[next_action_index + 1]:
                     if st.button(
                         "Repair",
                         icon=WORKSPACE_REPAIR_ICON,
@@ -261,7 +284,6 @@ def _render_workspace_request(
                         execute_workspace_repair(output_dir)
                         st.rerun()
         _render_intent_summary(intent_proposal, set_scenario_text=set_scenario_text)
-        _render_candidate_trace_caption(candidate_trace)
         _render_revision_controls(
             provider_name=provider_name,
             revision_text=revision_text,
@@ -269,6 +291,94 @@ def _render_workspace_request(
             revise_current_scenario=revise_current_scenario,
             has_current_spec=current_spec() is not None,
         )
+
+
+def _render_provider_status(provider_name: str) -> None:
+    if provider_name in {"openai-compatible", "openai_compatible"}:
+        hint = local_llm_configuration_hint(timeout_s=0.35)
+        if hint.model_names:
+            label = f"{_llm_runtime_label(hint.server_url)} · {hint.model_names[0]}"
+        elif hint.reachable:
+            label = f"{_llm_runtime_label(hint.server_url)} · choose model"
+        else:
+            label = "LLM · not found"
+        title = hint.message.replace("\n", " ")
+    else:
+        label = provider_name.replace("_", " ").title()
+        title = "Selected generation provider"
+    st.markdown(
+        f'<div class="workspace-provider-status" title="{_html_escape(title)}">{_html_escape(label)}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _llm_runtime_label(server_url: str) -> str:
+    normalized = server_url.lower()
+    if "11434" in normalized or "ollama" in normalized:
+        return "ollama"
+    if "localhost" in normalized or "127.0.0.1" in normalized:
+        return "local"
+    return "openai-compatible"
+
+
+def _render_micro_status(
+    *,
+    provider_label: str,
+    last_info: str,
+    intent_proposal: object | None,
+    candidate_trace: object | None,
+    has_current_spec: bool,
+) -> None:
+    text = _micro_status_text(
+        provider_label=provider_label,
+        last_info=last_info,
+        intent_proposal=intent_proposal,
+        candidate_trace=candidate_trace,
+        has_current_spec=has_current_spec,
+    )
+    st.markdown(
+        f'<div class="workspace-micro-status">{_html_escape(text)}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _micro_status_text(
+    *,
+    provider_label: str,
+    last_info: str,
+    intent_proposal: object | None,
+    candidate_trace: object | None,
+    has_current_spec: bool,
+) -> str:
+    if candidate_trace is not None:
+        status = str(getattr(candidate_trace, "acceptance_status", "") or "").replace("_", " ")
+        template_id = str(getattr(candidate_trace, "template_id", "") or "").replace("_", " ")
+        if status and template_id:
+            return f"Candidate Generation · {status} · {template_id}"
+        if status:
+            return f"Candidate Generation · {status}"
+    if intent_proposal is not None:
+        intent = getattr(intent_proposal, "intent", None)
+        provider_name = str(getattr(intent_proposal, "provider_name", "") or provider_label)
+        status = str(getattr(intent_proposal, "status", "supported") or "supported").replace("_", " ")
+        if intent is not None:
+            template_id = str(getattr(intent, "template_id", "") or "").replace("_", " ")
+            return f"Intent · {template_id} · {provider_name}" if template_id else f"Intent · {provider_name}"
+        return f"Intent · {status} · {provider_name}"
+    if has_current_spec:
+        return "Candidate Generation · accepted"
+    if last_info and last_info != "Provider updated.":
+        return last_info
+    return "Ready"
+
+
+def _html_escape(value: str) -> str:
+    return (
+        value.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
 
 
 def _render_candidate_trace_caption(candidate_trace: object | None) -> None:
@@ -290,27 +400,27 @@ def _render_revision_controls(
 ) -> None:
     if not has_current_spec:
         return
-    st.markdown("#### Scenario Revision Loop")
-    updated_revision = st.text_area(
-        "Revision request",
-        value=revision_text,
-        height=78,
-        placeholder="Describe a variant, e.g. shorter gap, rainy weather, slower pedestrian...",
-    )
-    set_revision_text(updated_revision)
-    provider_ready = provider_name in {"openai-compatible", "openai_compatible"}
-    if not provider_ready:
-        st.caption("Switch Provider to Local LLM to create a revised candidate.")
-    if st.button(
-        "Create Variant",
-        icon=":material/alt_route:",
-        help="Run Scenario Revision Loop through the generation provider; this does not use PatchSpec repair.",
-        disabled=not provider_ready or not updated_revision.strip(),
-        key="workspace_revision_create",
-        width="stretch",
-    ):
-        revise_current_scenario(provider_name, updated_revision)
-        st.rerun()
+    with st.expander("Scenario Revision Loop", expanded=False):
+        updated_revision = st.text_area(
+            "Revision request",
+            value=revision_text,
+            height=72,
+            placeholder="Describe a variant, e.g. shorter gap, rainy weather, slower pedestrian...",
+        )
+        set_revision_text(updated_revision)
+        provider_ready = provider_name in {"openai-compatible", "openai_compatible"}
+        if not provider_ready:
+            st.caption("Switch Provider to LLM to create a revised candidate.")
+        if st.button(
+            "Create Variant",
+            icon=":material/alt_route:",
+            help="Run Scenario Revision Loop through the generation provider; this does not use PatchSpec repair.",
+            disabled=not provider_ready or not updated_revision.strip(),
+            key="workspace_revision_create",
+            width="stretch",
+        ):
+            revise_current_scenario(provider_name, updated_revision)
+            st.rerun()
 
 
 def _render_intent_summary(intent_proposal: object, *, set_scenario_text: Callable[[str], None]) -> None:

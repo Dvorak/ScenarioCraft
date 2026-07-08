@@ -5,6 +5,8 @@ from pathlib import Path
 from streamlit.testing.v1 import AppTest
 
 from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
+from scenariocraft.core.schemas import ScenarioIntent
+from scenariocraft.core.templates import resolve_scenario_intent
 from scenariocraft.core.repair.providers import FakeRepairProvider
 from scenariocraft.external_tools import AsamQcResult, EsminiResult
 from scenariocraft.application.controlled_cases import CONTROLLED_CASES
@@ -39,7 +41,7 @@ def test_workspace_navigation_and_media_contract() -> None:
     assert WORKSPACE_MEDIA_TITLES == ("Preview 2D Semantic", "Playback Esmini")
     assert WORKSPACE_MEDIA_ASPECT_RATIO == "16 / 9"
     assert WORKSPACE_PROVIDER == "controlled_case"
-    assert WORKSPACE_PROVIDER_OPTIONS == ("Local LLM", "Controlled Case")
+    assert WORKSPACE_PROVIDER_OPTIONS == ("LLM", "Demo")
     assert WORKSPACE_GENERATE_ICON == ":material/send:"
     assert WORKSPACE_REPAIR_ICON == ":material/build:"
     assert WEB_PREVIEW_PRESENTATION_STYLE == "clean_split"
@@ -77,7 +79,7 @@ def test_workspace_is_default_and_has_one_controlled_case_selector() -> None:
 
 
 def test_workspace_local_llm_provider_uses_text_without_demo_case_selector(monkeypatch, tmp_path: Path) -> None:
-    from scenariocraft.core.schemas import ScenarioIntent
+    from scenariocraft.providers.openai_intent import LocalLlmConfigurationHint
     from scenariocraft.providers.intent import IntentProposal
 
     class StaticIntentProvider:
@@ -96,12 +98,25 @@ def test_workspace_local_llm_provider_uses_text_without_demo_case_selector(monke
     from scenariocraft.providers.openai_intent import OpenAIIntentProvider
 
     monkeypatch.setattr(OpenAIIntentProvider, "from_env", classmethod(lambda cls: StaticIntentProvider()))
+    monkeypatch.setattr(
+        "scenariocraft.web.workspace_view.local_llm_configuration_hint",
+        lambda timeout_s=0.35: LocalLlmConfigurationHint(
+            server_url="http://localhost:11434/v1",
+            reachable=True,
+            model_names=("qwen2.5:7b",),
+            message="Local LLM model is configured as `qwen2.5:7b`.",
+        ),
+    )
     app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
     app.text_area[0].set_value("生成一个城市道路同车道跟驰场景，前车突然急刹。")
-    app.selectbox[0].select("Local LLM").run()
+    app.selectbox[0].select("LLM").run()
 
     assert [item.label for item in app.selectbox] == ["Provider"]
+    markdown = [item.value for item in app.markdown]
+    assert any("ollama · qwen2.5:7b" in item for item in markdown)
+    assert any('class="workspace-micro-status"' in item and "Ready" in item for item in markdown)
+    assert not any('class="workspace-toolbar-spacer"' in item for item in markdown)
     next(button for button in app.button if button.label == "Generate").click().run()
 
     assert not app.exception
@@ -140,7 +155,7 @@ def test_workspace_local_llm_unsupported_intent_does_not_generate_spec(monkeypat
     app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
     app.text_area[0].set_value("Generate a highway cut-in with three lanes.")
-    app.selectbox[0].select("Local LLM").run()
+    app.selectbox[0].select("LLM").run()
 
     next(button for button in app.button if button.label == "Generate").click().run()
 
@@ -186,7 +201,7 @@ def test_workspace_refinement_suggestion_updates_request_without_generating(monk
     app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
     app.text_area[0].set_value("urban scenario")
-    app.selectbox[0].select("Local LLM").run()
+    app.selectbox[0].select("LLM").run()
     next(button for button in app.button if button.label == "Generate").click().run()
 
     next(button for button in app.button if button.label == "Use: Pedestrian occlusion").click().run()
@@ -226,11 +241,11 @@ def test_workspace_revision_loop_uses_generation_provider_without_patch_repair(m
     app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
     app.text_area[0].set_value("An ego vehicle follows a lead vehicle that suddenly brakes.")
-    app.selectbox[0].select("Local LLM").run()
+    app.selectbox[0].select("LLM").run()
     next(button for button in app.button if button.label == "Generate").click().run()
 
     assert app.session_state["spec"].scenario_name == "revision_candidate_1"
-    assert any("Scenario Revision Loop" in item.value for item in app.markdown)
+    assert any(expander.label == "Scenario Revision Loop" for expander in app.expander)
     revision_area = app.text_area[1]
     revision_area.set_value("Make this a shorter-gap variant.")
     next(button for button in app.button if button.label == "Create Variant").click().run()
@@ -252,7 +267,8 @@ def test_workspace_playback_panel_explains_preview_fallback_after_generation(tmp
     markdown = [item.value for item in app.markdown]
     assert "### Playback Esmini" in markdown
     assert "Playback Esmini unavailable." in [item.value for item in app.warning]
-    assert "2D Preview Fallback" in [item.value for item in app.info]
+    assert "No esmini-rendered media was generated." in [item.value for item in app.info]
+    assert "2D Preview Fallback" not in [item.value for item in app.info]
 
 
 def test_web_app_removes_legacy_generated_pipeline_helpers() -> None:
@@ -370,7 +386,7 @@ def test_advanced_page_exposes_candidate_acceptance_trace(monkeypatch, tmp_path:
     app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
     app.text_area[0].set_value("An ego vehicle follows a lead vehicle that suddenly brakes.")
-    app.selectbox[0].select("Local LLM").run()
+    app.selectbox[0].select("LLM").run()
     next(button for button in app.button if button.label == "Generate").click().run()
     app.session_state["active_page"] = "Advanced"
     app.run()
@@ -380,6 +396,43 @@ def test_advanced_page_exposes_candidate_acceptance_trace(monkeypatch, tmp_path:
     assert "accepted" in markdown
     assert "lead_vehicle_braking" in markdown
     assert "initial_gap_m" in markdown
+
+
+def test_advanced_page_exposes_candidate_fallback_trace(monkeypatch, tmp_path: Path) -> None:
+    from scenariocraft.core.schemas import ScenarioIntent
+    from scenariocraft.providers.intent import IntentProposal
+
+    class InvalidParameterProvider:
+        provider_name = "openai_compatible"
+
+        def propose_intent(self, request):
+            return IntentProposal(
+                intent=ScenarioIntent(
+                    template_id="lead_vehicle_braking",
+                    parameters={
+                        "scenario_name": "web_invalid_parameter_candidate",
+                        "reaction_point_x_m": -4.0,
+                    },
+                ),
+                rationale="The request matches lead vehicle braking but contains one invalid generated parameter.",
+                provider_name=self.provider_name,
+            )
+
+    from scenariocraft.providers.openai_intent import OpenAIIntentProvider
+
+    monkeypatch.setattr(OpenAIIntentProvider, "from_env", classmethod(lambda cls: InvalidParameterProvider()))
+    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app.session_state["output_root"] = str(tmp_path)
+    app.text_area[0].set_value("An ego vehicle follows a lead vehicle that suddenly brakes.")
+    app.selectbox[0].select("LLM").run()
+    next(button for button in app.button if button.label == "Generate").click().run()
+    app.session_state["active_page"] = "Advanced"
+    app.run()
+
+    markdown = "\n".join(item.value for item in app.markdown)
+    assert "Candidate fallback" in markdown
+    assert "provider parameters rejected" in markdown
+    assert "Discarded parameters" in markdown
 
 
 def test_workspace_controlled_cases_do_not_expose_repair_experiment_actions(tmp_path: Path) -> None:
@@ -398,14 +451,13 @@ def test_workspace_brief_uses_explicit_timing_metric_labels(tmp_path: Path) -> N
     app.session_state["output_root"] = str(tmp_path)
     next(button for button in app.button if button.label == "Generate").click().run()
 
-    labels = [metric.label for metric in app.metric]
-    assert "Target TTC" in labels
-    assert "Lead Time" in labels
-    assert "TTC" not in labels
-    assert "Estimated TTC" not in labels
-    captions = "\n".join(item.value for item in app.caption)
-    assert "Trigger threshold:" in captions
-    assert "Pedestrian to conflict:" in captions
+    markup = "\n".join(item.value for item in app.markdown)
+    assert 'class="workspace-brief-metrics"' in markup
+    assert "Target TTC" in markup
+    assert "Lead Time" in markup
+    assert "Estimated TTC" not in markup
+    assert "Trigger threshold:" in markup
+    assert "Pedestrian to conflict:" in markup
 
 
 def test_workspace_repair_experiments_are_not_controlled_case_options(tmp_path: Path) -> None:
@@ -422,24 +474,35 @@ def test_workspace_css_hides_streamlit_chrome_and_scopes_icon_controls() -> None
     app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=10).run()
     css = "\n".join(item.value for item in app.markdown if "<style>" in item.value)
 
-    assert "--sc-bg: #ffffff" in css
+    assert "--sc-bg: #fbfaf7" in css
     assert "--sc-text: #171717" in css
-    assert "--sc-blue: #006bff" in css
-    assert "--sc-radius-sm: 6px" in css
+    assert "--sc-blue: #ff4e4e" in css
+    assert "--sc-radius-sm: 10px" in css
     assert "--sc-focus-ring:" in css
     assert "--sc-font-sans:" in css
     assert "--sc-purple: #a000f8" in css
     assert 'header[data-testid="stHeader"] { display: none; }' in css
     assert '[data-testid="stDeployButton"] { display: none; }' in css
     assert ".st-key-workspace_toolbar" in css
+    assert ".workspace-provider-status" in css
+    assert ".workspace-toolbar-spacer" not in css
+    assert ".workspace-micro-status" in css
+    assert '.st-key-workspace_request [data-testid="stExpander"]' in css
+    assert ".workspace-loop-status" in css
+    assert ".workspace-brief-metrics" in css
+    assert 'align-items: center' in css
+    assert '[data-testid="stElementContainer"]:has(.workspace-provider-status)' in css
+    assert '[data-testid="stSelectbox"]' in css
     assert ".st-key-workspace_generate" in css
     assert ".st-key-workspace_repair" in css
+    assert ".st-key-workspace_shuffle_prompt" in css
+    assert '[data-testid="stColumn"]:first-child' in css
     assert f"--workspace-desktop-height: {WORKSPACE_DESKTOP_HEIGHT}" in css
     assert ".st-key-workspace_left_normal" in css
     assert ".st-key-workspace_left_repair" in css
     assert ".st-key-workspace_right" in css
-    assert "clamp(26rem, 32vw, 34rem)" in css
-    assert "clamp(30rem, 36vw, 38rem)" in css
+    assert "clamp(30rem, 34vw, 32rem)" in css
+    assert "clamp(31rem, 36vw, 34rem)" in css
     assert "grid-template-rows: repeat(2, minmax(0, 1fr))" in css
     assert ".st-key-workspace_preview_stage" in css
     assert ".st-key-workspace_playback_stage" in css
@@ -471,23 +534,37 @@ def test_workspace_css_hides_streamlit_chrome_and_scopes_icon_controls() -> None
     assert "height: auto" in css
 
 
-def test_workspace_status_is_one_textual_four_stage_grid() -> None:
+def test_workspace_status_is_loop_aware_pipeline_strip() -> None:
     app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=10).run()
     status_markup = next(
         item.value
         for item in app.markdown
-        if 'class="workspace-status-grid"' in item.value
+        if 'class="workspace-loop-status"' in item.value
     )
 
-    assert status_markup.count('class="status-item ') == 4
-    for label in ("Scenario", "Checks", "OSC Quality", "Simulation"):
+    assert "Candidate Generation · idle" in status_markup
+    assert status_markup.count('class="status-item ') == 6
+    for label in ("Intent", "Family", "Spec", "Build", "Checks", "Evidence"):
         assert label in status_markup
-    assert status_markup.count("</i>Not run</strong>") == 4
-    assert status_markup.count('tabindex="0"') == 4
-    assert status_markup.count("aria-label=") == 4
-    assert "Structured source: ScenarioSpec" in status_markup
-    assert "Current checker: ASAM QC" in status_markup
-    assert "Current simulator: esmini" in status_markup
+    assert "OSC Quality" not in status_markup
+    assert "Simulation" not in status_markup
+    assert status_markup.count('tabindex="0"') == 6
+    assert status_markup.count("aria-label=") == 6
+
+
+def test_workspace_brief_is_family_aware_for_oncoming_turn() -> None:
+    spec = resolve_scenario_intent(ScenarioIntent(template_id="oncoming_turn_across_path"))
+    vm = build_generated_scenario_view_model(spec)
+
+    assert vm.title == "Oncoming turn across path"
+    assert [(card.label, card.value) for card in vm.brief_metrics] == [
+        ("Ego", "50 km/h"),
+        ("Oncoming", "39 km/h"),
+        ("Target TTC", "2.0 s"),
+        ("Lead Time", "0.4 s"),
+    ]
+    assert "Pedestrian" not in [card.label for card in vm.brief_metrics]
+    assert "Pedestrian to conflict" not in vm.pedestrian_conflict_summary
 
 
 def test_workspace_uses_only_registered_controlled_cases() -> None:
@@ -584,17 +661,20 @@ def test_workspace_status_reports_prepared_check_failure(tmp_path: Path) -> None
     status = build_workspace_status_view_model(spec, prepared_case=prepared)
 
     values = {item.label: item.value for item in status.items}
+    assert status.loop_label == "PatchSpec Repair · required"
     assert values == {
-        "Scenario": "Generated",
+        "Intent": "Ready",
+        "Family": "Ready",
+        "Spec": "Ready",
+        "Build": "Ready",
         "Checks": "Failed",
-        "OSC Quality": "Waiting",
-        "Simulation": "Waiting",
+        "Evidence": "Waiting",
     }
     details = {item.label: item.detail for item in status.items}
-    assert "ScenarioSpec" in details["Scenario"]
+    assert "ScenarioSpec" in details["Spec"]
     assert "checks passed" in details["Checks"]
-    assert "ASAM QC" in details["OSC Quality"]
-    assert "esmini" in details["Simulation"]
+    assert "ASAM QC" in details["Evidence"]
+    assert "esmini" in details["Evidence"]
 
 
 def test_workspace_status_keeps_optional_tool_unavailability_explicit() -> None:
@@ -619,9 +699,7 @@ def test_workspace_status_keeps_optional_tool_unavailability_explicit() -> None:
     )
 
     items = {item.label: item for item in status.items}
-    assert items["OSC Quality"].value == "Unavailable"
-    assert items["OSC Quality"].tool_name == "ASAM QC"
-    assert items["OSC Quality"].detail.endswith("unavailable")
-    assert items["Simulation"].value == "Unavailable"
-    assert items["Simulation"].tool_name == "esmini"
-    assert items["Simulation"].detail.endswith("unavailable")
+    assert items["Evidence"].value == "Partial"
+    assert "ASAM QC" in items["Evidence"].detail
+    assert "unavailable" in items["Evidence"].detail
+    assert "esmini" in items["Evidence"].detail

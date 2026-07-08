@@ -63,8 +63,8 @@ def test_controlled_case_options_are_not_repair_experiment_cases() -> None:
 
 
 def test_workspace_defaults_to_provider_first_with_controlled_case_fallback() -> None:
-    assert WORKSPACE_PROVIDER_OPTIONS[0] == "Local LLM"
-    assert "Controlled Case" in WORKSPACE_PROVIDER_OPTIONS
+    assert WORKSPACE_PROVIDER_OPTIONS[0] == "LLM"
+    assert "Demo" in WORKSPACE_PROVIDER_OPTIONS
     assert "Demo / mock" not in WORKSPACE_PROVIDER_OPTIONS
 
 
@@ -83,7 +83,14 @@ def test_workspace_controlled_case_selector_lists_five_golden_families(tmp_path:
     assert not app.exception
     assert app.session_state["spec"].scenario_type == "cut_in"
     assert app.session_state["workspace_prepared_case"] is None
-    assert "Prepared Cut-in." in [item.value for item in app.caption]
+    assert any(
+        'class="workspace-micro-status"' in item.value
+        and "Candidate Generation · accepted · cut in" in item.value
+        for item in app.markdown
+    )
+    assert not any(
+        "Candidate Generation Loop · accepted" in item.value for item in app.caption
+    )
 
 
 def test_workspace_controlled_case_selection_updates_request_text(tmp_path: Path) -> None:
@@ -96,6 +103,22 @@ def test_workspace_controlled_case_selection_updates_request_text(tmp_path: Path
     assert app.session_state["selected_demo_case_id"] == "crossing_vehicle"
     assert app.session_state["scenario_text"] == expected
     assert "pedestrian occlusion" not in app.session_state["scenario_text"].lower()
+
+
+def test_workspace_controlled_case_selection_clears_stale_generated_result(tmp_path: Path) -> None:
+    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app.session_state["output_root"] = str(tmp_path)
+    next(button for button in app.button if button.label == "Generate").click().run()
+
+    assert app.session_state["spec"] is not None
+
+    app.selectbox[1].select("lead_vehicle_braking").run()
+
+    assert app.session_state["selected_demo_case_id"] == "lead_vehicle_braking"
+    assert app.session_state["spec"] is None
+    assert app.session_state["spec_json"] == ""
+    assert app.session_state["preview_path"] == ""
+    assert app.session_state["workspace_candidate_trace"] is None
 
 
 def test_workspace_default_request_comes_from_selected_controlled_case(tmp_path: Path) -> None:

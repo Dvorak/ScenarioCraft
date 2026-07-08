@@ -20,7 +20,7 @@ from scenariocraft.application.demo_cases import (
     run_demo_case,
 )
 from scenariocraft.application.controlled_cases import get_controlled_case
-from scenariocraft.application.generated_scenario import IntentGenerationOutcomeError
+from scenariocraft.application.candidate_generation import IntentGenerationOutcomeError
 from scenariocraft.core.build import BuildResult, build_openscenario
 from scenariocraft.rendering import generate_2d_preview
 from scenariocraft.external_tools import (
@@ -398,7 +398,7 @@ def _revise_current_scenario(provider_name: str, revision_request: str) -> None:
         _error("Scenario Revision Loop requires a revision request.")
         return
     if provider_name not in {"openai-compatible", "openai_compatible"}:
-        _error("Scenario Revision Loop uses the generation provider. Switch Provider to Local LLM.")
+        _error("Scenario Revision Loop uses the generation provider. Switch Provider to LLM.")
         return
     base_request = st.session_state.scenario_text.strip()
     st.session_state.scenario_text = f"{base_request}\n\nRevision request: {revision}"

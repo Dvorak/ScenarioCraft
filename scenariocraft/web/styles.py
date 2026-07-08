@@ -11,16 +11,16 @@ def inject_css() -> None:
         :root {
             --workspace-desktop-height: __WORKSPACE_DESKTOP_HEIGHT__;
             --workspace-media-aspect-ratio: __WORKSPACE_MEDIA_ASPECT_RATIO__;
-            --sc-bg: #ffffff;
-            --sc-bg-subtle: #fafafa;
+            --sc-bg: #fbfaf7;
+            --sc-bg-subtle: #f7f6f2;
             --sc-surface: #ffffff;
-            --sc-surface-subtle: #f2f2f2;
-            --sc-border: #eaeaea;
-            --sc-border-strong: #c9c9c9;
+            --sc-surface-subtle: #f4f2ed;
+            --sc-border: #e4e0d8;
+            --sc-border-strong: #cdc7bb;
             --sc-text: #171717;
             --sc-text-secondary: #4d4d4d;
             --sc-text-muted: #7d7d7d;
-            --sc-blue: #006bff;
+            --sc-blue: #ff4e4e;
             --sc-blue-bg: #f0f7ff;
             --sc-red: #ea001d;
             --sc-red-bg: #ffeeef;
@@ -30,14 +30,14 @@ def inject_css() -> None:
             --sc-green-bg: #ecfdec;
             --sc-purple: #a000f8;
             --sc-white: #ffffff;
-            --sc-radius-sm: 6px;
-            --sc-radius-md: 8px;
+            --sc-radius-sm: 10px;
+            --sc-radius-md: 12px;
             --sc-space-1: 0.25rem;
             --sc-space-2: 0.5rem;
             --sc-space-3: 0.75rem;
             --sc-space-4: 1rem;
-            --sc-shadow-raised: 0 1px 2px rgba(24, 35, 54, 0.04);
-            --sc-focus-ring: 0 0 0 2px var(--sc-bg), 0 0 0 4px var(--sc-blue);
+            --sc-shadow-raised: 0 1px 2px rgba(15, 15, 15, 0.04), 0 8px 24px -14px rgba(15, 15, 15, 0.10);
+            --sc-focus-ring: 0 0 0 2px var(--sc-bg), 0 0 0 4px color-mix(in srgb, var(--sc-blue) 46%, transparent);
             --sc-font-sans: "Geist Sans", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             --sc-font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
             color-scheme: light;
@@ -50,21 +50,21 @@ def inject_css() -> None:
             font-family: var(--sc-font-sans);
         }
         .block-container {
-            max-width: 1512px;
-            padding: 0.5rem 0.8rem 1rem;
+            max-width: 1500px;
+            padding: 1.05rem 1.1rem 1.2rem;
             margin-top: 0.45rem;
-            border: 1px solid #e5e7ec;
-            border-radius: 8px;
-            background: rgba(255,255,255,.98);
-            box-shadow: 0 2px 10px rgba(30,40,65,.04);
+            border: 1px solid var(--sc-border);
+            border-radius: var(--sc-radius-md);
+            background: color-mix(in srgb, var(--sc-bg) 88%, #fff);
+            box-shadow: 0 2px 12px rgba(30,40,65,.035);
         }
         h2 { margin-bottom: 0.2rem; letter-spacing: 0; }
         h3 {
             color: var(--sc-text);
-            font-size: 0.88rem !important;
+            font-size: 0.84rem !important;
             font-weight: 600 !important;
-            line-height: 1.5 !important;
-            margin: 0 0 0.72rem 0 !important;
+            line-height: 1.35 !important;
+            margin: 0 0 0.62rem 0 !important;
             letter-spacing: 0;
         }
         .st-key-workspace_left_normal,
@@ -82,15 +82,15 @@ def inject_css() -> None:
         }
         [data-testid="stHorizontalBlock"]:has(.st-key-workspace_left_normal)
         > [data-testid="stColumn"]:has(.st-key-workspace_left_normal) {
-            flex: 0 1 clamp(26rem, 32vw, 34rem) !important;
-            width: clamp(26rem, 32vw, 34rem) !important;
-            min-width: 24rem;
+            flex: 0 1 clamp(30rem, 34vw, 32rem) !important;
+            width: clamp(30rem, 34vw, 32rem) !important;
+            min-width: 29rem;
         }
         [data-testid="stHorizontalBlock"]:has(.st-key-workspace_left_repair)
         > [data-testid="stColumn"]:has(.st-key-workspace_left_repair) {
-            flex: 0 1 clamp(30rem, 36vw, 38rem) !important;
-            width: clamp(30rem, 36vw, 38rem) !important;
-            min-width: 27rem;
+            flex: 0 1 clamp(31rem, 36vw, 34rem) !important;
+            width: clamp(31rem, 36vw, 34rem) !important;
+            min-width: 29rem;
         }
         [data-testid="stHorizontalBlock"]:has(.st-key-workspace_left_normal)
         > [data-testid="stColumn"]:has(.st-key-workspace_right),
@@ -213,30 +213,94 @@ def inject_css() -> None:
             object-fit: contain;
         }
         .st-key-workspace_toolbar [data-testid="stHorizontalBlock"] {
-            align-items: end;
-            flex-wrap: wrap;
-            gap: var(--sc-space-2);
+            align-items: center;
+            flex-wrap: nowrap;
+            gap: 0.48rem;
         }
-        .st-key-workspace_toolbar [data-testid="column"]:first-child {
-            flex: 1 1 10rem !important;
-            min-width: 10rem;
+        .st-key-workspace_toolbar [data-testid="stVerticalBlock"],
+        .st-key-workspace_toolbar [data-testid="stElementContainer"],
+        .st-key-workspace_toolbar [data-testid="stMarkdownContainer"] {
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
         }
-        .st-key-workspace_toolbar [data-testid="column"]:not(:first-child) {
-            flex: 0 0 2.75rem !important;
-            width: 2.75rem !important;
-            min-width: 2.75rem;
+        .st-key-workspace_toolbar [data-testid="stElementContainer"]:has(.workspace-provider-status) {
+            width: 100% !important;
+            height: 2.62rem !important;
+            min-height: 2.62rem !important;
+            display: flex;
+            align-items: center;
         }
+        .st-key-workspace_toolbar [data-testid="stElementContainer"]:has(.workspace-provider-status)
+        [data-testid="stMarkdownContainer"] {
+            width: 100% !important;
+        }
+        .st-key-workspace_toolbar [data-testid="stSelectbox"],
+        .st-key-workspace_toolbar [data-testid="stButton"] {
+            height: 2.62rem;
+            min-height: 2.62rem;
+            display: flex;
+            align-items: center;
+        }
+        .st-key-workspace_toolbar [data-testid="column"]:first-child,
+        .st-key-workspace_toolbar [data-testid="stColumn"]:first-child {
+            flex: 0 1 4.6rem !important;
+            width: 4.6rem !important;
+            min-width: 4.6rem;
+        }
+        .st-key-workspace_toolbar [data-testid="column"]:nth-child(2),
+        .st-key-workspace_toolbar [data-testid="stColumn"]:nth-child(2) {
+            flex: 1 1 auto !important;
+            width: auto !important;
+            min-width: 8rem;
+            max-width: none !important;
+        }
+        .st-key-workspace_toolbar [data-testid="column"]:nth-child(n+3),
+        .st-key-workspace_toolbar [data-testid="stColumn"]:nth-child(n+3) {
+            flex: 0 0 2.5rem !important;
+            width: 2.62rem !important;
+            min-width: 2.5rem;
+        }
+        .workspace-provider-status {
+            width: 100%;
+            height: 2.62rem;
+            min-height: 2.62rem;
+            display: flex;
+            align-items: center;
+            padding: 0 0.9rem;
+            border: 1px solid var(--sc-border);
+            border-radius: var(--sc-radius-sm);
+            background: var(--sc-bg-subtle);
+            color: var(--sc-text-muted);
+            font-size: 0.82rem;
+            font-weight: 520;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .workspace-micro-status {
+            min-height: 1rem;
+            margin: -0.08rem 0 0.38rem 0;
+            color: var(--sc-text-muted);
+            font-size: 0.74rem;
+            line-height: 1.05rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .st-key-workspace_shuffle_prompt button,
         .st-key-workspace_generate button,
         .st-key-workspace_repair button {
-            width: 2.75rem;
-            min-width: 2.75rem;
-            height: 2.75rem;
-            min-height: 2.75rem;
+            width: 2.5rem;
+            min-width: 2.5rem;
+            height: 2.62rem;
+            min-height: 2.62rem;
             padding: 0;
             border-radius: var(--sc-radius-sm);
         }
+        .st-key-workspace_shuffle_prompt button p,
         .st-key-workspace_generate button p,
         .st-key-workspace_repair button p { font-size: 0; }
+        .st-key-workspace_shuffle_prompt button span,
         .st-key-workspace_generate button span,
         .st-key-workspace_repair button span { font-size: 1.2rem; }
         [data-testid="stVerticalBlockBorderWrapper"] {
@@ -297,17 +361,29 @@ def inject_css() -> None:
         }
         [data-testid="stImage"] img { object-fit: contain; }
         .st-key-workspace_status > div { padding-top: 0.1rem; padding-bottom: 0.1rem; }
+        .workspace-loop-status {
+            display: grid;
+            gap: 0.44rem;
+        }
+        .workspace-loop-title {
+            color: var(--sc-text-muted);
+            font-size: 0.7rem;
+            line-height: 1rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
         .workspace-status-grid {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            column-gap: var(--sc-space-4);
-            row-gap: var(--sc-space-2);
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            column-gap: 0.62rem;
+            row-gap: 0.36rem;
             align-items: start;
         }
         .status-item {
             display: flex;
-            flex-direction: column;
-            gap: var(--sc-space-1);
+            align-items: center;
+            gap: 0.36rem;
             min-width: 0;
             border-radius: var(--sc-radius-sm);
             cursor: help;
@@ -315,30 +391,113 @@ def inject_css() -> None:
             outline-offset: 3px;
         }
         .status-item:focus-visible { box-shadow: var(--sc-focus-ring); }
-        .status-label { color: var(--sc-text-muted); font-size: 0.72rem; line-height: 1.15; white-space: nowrap; }
+        .status-label {
+            color: var(--sc-text-muted);
+            font-size: 0.64rem;
+            line-height: 1.05;
+            white-space: nowrap;
+            min-width: 2.75rem;
+        }
         @media (prefers-color-scheme: dark) {
             .status-label { color: var(--sc-text-muted); }
         }
         .status-item strong {
             display: flex;
             align-items: center;
-            gap: var(--sc-space-2);
-            font-size: 0.9rem;
+            gap: 0.3rem;
+            font-size: 0.74rem;
             line-height: 1.15;
             font-weight: 650;
             white-space: nowrap;
+            min-width: 0;
         }
         .status-item strong i {
             display: block;
             flex: 0 0 auto;
-            width: 0.46rem;
-            height: 0.46rem;
+            width: 0.36rem;
+            height: 0.36rem;
             border-radius: 50%;
             background: var(--sc-border-strong);
         }
         .status-passed strong i { background: var(--sc-green); }
         .status-failed strong i { background: var(--sc-red); }
         .status-waiting strong i { background: var(--sc-amber); }
+        .workspace-brief {
+            display: grid;
+            gap: 0.54rem;
+        }
+        .workspace-brief-title {
+            color: var(--sc-text);
+            font-size: 0.95rem;
+            line-height: 1.2;
+            font-weight: 650;
+            overflow-wrap: anywhere;
+        }
+        .workspace-brief-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.4rem;
+        }
+        .workspace-brief-metric {
+            min-width: 0;
+            padding: 0.44rem 0.52rem;
+            border: 1px solid var(--sc-border);
+            border-radius: var(--sc-radius-sm);
+            background: var(--sc-bg-subtle);
+            outline: 2px solid transparent;
+            outline-offset: 2px;
+            cursor: help;
+        }
+        .workspace-brief-metric:focus-visible { box-shadow: var(--sc-focus-ring); }
+        .workspace-brief-metric span {
+            display: block;
+            color: var(--sc-text-muted);
+            font-size: 0.64rem;
+            line-height: 1.05;
+            margin-bottom: 0.28rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .workspace-brief-metric strong {
+            display: block;
+            color: var(--sc-text);
+            font-size: 0.86rem;
+            line-height: 1.15;
+            font-weight: 650;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .workspace-brief-details {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.32rem;
+            color: var(--sc-text-muted);
+            font-size: 0.68rem;
+            line-height: 1.15;
+        }
+        .workspace-brief-details span {
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            padding: 0.24rem 0.38rem;
+            border: 1px solid var(--sc-border);
+            border-radius: 999px;
+            background: var(--sc-bg-subtle);
+        }
+        .st-key-workspace_request [data-testid="stExpander"] {
+            border-color: var(--sc-border);
+            border-radius: var(--sc-radius-sm);
+            box-shadow: none;
+            margin-top: 0.55rem;
+        }
+        .st-key-workspace_request [data-testid="stExpander"] summary {
+            min-height: 2.2rem;
+            font-size: 0.78rem;
+            color: var(--sc-text-secondary);
+        }
         .repair-failure-list { display: grid; gap: var(--sc-space-2); }
         .repair-failure {
             display: grid;

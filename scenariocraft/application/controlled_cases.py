@@ -84,7 +84,7 @@ CONTROLLED_CASES: tuple[ControlledCase, ...] = (
         template_id="oncoming_turn_across_path",
         display_name="Oncoming turn across path",
         description="Intersection scenario where an oncoming vehicle turns across the ego path.",
-        seed=105,
+        seed=1,
         source_text_variants=(
             "An oncoming vehicle turns left across the ego vehicle path at an urban intersection.",
             "Create a city intersection scenario where an oncoming car turns across ego's lane.",

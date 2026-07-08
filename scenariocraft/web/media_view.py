@@ -29,9 +29,14 @@ def render_workspace_runtime_media(output_dir: Path, playback_result: object) ->
         frames = _verified_esmini_frame_paths(playback_result, output_dir)
         if frames:
             st.image(str(frames[0]), width="stretch")
-    elif playback_result.playback_kind in {"preview_fallback_gif", "preview_static_image"}:
+    elif playback_result.playback_kind == "preview_fallback_gif":
         st.warning("Playback Esmini unavailable.")
         st.info("2D Preview Fallback")
+        if playback_result.playback_fallback_reason:
+            st.caption(playback_result.playback_fallback_reason)
+    elif playback_result.playback_kind == "preview_static_image":
+        st.warning("Playback Esmini unavailable.")
+        st.info("No esmini-rendered media was generated.")
         if playback_result.playback_fallback_reason:
             st.caption(playback_result.playback_fallback_reason)
     else:
