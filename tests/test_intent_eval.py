@@ -113,9 +113,21 @@ def test_default_eval_cases_include_supported_unsupported_and_clarification() ->
 
     cases = default_intent_eval_cases()
     statuses = {case.expected_status for case in cases}
+    supported_templates = {
+        case.expected_template_id
+        for case in cases
+        if case.expected_status == "supported" and case.expected_template_id is not None
+    }
 
     assert len(cases) >= 20
     assert {"supported", "unsupported", "clarification_required"} <= statuses
+    assert supported_templates == {
+        "pedestrian_occlusion",
+        "lead_vehicle_braking",
+        "cut_in",
+        "crossing_vehicle",
+        "oncoming_turn_across_path",
+    }
     assert any("highway cut-in" in case.user_text.lower() for case in cases)
     assert any("child" in case.user_text.lower() and "delivery van" in case.user_text.lower() for case in cases)
     assert any("前车" in case.user_text for case in cases)

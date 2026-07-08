@@ -13,6 +13,9 @@ class OpenAIRepairProviderConfigurationError(RuntimeError):
     """Raised when the OpenAI repair provider cannot be configured locally."""
 
 
+DEFAULT_OPENAI_REPAIR_TIMEOUT_S = 20.0
+
+
 _OPERATION_SCHEMAS: dict[str, dict[str, object]] = {
     "set_actor_pose": {
         "type": "object",
@@ -101,11 +104,18 @@ class OpenAIRepairProvider:
 
     provider_name = "openai"
 
-    def __init__(self, *, model: str, client: object | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        model: str,
+        client: object | None = None,
+        timeout_s: float = DEFAULT_OPENAI_REPAIR_TIMEOUT_S,
+    ) -> None:
         if not isinstance(model, str) or not model.strip():
             raise OpenAIRepairProviderConfigurationError("model must be a non-empty string.")
         self.model = model.strip()
-        self._client = client if client is not None else self._create_client()
+        self.timeout_s = _provider_timeout(timeout_s)
+        self._client = client if client is not None else self._create_client(timeout_s=self.timeout_s)
 
     def propose_patch(self, request: RepairRequest) -> RepairProposal:
         if not isinstance(request, RepairRequest):
@@ -165,7 +175,7 @@ class OpenAIRepairProvider:
         return RepairProposal(patch=patch, rationale=rationale.strip(), provider_name=self.provider_name)
 
     @staticmethod
-    def _create_client() -> object:
+    def _create_client(*, timeout_s: float) -> object:
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
             raise OpenAIRepairProviderConfigurationError(
@@ -177,7 +187,7 @@ class OpenAIRepairProvider:
             raise OpenAIRepairProviderConfigurationError(
                 'The OpenAI SDK is not installed; install the "openai" optional dependency.'
             ) from exc
-        return OpenAI(api_key=api_key)
+        return OpenAI(api_key=api_key, timeout=timeout_s)
 
     @staticmethod
     def _request_payload(request: RepairRequest) -> dict[str, object]:
@@ -254,3 +264,11 @@ class OpenAIRepairProvider:
 
     def _decline(self, rationale: str) -> RepairProposal:
         return RepairProposal(patch=None, rationale=rationale, provider_name=self.provider_name)
+
+
+def _provider_timeout(value: object) -> float:
+    try:
+        timeout_s = float(value)
+    except (TypeError, ValueError):
+        return DEFAULT_OPENAI_REPAIR_TIMEOUT_S
+    return timeout_s if timeout_s > 0.0 else DEFAULT_OPENAI_REPAIR_TIMEOUT_S

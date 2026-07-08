@@ -40,6 +40,16 @@ def test_openai_provider_satisfies_runtime_protocol() -> None:
     assert isinstance(provider, RepairProvider)
 
 
+def test_openai_repair_provider_records_bounded_timeout() -> None:
+    provider = OpenAIRepairProvider(
+        model="test-model",
+        client=FakeOpenAIClient(_response(None)),
+        timeout_s=6.5,
+    )
+
+    assert provider.timeout_s == 6.5
+
+
 def test_request_contains_only_structured_repair_context_and_guardrails() -> None:
     client = FakeOpenAIClient(_response(None))
     request = _request()

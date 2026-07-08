@@ -119,6 +119,7 @@ def test_openai_intent_provider_sends_revision_context_to_model() -> None:
     call = client.responses.calls[0]
     assert call["model"] == "local-qwen"
     assert "json_schema" in str(call["text"])
+    assert call["temperature"] == 0
 
 
 def test_openai_intent_provider_refuses_unknown_template() -> None:
@@ -298,6 +299,50 @@ def test_openai_intent_provider_falls_back_to_chat_completions_for_local_models(
     assert proposal.intent.template_id == "pedestrian_occlusion"
     assert client.chat.completions.calls
     assert client.chat.completions.calls[0]["response_format"] == {"type": "json_object"}
+    assert client.chat.completions.calls[0]["temperature"] == 0
+
+
+def test_openai_intent_provider_corrects_clear_template_mismatch_against_capability_tree() -> None:
+    payload = json.dumps(
+        {
+            "intent": {"template_id": "cut_in"},
+            "rationale": "The model selected a lane-change family by mistake.",
+        }
+    )
+    request = IntentRequest(
+        user_text=(
+            "Create an urban same-lane scenario where the ego car follows a lead vehicle "
+            "and the lead vehicle suddenly brakes."
+        ),
+        available_templates=("lead_vehicle_braking", "cut_in"),
+        template_contract_summary={
+            "lead_vehicle_braking": {
+                "description": "Urban same-lane following scenario where a lead vehicle brakes ahead of ego.",
+                "capability": {
+                    "interaction_family": "lead_vehicle_braking",
+                    "aliases": ["ego follows lead vehicle that brakes", "same lane emergency braking"],
+                    "semantic_slots": ["lead_vehicle", "following_relation", "braking_event"],
+                    "supported_variants": ["urban same-lane following"],
+                },
+            },
+            "cut_in": {
+                "description": "Adjacent-lane vehicle cuts into the ego lane.",
+                "capability": {
+                    "interaction_family": "cut_in",
+                    "aliases": ["adjacent lane cut-in", "vehicle merges into ego lane"],
+                    "semantic_slots": ["adjacent_lane", "lane_change", "merge_point"],
+                    "supported_variants": ["multi-lane same-direction cut-in"],
+                },
+            },
+        },
+    )
+    provider = OpenAIIntentProvider(model="local-qwen", client=_FakeClient(payload))
+
+    proposal = provider.propose_intent(request)
+
+    assert proposal.intent is not None
+    assert proposal.intent.template_id == "lead_vehicle_braking"
+    assert proposal.intent.metadata["provider_template_id"] == "cut_in"
 
 
 def test_openai_intent_provider_refuses_invalid_json() -> None:
@@ -324,11 +369,13 @@ def test_openai_intent_provider_reads_local_llm_env_aliases(monkeypatch) -> None
     monkeypatch.setenv("SCENARIOCRAFT_LOCAL_LLM_API_KEY", "local")
     monkeypatch.setenv("SCENARIOCRAFT_LOCAL_LLM_BASE_URL", "http://localhost:11434/v1")
     monkeypatch.setenv("SCENARIOCRAFT_LOCAL_LLM_MODEL", "qwen2.5:7b")
+    monkeypatch.setenv("SCENARIOCRAFT_LOCAL_LLM_TIMEOUT_S", "7.5")
 
     provider = OpenAIIntentProvider.from_env(client=_FakeClient("{}"))
 
     assert provider.model == "qwen2.5:7b"
     assert provider.base_url == "http://localhost:11434/v1"
+    assert provider.timeout_s == 7.5
 
 
 def test_openai_intent_provider_auto_discovers_ollama_model(monkeypatch) -> None:

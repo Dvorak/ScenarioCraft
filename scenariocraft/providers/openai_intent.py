@@ -31,6 +31,9 @@ class LocalLlmConfigurationHint:
     message: str
 
 
+DEFAULT_OPENAI_COMPATIBLE_TIMEOUT_S = 20.0
+
+
 def local_openai_compatible_env() -> dict[str, str | None]:
     """Read hosted/local OpenAI-compatible intent provider environment.
 
@@ -53,7 +56,11 @@ def local_openai_compatible_env() -> dict[str, str | None]:
         or os.environ.get("OPENAI_API_KEY")
         or ("local" if base_url else None)
     )
-    return {"base_url": base_url, "model": model, "api_key": api_key}
+    timeout_s = (
+        os.environ.get("SCENARIOCRAFT_LOCAL_LLM_TIMEOUT_S")
+        or os.environ.get("SCENARIOCRAFT_OPENAI_TIMEOUT_S")
+    )
+    return {"base_url": base_url, "model": model, "api_key": api_key, "timeout_s": timeout_s}
 
 
 def local_llm_configuration_hint(*, timeout_s: float = 0.35) -> LocalLlmConfigurationHint:
@@ -128,6 +135,16 @@ def _ollama_model_names(base_url: str, *, timeout_s: float) -> tuple[str, ...]:
     return tuple(names)
 
 
+def _provider_timeout(value: object) -> float:
+    if value is None or value == "":
+        return DEFAULT_OPENAI_COMPATIBLE_TIMEOUT_S
+    try:
+        timeout_s = float(value)
+    except (TypeError, ValueError):
+        return DEFAULT_OPENAI_COMPATIBLE_TIMEOUT_S
+    return timeout_s if timeout_s > 0.0 else DEFAULT_OPENAI_COMPATIBLE_TIMEOUT_S
+
+
 _SYSTEM_PROMPT = """Return only a structured ScenarioIntent proposal.
 You are a semantic router onto ScenarioCraft's registered template capability
 tree. Use the supplied template descriptions, aliases, semantic slots, supported
@@ -141,6 +158,9 @@ default, sample, or reject concrete parameter candidates.
 Choose one available template when the request clearly matches that scenario
 family, even if optional parameters are missing. Deterministic resolvers will
 fill safe defaults or seeded samples.
+Same-lane following with a lead/front vehicle that brakes maps to
+lead_vehicle_braking. Only choose cut_in when the request describes an adjacent
+lane vehicle cutting in, merging, or changing lanes into the ego lane.
 Do not choose the nearest template when the interaction family is unsupported.
 For vague but potentially supportable requests, return clarification_required
 and include refinement_suggestions that rewrite the user request into concrete
@@ -173,13 +193,19 @@ class OpenAIIntentProvider:
         client: object | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
+        timeout_s: float = DEFAULT_OPENAI_COMPATIBLE_TIMEOUT_S,
     ) -> None:
         if not isinstance(model, str) or not model.strip():
             raise OpenAIIntentProviderConfigurationError("model must be a non-empty string.")
         self.model = model.strip()
         self.base_url = base_url.strip() if isinstance(base_url, str) and base_url.strip() else None
+        self.timeout_s = _provider_timeout(timeout_s)
         self._api_key = api_key
-        self._client = client if client is not None else self._create_client(api_key=api_key, base_url=base_url)
+        self._client = client if client is not None else self._create_client(
+            api_key=api_key,
+            base_url=base_url,
+            timeout_s=self.timeout_s,
+        )
 
     @classmethod
     def from_env(cls, *, client: object | None = None) -> "OpenAIIntentProvider":
@@ -187,6 +213,7 @@ class OpenAIIntentProvider:
         model = env["model"]
         api_key = env["api_key"]
         base_url = env["base_url"]
+        timeout_s = _provider_timeout(env.get("timeout_s"))
         if not model:
             hint = local_llm_configuration_hint(timeout_s=0.75)
             if hint.reachable and hint.model_names:
@@ -198,7 +225,7 @@ class OpenAIIntentProvider:
                     "SCENARIOCRAFT_LOCAL_LLM_MODEL or SCENARIOCRAFT_INTENT_MODEL is required for the "
                     "OpenAI-compatible intent provider when Ollama auto-discovery is unavailable."
                 )
-        return cls(model=model, client=client, api_key=api_key, base_url=base_url)
+        return cls(model=model, client=client, api_key=api_key, base_url=base_url, timeout_s=timeout_s)
 
     def propose_intent(self, request: IntentRequest) -> IntentProposal:
         if not isinstance(request, IntentRequest):
@@ -262,6 +289,12 @@ class OpenAIIntentProvider:
                 f"OpenAI-compatible response used unknown template_id: {raw_template_id}.",
                 nearest_template_candidates=nearest_template_candidates,
             )
+        request_consistent_template_id = _request_consistent_template_id(
+            coerced_template_id,
+            request,
+        )
+        if request_consistent_template_id is not None:
+            coerced_template_id = request_consistent_template_id
         if coerced_template_id != raw_template_id:
             metadata = intent_payload.get("metadata")
             metadata = dict(metadata) if isinstance(metadata, Mapping) else {}
@@ -275,7 +308,7 @@ class OpenAIIntentProvider:
         return IntentProposal(intent=intent, rationale=rationale.strip(), provider_name=self.provider_name)
 
     @staticmethod
-    def _create_client(*, api_key: str | None, base_url: str | None) -> object:
+    def _create_client(*, api_key: str | None, base_url: str | None, timeout_s: float) -> object:
         if not api_key:
             raise OpenAIIntentProviderConfigurationError(
                 "OPENAI_API_KEY or SCENARIOCRAFT_OPENAI_API_KEY is required unless a client is injected."
@@ -286,7 +319,7 @@ class OpenAIIntentProvider:
             raise OpenAIIntentProviderConfigurationError(
                 'The OpenAI SDK is not installed; install the "openai" optional dependency.'
             ) from exc
-        kwargs: dict[str, str] = {"api_key": api_key}
+        kwargs: dict[str, object] = {"api_key": api_key, "timeout": timeout_s}
         if base_url:
             kwargs["base_url"] = base_url
         return OpenAI(**kwargs)
@@ -297,6 +330,7 @@ class OpenAIIntentProvider:
                 model=self.model,
                 input=messages,
                 text={"format": self._response_format()},
+                temperature=0,
             )
         except Exception:
             chat = getattr(self._client, "chat", None)
@@ -307,6 +341,7 @@ class OpenAIIntentProvider:
                 model=self.model,
                 messages=messages,
                 response_format={"type": "json_object"},
+                temperature=0,
             )
 
     @staticmethod
@@ -462,6 +497,60 @@ def _coerced_template_id(raw_template_id: str, request: IntentRequest) -> str | 
             best_score = score
             best_template = template_id
     return best_template if best_score >= 2 else None
+
+
+def _request_consistent_template_id(template_id: str, request: IntentRequest) -> str | None:
+    """Correct clear provider/template mismatches against the capability tree.
+
+    Small local models can occasionally select a known but semantically wrong
+    template. This guard is intentionally conservative: it only changes the
+    selected template when the user text has a substantially stronger token
+    overlap with another registered capability.
+    """
+
+    if template_id not in request.available_templates:
+        return None
+    request_tokens = _normalized_tokens(request.user_text)
+    if not request_tokens:
+        return None
+    scores = {
+        candidate: _template_match_score(request_tokens, candidate, request)
+        for candidate in request.available_templates
+    }
+    selected_score = scores.get(template_id, 0)
+    best_template, best_score = max(scores.items(), key=lambda item: item[1])
+    if best_template == template_id:
+        return None
+    if best_score >= 3 and best_score >= selected_score + 2:
+        return best_template
+    return None
+
+
+def _template_match_score(
+    request_tokens: set[str],
+    template_id: str,
+    request: IntentRequest,
+) -> int:
+    summary = request.template_contract_summary.get(template_id, {})
+    candidates = [template_id]
+    if isinstance(summary, Mapping):
+        description = summary.get("description")
+        if isinstance(description, str):
+            candidates.append(description)
+        capability = summary.get("capability")
+        if isinstance(capability, Mapping):
+            for key in ("interaction_family", "description"):
+                value = capability.get(key)
+                if isinstance(value, str):
+                    candidates.append(value)
+            for key in ("aliases", "semantic_slots", "supported_variants"):
+                values = capability.get(key)
+                if isinstance(values, list):
+                    candidates.extend(str(value) for value in values)
+    return max(
+        (_token_overlap_score(request_tokens, _normalized_tokens(candidate)) for candidate in candidates),
+        default=0,
+    )
 
 
 def _normalized_key(value: str) -> str:

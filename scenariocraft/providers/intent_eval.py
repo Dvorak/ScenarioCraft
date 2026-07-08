@@ -149,6 +149,36 @@ def default_intent_eval_cases() -> tuple[IntentEvalCase, ...]:
         IntentEvalCase("zh_ttc_braking", "前车急刹，目标最小 TTC 大约 2 秒。", "lead_vehicle_braking"),
         IntentEvalCase("en_clear_pedestrian", "A clear dry urban pedestrian occlusion near a parked van.", "pedestrian_occlusion"),
         IntentEvalCase(
+            "en_cut_in",
+            "A vehicle in the adjacent lane cuts into the ego lane on an urban multilane road.",
+            "cut_in",
+        ),
+        IntentEvalCase(
+            "zh_cut_in",
+            "生成一个城市多车道场景，旁边车道车辆突然并入自车车道。",
+            "cut_in",
+        ),
+        IntentEvalCase(
+            "en_crossing_vehicle",
+            "An ego vehicle approaches an intersection while a crossing vehicle enters its path.",
+            "crossing_vehicle",
+        ),
+        IntentEvalCase(
+            "zh_crossing_vehicle",
+            "生成一个城市路口场景，自车接近路口，横向车辆进入自车路径。",
+            "crossing_vehicle",
+        ),
+        IntentEvalCase(
+            "en_oncoming_turn",
+            "An oncoming vehicle turns left across the ego vehicle path at an urban intersection.",
+            "oncoming_turn_across_path",
+        ),
+        IntentEvalCase(
+            "zh_oncoming_turn",
+            "生成一个城市路口对向车转弯场景，对向车辆左转穿过自车路径。",
+            "oncoming_turn_across_path",
+        ),
+        IntentEvalCase(
             "unsupported_highway_cut_in",
             "Generate a highway cut-in with three lanes.",
             expected_status="unsupported",
@@ -160,8 +190,8 @@ def default_intent_eval_cases() -> tuple[IntentEvalCase, ...]:
             expected_status="unsupported",
             expected_nearest_template_candidates=("lead_vehicle_braking",),
         ),
-        IntentEvalCase("unsupported_intersection", "An intersection crossing vehicle violates the red light.", expected_status="unsupported"),
-        IntentEvalCase("unsupported_oncoming_turn", "An oncoming vehicle turns left across ego at an intersection.", expected_status="unsupported"),
+        IntentEvalCase("unsupported_signalized_intersection", "A signalized red-light violation with traffic light phases.", expected_status="unsupported"),
+        IntentEvalCase("unsupported_complex_unprotected_turn", "A multi-lane unprotected turn with traffic signals and pedestrians.", expected_status="unsupported"),
         IntentEvalCase("unsupported_construction", "A work-zone lane closure with cones and a police vehicle.", expected_status="unsupported"),
         IntentEvalCase("unsupported_roundabout", "A multi-agent roundabout negotiation scenario.", expected_status="unsupported"),
         IntentEvalCase("unsupported_rear_end", "A vehicle behind ego rear-ends the ego vehicle.", expected_status="unsupported"),
