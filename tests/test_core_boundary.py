@@ -8,6 +8,7 @@ def test_core_boundary_manifest_names_stable_extraction_groups() -> None:
         CORE_PACKAGE_MODULES,
         DELIVERY_ADAPTER_MODULES,
         EXTERNAL_TOOL_MODULES,
+        FORBIDDEN_EXTERNAL_TOOL_IMPORT_PATTERNS,
         TOOL_SEMANTIC_GROUPS,
     )
 
@@ -25,17 +26,31 @@ def test_core_boundary_manifest_names_stable_extraction_groups() -> None:
     assert "scenariocraft.rendering" in EXTERNAL_TOOL_MODULES
     assert "scenariocraft.providers.openai_repair" in EXTERNAL_TOOL_MODULES
     assert TOOL_SEMANTIC_GROUPS["build"] == (
+        "scenariocraft.core.build.fallback_xml_writer",
         "scenariocraft.core.build.layout_adapter",
+        "scenariocraft.core.build.road_binding",
         "scenariocraft.core.build.scenario_builder",
+        "scenariocraft.core.build.storyboard_compiler",
+        "scenariocraft.core.build.trajectory_compiler",
+        "scenariocraft.core.build.trigger_compiler",
     )
     assert "scenariocraft.rendering.preview_2d" in TOOL_SEMANTIC_GROUPS["rendering"]
+    assert "scenariocraft.rendering.preview_style" in TOOL_SEMANTIC_GROUPS["rendering"]
     assert "scenariocraft.rendering.report" in TOOL_SEMANTIC_GROUPS["rendering"]
     assert "scenariocraft.core.metrics.timing" in TOOL_SEMANTIC_GROUPS["metrics"]
-    assert TOOL_SEMANTIC_GROUPS["checks"] == ("scenariocraft.core.checks.structural",)
+    assert "scenariocraft.core.checks.structural" in TOOL_SEMANTIC_GROUPS["checks"]
+    assert "scenariocraft.core.checks.artifact_consistency" in TOOL_SEMANTIC_GROUPS["checks"]
+    assert "scenariocraft.core.checks.crossing_vehicle" in TOOL_SEMANTIC_GROUPS["checks"]
+    assert "scenariocraft.core.checks.family" in TOOL_SEMANTIC_GROUPS["checks"]
+    assert "scenariocraft.core.checks.xosc_artifact_reader" in TOOL_SEMANTIC_GROUPS["checks"]
+    assert "scenariocraft.providers.openai_intent" in TOOL_SEMANTIC_GROUPS["providers"]
+    assert "scenariocraft.core.roads.urban_four_way_intersection" in TOOL_SEMANTIC_GROUPS["roads"]
+    assert "scenariocraft.core.templates.cut_in" in TOOL_SEMANTIC_GROUPS["templates"]
     assert TOOL_SEMANTIC_GROUPS["external_tools"] == (
         "scenariocraft.external_tools.asam_qc",
         "scenariocraft.external_tools.esmini",
     )
+    assert "scenariocraft.providers" in FORBIDDEN_EXTERNAL_TOOL_IMPORT_PATTERNS
 
 
 def test_core_boundary_manifest_has_no_missing_current_modules() -> None:
@@ -60,6 +75,34 @@ def test_core_candidates_remain_free_of_delivery_runtime_and_provider_imports() 
         for path in paths:
             source = path.read_text(encoding="utf-8")
             matches = [pattern for pattern in FORBIDDEN_CORE_IMPORT_PATTERNS if pattern in source]
+            if matches:
+                offenders[str(path)] = matches
+
+    assert offenders == {}
+
+
+def test_provider_external_tool_and_rendering_boundaries_are_directional() -> None:
+    from scenariocraft.tooling.boundary_manifest import (
+        FORBIDDEN_EXTERNAL_TOOL_IMPORT_PATTERNS,
+        FORBIDDEN_PROVIDER_IMPORT_PATTERNS,
+        FORBIDDEN_RENDERING_IMPORT_PATTERNS,
+        TOOL_SEMANTIC_GROUPS,
+    )
+
+    groups = {
+        "providers": (TOOL_SEMANTIC_GROUPS["providers"], FORBIDDEN_PROVIDER_IMPORT_PATTERNS),
+        "external_tools": (
+            TOOL_SEMANTIC_GROUPS["external_tools"],
+            FORBIDDEN_EXTERNAL_TOOL_IMPORT_PATTERNS,
+        ),
+        "rendering": (TOOL_SEMANTIC_GROUPS["rendering"], FORBIDDEN_RENDERING_IMPORT_PATTERNS),
+    }
+    offenders: dict[str, list[str]] = {}
+    for modules, forbidden_patterns in groups.values():
+        for module_name in modules:
+            path = Path(*module_name.split(".")).with_suffix(".py")
+            source = path.read_text(encoding="utf-8")
+            matches = [pattern for pattern in forbidden_patterns if pattern in source]
             if matches:
                 offenders[str(path)] = matches
 
