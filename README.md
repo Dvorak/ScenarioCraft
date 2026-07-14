@@ -11,7 +11,16 @@ It is designed around a simple rule: LLMs may propose structured intent or
 structured patches, but deterministic code builds, checks, previews, executes,
 and reports the scenario.
 
-![ScenarioCraft architecture](docs/assets/scenariocraft-architecture.png)
+![ScenarioCraft architecture](docs/diagrams/scenariocraft-architecture.png)
+
+[View the editable D2 technical flow](docs/diagrams/scenariocraft-architecture.d2)
+
+The image is a product-level conceptual overview. The D2 diagram is a separate
+editable technical flow for developers.
+
+Every accepted scenario passes the same evidence gate. Variants change the
+requested scenario, while bounded `PatchSpec` repair corrects failed evidence;
+both paths rebuild and reevaluate before acceptance.
 
 ## What It Does
 

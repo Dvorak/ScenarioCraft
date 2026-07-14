@@ -1,0 +1,178 @@
+grid-rows: 3
+grid-columns: 5
+grid-gap: 28
+style.fill: "#f8fafc"
+
+classes: {
+  card: {
+    shape: rectangle
+    width: 200
+    height: 126
+    style: {
+      fill: "#ffffff"
+      stroke: "#94a3b8"
+      stroke-width: 2
+      border-radius: 18
+      shadow: true
+      font-size: 17
+      font-color: "#0f172a"
+      bold: true
+    }
+  }
+  blue: {
+    style: {
+      fill: "#f3f7ff"
+      stroke: "#2563eb"
+      font-color: "#174ea6"
+    }
+  }
+  green: {
+    style: {
+      fill: "#f2fbf6"
+      stroke: "#25835b"
+      font-color: "#17633f"
+    }
+  }
+  optional: {
+    shape: rectangle
+    width: 200
+    height: 76
+    style: {
+      fill: "#f8fafc"
+      stroke: "#64748b"
+      stroke-dash: 4
+      border-radius: 14
+      font-size: 14
+      font-color: "#334155"
+    }
+  }
+  repair: {
+    shape: rectangle
+    width: 240
+    height: 112
+    style: {
+      fill: "#fff8ef"
+      stroke: "#d97706"
+      stroke-width: 2
+      border-radius: 14
+      font-size: 14
+      font-color: "#9a4d09"
+      bold: true
+    }
+  }
+  variant: {
+    shape: rectangle
+    width: 240
+    height: 112
+    style: {
+      fill: "#eff6ff"
+      stroke: "#2563eb"
+      stroke-width: 2
+      border-radius: 14
+      font-size: 14
+      font-color: "#174ea6"
+      bold: true
+    }
+  }
+  terminal: {
+    shape: rectangle
+    width: 200
+    height: 72
+    style: {
+      fill: "#fff7f7"
+      stroke: "#dc2626"
+      stroke-width: 1
+      stroke-dash: 3
+      border-radius: 12
+      font-size: 14
+      font-color: "#991b1b"
+    }
+  }
+  invisible: {
+    label: ""
+    width: 200
+    height: 1
+    style: {
+      opacity: 0
+      stroke: transparent
+      fill: transparent
+    }
+  }
+}
+
+# Row 1 — an optional model may propose typed intent.
+llm_intent: "LLM Intent Provider\noptional · typed intent only" {
+  class: optional
+}
+top_pad_2: "" { class: invisible }
+top_pad_3: "" { class: invisible }
+top_pad_4: "" { class: invisible }
+top_pad_5: "" { class: invisible }
+
+# Row 2 — every candidate follows the same deterministic production path.
+intent: "Intent\nuser goal\n→ ScenarioIntent" {
+  class: [card; blue]
+}
+spec: "ScenarioSpec\nresolved candidate\nsource of truth" {
+  class: [card; blue]
+}
+production: "Deterministic Production\nbuild · preview\nXOSC + XODR" {
+  class: card
+}
+gate: "Evidence Gate\nsemantics · geometry · artifacts\noptional QC · runtime" {
+  class: [card; green]
+}
+accepted: "Accepted Scenario\nartifacts + evidence" {
+  class: [card; green]
+}
+
+# Row 3 — outcome cards name their re-entry target explicitly.
+outcome_pad_1: "" { class: invisible }
+outcome_pad_2: "" { class: invisible }
+unresolved: "Reject / Clarify / Report\nunsupported or exhausted" {
+  class: terminal
+}
+repair_loop: "Repair Loop\nFailed evidence → Repair Provider\noptional LLM or deterministic\n→ PatchSpec → ScenarioSpec" {
+  class: repair
+}
+variant_loop: "Variant Request\nAccepted scenario + revision goal\n→ new candidate → Intent" {
+  class: variant
+}
+
+llm_intent -> intent: proposes typed intent {
+  style: {
+    stroke: "#64748b"
+    stroke-dash: 4
+    font-color: "#475569"
+  }
+}
+
+intent -> spec
+spec -> production
+production -> gate
+gate -> accepted {
+  style: {
+    stroke: "#25835b"
+    stroke-width: 3
+  }
+}
+
+gate -> unresolved {
+  style: {
+    stroke: "#dc2626"
+    stroke-width: 1
+    stroke-dash: 3
+  }
+}
+gate -> repair_loop {
+  style: {
+    stroke: "#d97706"
+    stroke-width: 3
+  }
+}
+accepted -> variant_loop {
+  style: {
+    stroke: "#2563eb"
+    stroke-width: 3
+  }
+}
