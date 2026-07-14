@@ -43,6 +43,11 @@ def test_controlled_cases_have_prompt_variants_for_natural_language_ui() -> None
         assert controlled_case_prompt_variant(case.case_id, 99) in case.source_text_variants
 
 
+def test_controlled_demo_prompt_variants_are_english_only() -> None:
+    for case in CONTROLLED_CASES:
+        assert all(variant.isascii() for variant in case.source_text_variants)
+
+
 def test_controlled_case_instantiation_produces_matching_scenario_spec() -> None:
     for case in CONTROLLED_CASES:
         spec = instantiate_controlled_case(case.case_id)

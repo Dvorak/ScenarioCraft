@@ -36,7 +36,6 @@ CONTROLLED_CASES: tuple[ControlledCase, ...] = (
         source_text_variants=(
             "An urban pedestrian occlusion scenario with a pedestrian emerging from behind a parked van.",
             "Create a rainy city street scene where ego approaches a parked delivery van and a pedestrian steps out from behind it.",
-            "生成一个城市道路行人遮挡场景，自车接近路边停着的厢式车，行人从车后突然横穿。",
             "A wet urban road with ego traveling past curbside parking while a hidden pedestrian crosses from the sidewalk.",
         ),
     ),
@@ -49,7 +48,6 @@ CONTROLLED_CASES: tuple[ControlledCase, ...] = (
         source_text_variants=(
             "An ego vehicle follows a lead vehicle in the city and the lead vehicle suddenly brakes.",
             "Create an urban same-lane following scenario where the car ahead brakes hard in front of ego.",
-            "生成一个城市跟车场景，自车跟随前车行驶，前车突然急刹。",
             "A straight urban road scenario with ego closing on a slower lead vehicle that performs a sharp braking maneuver.",
         ),
     ),
@@ -62,7 +60,6 @@ CONTROLLED_CASES: tuple[ControlledCase, ...] = (
         source_text_variants=(
             "A vehicle in the adjacent lane cuts into the ego vehicle lane on an urban multilane road.",
             "Create a multilane urban traffic scene where another car merges sharply into ego's lane ahead.",
-            "生成一个城市多车道 cut-in 场景，旁边车道车辆突然并入自车车道。",
             "An adjacent vehicle moves laterally into the ego lane, creating a short-gap cut-in conflict.",
         ),
     ),
@@ -75,7 +72,6 @@ CONTROLLED_CASES: tuple[ControlledCase, ...] = (
         source_text_variants=(
             "An ego vehicle approaches an intersection while a crossing vehicle enters its path.",
             "Create an urban intersection scenario where cross traffic drives through ego's intended path.",
-            "生成一个城市路口场景，自车接近路口，横向车辆进入自车行驶路径。",
             "A side vehicle crosses the conflict point at a four-way intersection as ego approaches.",
         ),
     ),
@@ -88,7 +84,6 @@ CONTROLLED_CASES: tuple[ControlledCase, ...] = (
         source_text_variants=(
             "An oncoming vehicle turns left across the ego vehicle path at an urban intersection.",
             "Create a city intersection scenario where an oncoming car turns across ego's lane.",
-            "生成一个城市路口对向车转弯场景，对向车辆左转穿过自车路径。",
             "An oncoming vehicle initiates a turn across the ego path near the intersection conflict point.",
         ),
     ),
