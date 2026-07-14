@@ -70,6 +70,7 @@ TOOL_SEMANTIC_GROUPS = {
     "external_tools": (
         "scenariocraft.external_tools.asam_qc",
         "scenariocraft.external_tools.esmini",
+        "scenariocraft.external_tools.opendrive_mcp",
     ),
     "providers": (
         "scenariocraft.providers.intent",

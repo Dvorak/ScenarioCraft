@@ -6,8 +6,9 @@ import json
 import os
 import subprocess
 import sys
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 
@@ -36,13 +37,24 @@ class OpenDriveMcpConfig:
 @dataclass(frozen=True)
 class OpenDriveMcpToolEvidence:
     tool_name: str
-    arguments: dict[str, object]
+    arguments: Mapping[str, object]
     ok: bool
-    payload: dict[str, object] | None = None
+    payload: Mapping[str, object] | None = None
     error_message: str | None = None
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "arguments", _freeze_mapping(self.arguments))
+        if self.payload is not None:
+            object.__setattr__(self, "payload", _freeze_mapping(self.payload))
+
     def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+        return {
+            "tool_name": self.tool_name,
+            "arguments": _thaw_json(self.arguments),
+            "ok": self.ok,
+            "payload": _thaw_json(self.payload),
+            "error_message": self.error_message,
+        }
 
 
 @dataclass(frozen=True)
@@ -107,14 +119,22 @@ def run_opendrive_mcp_sidecar(
     tools: list[OpenDriveMcpToolEvidence] = []
     try:
         first_responses = _run_session(resolved_config, calls)
-        for call_id, tool_name, arguments in calls:
-            evidence = _tool_evidence(tool_name, arguments, first_responses[call_id])
-            tools.append(evidence)
-            if not evidence.ok:
-                return _write_evidence(
-                    _failure_evidence(resolved_path, resolved_config, tools, evidence.error_message),
-                    output_path,
-                )
+        first_tools = [
+            _tool_evidence(tool_name, arguments, first_responses[call_id])
+            for call_id, tool_name, arguments in calls
+        ]
+        tools.extend(first_tools)
+        first_failure = next((tool for tool in first_tools if not tool.ok), None)
+        if first_failure is not None:
+            return _write_evidence(
+                _failure_evidence(
+                    resolved_path,
+                    resolved_config,
+                    tools,
+                    first_failure.error_message,
+                ),
+                output_path,
+            )
 
         road_ids = _road_ids(tools[-1].payload)
         lane_calls = tuple(
@@ -127,19 +147,22 @@ def run_opendrive_mcp_sidecar(
         )
         if lane_calls:
             lane_responses = _run_session(resolved_config, lane_calls, initialize_id=100)
-            for call_id, tool_name, arguments in lane_calls:
-                evidence = _tool_evidence(tool_name, arguments, lane_responses[call_id])
-                tools.append(evidence)
-                if not evidence.ok:
-                    return _write_evidence(
-                        _failure_evidence(
-                            resolved_path,
-                            resolved_config,
-                            tools,
-                            evidence.error_message,
-                        ),
-                        output_path,
-                    )
+            lane_tools = [
+                _tool_evidence(tool_name, arguments, lane_responses[call_id])
+                for call_id, tool_name, arguments in lane_calls
+            ]
+            tools.extend(lane_tools)
+            lane_failure = next((tool for tool in lane_tools if not tool.ok), None)
+            if lane_failure is not None:
+                return _write_evidence(
+                    _failure_evidence(
+                        resolved_path,
+                        resolved_config,
+                        tools,
+                        lane_failure.error_message,
+                    ),
+                    output_path,
+                )
     except _McpUnavailableError as exc:
         evidence = OpenDriveMcpEvidence(
             available=False,
@@ -236,8 +259,12 @@ def _run_session(
             raise _McpProtocolError(f"OpenDRIVE MCP returned invalid JSON: {exc}") from exc
         if not isinstance(decoded, dict):
             raise _McpProtocolError("OpenDRIVE MCP returned a non-object JSON-RPC response.")
+        if decoded.get("jsonrpc") != "2.0":
+            raise _McpProtocolError(
+                'OpenDRIVE MCP response must declare jsonrpc version "2.0".'
+            )
         response_id = decoded.get("id")
-        if not isinstance(response_id, int):
+        if isinstance(response_id, bool) or not isinstance(response_id, int):
             raise _McpProtocolError("OpenDRIVE MCP response is missing an integer id.")
         if response_id in responses:
             raise _McpProtocolError(f"OpenDRIVE MCP returned duplicate response id {response_id}.")
@@ -321,9 +348,9 @@ def _tool_evidence(
     return OpenDriveMcpToolEvidence(tool_name, arguments, True, payload)
 
 
-def _road_ids(payload: dict[str, object] | None) -> tuple[str, ...]:
-    roads = payload.get("roads") if isinstance(payload, dict) else None
-    if not isinstance(roads, list):
+def _road_ids(payload: Mapping[str, object] | None) -> tuple[str, ...]:
+    roads = payload.get("roads") if isinstance(payload, Mapping) else None
+    if not isinstance(roads, tuple):
         raise _McpProtocolError("MCP tool list_roads returned an invalid roads list.")
     road_ids: list[str] = []
     for road in roads:
@@ -357,7 +384,7 @@ def _backend_name(tools: Sequence[OpenDriveMcpToolEvidence]) -> str | None:
     names = {
         backend.get("name")
         for tool in tools
-        if isinstance(tool.payload, dict)
+        if isinstance(tool.payload, Mapping)
         for backend in [tool.payload.get("backend")]
         if isinstance(backend, Mapping) and isinstance(backend.get("name"), str)
     }
@@ -366,6 +393,26 @@ def _backend_name(tools: Sequence[OpenDriveMcpToolEvidence]) -> str | None:
     if len(names) == 1:
         return next(iter(names))
     return None
+
+
+def _freeze_mapping(value: Mapping[str, object]) -> Mapping[str, object]:
+    return MappingProxyType({key: _freeze_json(item) for key, item in value.items()})
+
+
+def _freeze_json(value: object) -> object:
+    if isinstance(value, Mapping):
+        return _freeze_mapping(value)
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_json(item) for item in value)
+    return value
+
+
+def _thaw_json(value: object) -> object:
+    if isinstance(value, Mapping):
+        return {key: _thaw_json(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_thaw_json(item) for item in value]
+    return value
 
 
 def _write_evidence(

@@ -49,6 +49,7 @@ def test_core_boundary_manifest_names_stable_extraction_groups() -> None:
     assert TOOL_SEMANTIC_GROUPS["external_tools"] == (
         "scenariocraft.external_tools.asam_qc",
         "scenariocraft.external_tools.esmini",
+        "scenariocraft.external_tools.opendrive_mcp",
     )
     assert "scenariocraft.providers" in FORBIDDEN_EXTERNAL_TOOL_IMPORT_PATTERNS
 

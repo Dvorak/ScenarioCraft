@@ -43,6 +43,8 @@ def payload_for(name, arguments):
         ])
     if MODE == "tool-failure" and name == "summarize_map":
         base.update(ok=False, error={{"code": "PARSE_FAILED", "message": "bad map"}})
+    if MODE == "lane-failure" and name == "list_lanes" and arguments["road_id"] == "0":
+        base.update(ok=False, error={{"code": "LANE_FAILED", "message": "bad lane"}})
     return base
 
 
@@ -84,6 +86,10 @@ for request in requests:
                     "content": [{{"type": "text", "text": json.dumps(payload_for(name, arguments))}}]
                 }},
             }}
+    if MODE == "missing-jsonrpc":
+        response.pop("jsonrpc", None)
+    if MODE == "boolean-id" and request_id == 1:
+        response["id"] = True
     responses.append(response)
 
 if MODE == "missing-id" and responses:
@@ -132,6 +138,23 @@ def test_sidecar_collects_map_and_per_road_lane_evidence(tmp_path: Path) -> None
     assert json.loads(output_path.read_text(encoding="utf-8")) == evidence.to_dict()
 
 
+def test_sidecar_evidence_is_deeply_immutable(tmp_path: Path) -> None:
+    xodr_path = tmp_path / "map.xodr"
+    xodr_path.write_text("<OpenDRIVE />", encoding="utf-8")
+
+    evidence = run_opendrive_mcp_sidecar(
+        xodr_path,
+        config=_config(_write_mcp_stub(tmp_path / "stub.py")),
+    )
+
+    assert evidence.tools[0].payload is not None
+    with pytest.raises(TypeError):
+        evidence.tools[0].payload["backend"]["name"] = "mock"
+    with pytest.raises(TypeError):
+        evidence.tools[3].arguments["road_id"] = "changed"
+    assert evidence.to_dict()["tools"][0]["payload"]["backend"]["name"] == "libOpenDRIVE"
+
+
 def test_sidecar_uses_environment_configuration(monkeypatch, tmp_path: Path) -> None:
     xodr_path = tmp_path / "map.xodr"
     xodr_path.write_text("<OpenDRIVE />", encoding="utf-8")
@@ -166,6 +189,8 @@ def test_sidecar_uses_environment_configuration(monkeypatch, tmp_path: Path) -> 
         ("invalid-map", True, "validate_basic"),
         ("missing-id", True, "missing response"),
         ("duplicate-id", True, "duplicate response"),
+        ("missing-jsonrpc", True, "jsonrpc"),
+        ("boolean-id", True, "integer id"),
     ],
 )
 def test_sidecar_returns_structured_failure_evidence(
@@ -187,6 +212,36 @@ def test_sidecar_returns_structured_failure_evidence(
     assert evidence.passed is False
     assert evidence.error_message is not None
     assert message_fragment in evidence.error_message
+
+
+def test_sidecar_records_all_map_responses_when_one_fails(tmp_path: Path) -> None:
+    xodr_path = tmp_path / "map.xodr"
+    xodr_path.write_text("<OpenDRIVE />", encoding="utf-8")
+
+    evidence = run_opendrive_mcp_sidecar(
+        xodr_path,
+        config=_config(_write_mcp_stub(tmp_path / "stub.py", "invalid-map")),
+    )
+
+    assert evidence.passed is False
+    assert [tool.tool_name for tool in evidence.tools] == [
+        "validate_basic",
+        "summarize_map",
+        "list_roads",
+    ]
+
+
+def test_sidecar_records_all_lane_responses_when_one_fails(tmp_path: Path) -> None:
+    xodr_path = tmp_path / "map.xodr"
+    xodr_path.write_text("<OpenDRIVE />", encoding="utf-8")
+
+    evidence = run_opendrive_mcp_sidecar(
+        xodr_path,
+        config=_config(_write_mcp_stub(tmp_path / "stub.py", "lane-failure")),
+    )
+
+    assert evidence.passed is False
+    assert [tool.arguments["road_id"] for tool in evidence.tools[3:]] == ["0", "1"]
 
 
 def test_sidecar_returns_unavailable_for_missing_executable(tmp_path: Path) -> None:
