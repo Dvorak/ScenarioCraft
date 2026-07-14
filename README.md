@@ -7,6 +7,10 @@ into a typed scenario contract, deterministic OpenSCENARIO/OpenDRIVE artifacts,
 semantic previews, check evidence, optional runtime evidence, and constrained
 repair patches.
 
+The React interface is maintained in
+[Dvorak/scenariocraft-web](https://github.com/Dvorak/scenariocraft-web) and is
+pinned in this repository as the `web/` Git submodule.
+
 It is designed around a simple rule: LLMs may propose structured intent or
 structured patches, but deterministic code builds, checks, previews, executes,
 and reports the scenario.
@@ -79,6 +83,9 @@ its pinned submodule and install its Node dependencies:
 .venv/bin/just setup-web
 ```
 
+The submodule points to the separately maintained
+[ScenarioCraft Web repository](https://github.com/Dvorak/scenariocraft-web).
+
 ### 3. Install Optional Local Tools
 
 The setup helper installs or locates optional tools used by the full workflow:
@@ -110,8 +117,14 @@ http://localhost:3000
 The React workspace lets you generate all five controlled families or use a
 configured Local LLM, inspect the typed result and checks, view real Preview 2D
 and playback artifacts, create variants, and inspect pipeline evidence in the
-Advanced view. The frozen Streamlit debug surface remains available with
-`.venv/bin/just web-legacy` at `http://localhost:8501`.
+Advanced view.
+
+![ScenarioCraft Web walkthrough showing Demo and Local LLM workflows](docs/assets/scenariocraft-web-demo.gif)
+
+The walkthrough uses a real controlled-case run, verified esmini media, and a
+local Ollama `qwen2.5:7b` intent request. The frozen legacy Streamlit regression
+surface remains available with `.venv/bin/just web-legacy` at
+`http://localhost:8501`.
 
 ### 5. Run the CLI
 
