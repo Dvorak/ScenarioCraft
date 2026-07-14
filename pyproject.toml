@@ -32,6 +32,10 @@ qc = [
   "asam-qc-openscenarioxml>=1.0,<1.1",
 ]
 web = ["streamlit>=1.37,<2"]
+api = [
+  "starlette>=1.0,<2",
+  "uvicorn>=0.49,<1",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
