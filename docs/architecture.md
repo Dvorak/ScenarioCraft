@@ -1,20 +1,27 @@
 # Architecture
 
-ScenarioCraft keeps scenario generation structured and inspectable.
+ScenarioCraft keeps autonomous-driving scenario generation structured, inspectable, and evidence-driven.
 
 ```text
+
 natural language
+
 -> ScenarioIntent
--> scenario family template
+-> scenario-family template
 -> ScenarioSpec
 -> deterministic build
--> checks / preview / optional QC and runtime evidence
+-> deterministic checks / preview / optional QC and runtime evidence
 -> PatchSpec repair when needed
+-> rebuild and recheck
 ```
 
 LLMs and local models are adapters around typed contracts. They may propose
 `ScenarioIntent` or `PatchSpec` JSON, but they do not generate or repair raw
 OpenSCENARIO XML directly.
+
+ScenarioCraft remains responsible
+for resolving templates, compiling artifacts, running checks, and deciding
+whether a generated or repaired scenario is accepted.
 
 ## Core Contracts
 
@@ -28,14 +35,22 @@ OpenSCENARIO XML directly.
 ## Three Loops
 
 ```text
+
 Candidate Generation Loop
-  candidate parameters/spec -> deterministic checks -> accepted ScenarioSpec
+  candidate intent/parameters/spec
+  -> deterministic checks
+  -> accepted ScenarioSpec
 
 Scenario Revision Loop
-  existing ScenarioSpec + user edit request -> Candidate Generation Loop
+  existing ScenarioSpec + user edit request
+  -> revised intent/parameters
+  -> Candidate Generation Loop
 
 PatchSpec Repair Loop
-  failed accepted evidence -> PatchSpec -> patcher -> rebuild/recheck
+  failed accepted evidence
+  -> RepairProvider proposes PatchSpec
+  -> patcher updates ScenarioSpec
+  -> rebuild/recheck
 ```
 
 These loops stay separate so scenario variation, user edits, and artifact repair
