@@ -138,7 +138,6 @@ def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> Scenari
         semantic_result=semantic_result,
         geometry_results=geometry_results,
         artifact_results=artifact_results,
-        runtime_results=runtime_results,
     )
     return ScenarioWorkflowResult(
         request=request,

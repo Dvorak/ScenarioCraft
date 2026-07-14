@@ -348,6 +348,34 @@ def test_controlled_golden_family_candidates_are_accepted_when_family_checks_pas
         assert result.candidate_trace.check_summary["failed"] == 0, case.case_id
 
 
+def test_candidate_acceptance_trace_excludes_post_build_runtime_evidence(tmp_path: Path) -> None:
+    result = run_generated_scenario_workflow(
+        ScenarioWorkflowRequest(
+            scenario_text="A pedestrian emerges from behind a parked van.",
+            output_dir=tmp_path,
+            provider_name="controlled_case",
+            controlled_case_id="pedestrian_occlusion",
+            options=ScenarioWorkflowOptions(
+                run_preview=False,
+                run_semantics=True,
+                run_geometry_checks=True,
+                run_artifact_checks=True,
+                run_runtime_checks=True,
+                run_report=False,
+                run_asam_qc=False,
+                run_esmini=False,
+                run_playback=False,
+            ),
+        )
+    )
+
+    assert any(not check.passed for check in result.runtime_check_results)
+    assert result.candidate_trace is not None
+    assert result.candidate_trace.acceptance_status == "accepted"
+    assert result.candidate_trace.check_summary["failed"] == 0
+    assert result.candidate_trace.check_summary["failed_checks"] == []
+
+
 def test_controlled_repair_case_skips_optional_integrations_until_repair(tmp_path: Path) -> None:
     result = run_generated_scenario_workflow(
         ScenarioWorkflowRequest(

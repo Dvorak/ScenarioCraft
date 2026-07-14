@@ -23,6 +23,10 @@ class OpenAIIntentProviderConfigurationError(RuntimeError):
     """Raised when the OpenAI-compatible intent provider cannot be configured."""
 
 
+class OpenAIIntentProviderExecutionError(RuntimeError):
+    """Raised when a configured provider cannot complete an intent request."""
+
+
 @dataclass(frozen=True)
 class LocalLlmConfigurationHint:
     server_url: str
@@ -237,7 +241,9 @@ class OpenAIIntentProvider:
         try:
             response = self._create_response(messages)
         except Exception as exc:
-            return self._decline(f"OpenAI-compatible intent request failed with {type(exc).__name__}.")
+            raise OpenAIIntentProviderExecutionError(
+                f"OpenAI-compatible intent request failed with {type(exc).__name__}."
+            ) from exc
 
         raw = self._response_payload(response)
         if raw is None:

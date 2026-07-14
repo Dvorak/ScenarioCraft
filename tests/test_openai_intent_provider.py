@@ -7,6 +7,7 @@ import scenariocraft.providers.openai_intent as openai_intent_module
 from scenariocraft.providers.openai_intent import (
     OpenAIIntentProvider,
     OpenAIIntentProviderConfigurationError,
+    OpenAIIntentProviderExecutionError,
     local_llm_configuration_hint,
 )
 
@@ -47,6 +48,11 @@ class _FakeChatClient:
     def __init__(self, payload: str) -> None:
         self.responses = _FailingResponses()
         self.chat = type("Chat", (), {"completions": _FakeChatCompletions(payload)})()
+
+
+class _UnavailableClient:
+    def __init__(self) -> None:
+        self.responses = _FailingResponses()
 
 
 def _request() -> IntentRequest:
@@ -300,6 +306,13 @@ def test_openai_intent_provider_falls_back_to_chat_completions_for_local_models(
     assert client.chat.completions.calls
     assert client.chat.completions.calls[0]["response_format"] == {"type": "json_object"}
     assert client.chat.completions.calls[0]["temperature"] == 0
+
+
+def test_openai_intent_provider_raises_execution_error_when_endpoint_fails() -> None:
+    provider = OpenAIIntentProvider(model="local-qwen", client=_UnavailableClient())
+
+    with pytest.raises(OpenAIIntentProviderExecutionError, match="RuntimeError"):
+        provider.propose_intent(_request())
 
 
 def test_openai_intent_provider_corrects_clear_template_mismatch_against_capability_tree() -> None:

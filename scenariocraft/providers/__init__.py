@@ -4,6 +4,7 @@ from scenariocraft.providers.intent import IntentProposal, IntentProvider, Inten
 from scenariocraft.providers.openai_intent import (
     OpenAIIntentProvider,
     OpenAIIntentProviderConfigurationError,
+    OpenAIIntentProviderExecutionError,
 )
 from scenariocraft.providers.openai_repair import (
     OpenAIRepairProvider,
@@ -16,6 +17,7 @@ __all__ = [
     "IntentRequest",
     "OpenAIIntentProvider",
     "OpenAIIntentProviderConfigurationError",
+    "OpenAIIntentProviderExecutionError",
     "OpenAIRepairProvider",
     "OpenAIRepairProviderConfigurationError",
 ]

@@ -72,9 +72,8 @@ def build_candidate_acceptance_trace(
     semantic_result: SemanticValidationResult | None,
     geometry_results: tuple,
     artifact_results: tuple,
-    runtime_results: tuple,
 ) -> CandidateAcceptanceTrace:
-    """Build structured evidence for candidate acceptance/rejection."""
+    """Build pre-runtime evidence for candidate acceptance/rejection."""
 
     resolution = spec.template_resolution_metadata()
     parameters = resolution.get("parameters", [])
@@ -90,7 +89,7 @@ def build_candidate_acceptance_trace(
                     for key, value in parameter.items()
                     if key in {"value", "source", "unit"}
                 }
-    check_results = tuple(geometry_results) + tuple(artifact_results) + tuple(runtime_results)
+    check_results = tuple(geometry_results) + tuple(artifact_results)
     failed_names = tuple(str(result.name) for result in check_results if not getattr(result, "passed", False))
     semantic_failed = semantic_result is not None and not semantic_result.passed
     failed_count = len(failed_names) + (1 if semantic_failed else 0)
