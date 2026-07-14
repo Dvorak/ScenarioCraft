@@ -5,7 +5,12 @@ from pathlib import Path
 from typing import Any, Literal, TypeAlias
 
 from scenariocraft.core.build import BuildResult
-from scenariocraft.external_tools import AsamQcResult, EsminiPlaybackResult, EsminiResult
+from scenariocraft.external_tools import (
+    AsamQcResult,
+    EsminiPlaybackResult,
+    EsminiResult,
+    OpenDriveMcpEvidence,
+)
 from scenariocraft.core.schemas import CheckResult, ScenarioSpec
 from scenariocraft.core.checks import SemanticValidationResult
 from scenariocraft.providers.intent import IntentProposal
@@ -40,6 +45,7 @@ class ScenarioWorkflowOptions:
     run_asam_qc: bool = False
     run_esmini: bool = False
     run_playback: bool = False
+    run_opendrive_mcp: bool = False
     require_esmini: bool = False
     esmini_bin: str | None = None
     esmini_timeout_s: float = 20.0
@@ -96,6 +102,7 @@ class ScenarioArtifactPaths:
     esmini_result_path: Path | None = None
     playback_result_path: Path | None = None
     playback_path: Path | None = None
+    opendrive_mcp_result_path: Path | None = None
 
     def to_dict(self) -> dict[str, str | None]:
         return {
@@ -112,6 +119,7 @@ class ScenarioArtifactPaths:
                 "esmini_result_path",
                 "playback_result_path",
                 "playback_path",
+                "opendrive_mcp_result_path",
             )
         }
 
@@ -178,6 +186,7 @@ class ScenarioWorkflowResult:
     qc_result: AsamQcResult | None = None
     esmini_result: EsminiResult | None = None
     playback_result: EsminiPlaybackResult | None = None
+    opendrive_mcp_result: OpenDriveMcpEvidence | None = None
     xosc_text: str = ""
     report_text: str = ""
 
@@ -207,6 +216,7 @@ class ScenarioWorkflowResult:
             "qc_result": _json_value(self.qc_result),
             "esmini_result": _json_value(self.esmini_result),
             "playback_result": _json_value(self.playback_result),
+            "opendrive_mcp_result": _json_value(self.opendrive_mcp_result),
             "xosc_text_available": bool(self.xosc_text),
             "report_text_available": bool(self.report_text),
         }

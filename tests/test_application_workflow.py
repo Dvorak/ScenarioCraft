@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
+
+import scenariocraft.application.generated_scenario as generated_scenario_module
 
 from scenariocraft.application import (
     ExternalScenarioWorkflowOptions,
@@ -15,6 +18,30 @@ from scenariocraft.application.controlled_cases import CONTROLLED_CASES
 from scenariocraft.application.candidate_generation import IntentGenerationOutcomeError
 from scenariocraft.core.schemas import ScenarioIntent
 from scenariocraft.providers.intent import IntentProposal
+from scenariocraft.external_tools import OpenDriveMcpEvidence, OpenDriveMcpToolEvidence
+
+
+def _opendrive_mcp_evidence(file_path: Path, *, passed: bool = True) -> OpenDriveMcpEvidence:
+    tool = OpenDriveMcpToolEvidence(
+        tool_name="validate_basic",
+        arguments={"file_path": str(file_path)},
+        ok=passed,
+        payload={
+            "ok": passed,
+            "valid": passed,
+            "backend": {"name": "libOpenDRIVE"},
+        },
+        error_message=None if passed else "validation failed",
+    )
+    return OpenDriveMcpEvidence(
+        available=passed,
+        passed=passed,
+        backend_name="libOpenDRIVE" if passed else None,
+        file_path=str(file_path),
+        command=("python", "-m", "opendrive_mcp.server", "--mcp"),
+        tools=(tool,),
+        error_message=None if passed else "sidecar unavailable",
+    )
 
 
 def test_application_layer_has_no_delivery_or_process_imports() -> None:
@@ -69,6 +96,156 @@ def test_generated_scenario_workflow_builds_deterministic_artifacts(tmp_path: Pa
     assert (tmp_path / "scenario_spec.json").exists()
     assert (tmp_path / "scenario.xosc").exists()
     assert (tmp_path / "urban_two_way_parking.xodr").exists()
+
+
+def test_generated_workflow_records_optional_opendrive_mcp_evidence(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    calls = []
+
+    def fake_sidecar(file_path, *, config=None, output_path=None):
+        evidence = _opendrive_mcp_evidence(Path(file_path))
+        assert output_path is not None
+        output_path.write_text(evidence.to_json() + "\n", encoding="utf-8")
+        calls.append((Path(file_path), config, Path(output_path)))
+        return evidence
+
+    monkeypatch.setattr(
+        generated_scenario_module,
+        "run_opendrive_mcp_sidecar",
+        fake_sidecar,
+        raising=False,
+    )
+
+    result = run_generated_scenario_workflow(
+        ScenarioWorkflowRequest(
+            scenario_text="A rainy pedestrian occlusion scenario.",
+            output_dir=tmp_path,
+            provider_name="mock",
+            options=ScenarioWorkflowOptions(
+                run_preview=False,
+                run_runtime_checks=False,
+                run_report=False,
+                run_opendrive_mcp=True,
+            ),
+        )
+    )
+
+    evidence_path = tmp_path / "opendrive_mcp_result.json"
+    assert calls == [(tmp_path / "urban_two_way_parking.xodr", None, evidence_path)]
+    assert result.opendrive_mcp_result is not None
+    assert result.opendrive_mcp_result.passed is True
+    assert result.artifacts.opendrive_mcp_result_path == evidence_path
+    assert result.to_dict()["opendrive_mcp_result"]["backend_name"] == "libOpenDRIVE"
+    assert result.terminal_status == "passed"
+
+
+def test_generated_workflow_does_not_run_opendrive_mcp_by_default(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    def forbidden(*args, **kwargs):
+        raise AssertionError("OpenDRIVE MCP sidecar should be disabled by default")
+
+    monkeypatch.setattr(
+        generated_scenario_module,
+        "run_opendrive_mcp_sidecar",
+        forbidden,
+        raising=False,
+    )
+
+    result = run_generated_scenario_workflow(
+        ScenarioWorkflowRequest(
+            scenario_text="A rainy pedestrian occlusion scenario.",
+            output_dir=tmp_path,
+            provider_name="mock",
+            options=ScenarioWorkflowOptions(
+                run_preview=False,
+                run_runtime_checks=False,
+                run_report=False,
+            ),
+        )
+    )
+
+    assert result.opendrive_mcp_result is None
+    assert result.artifacts.opendrive_mcp_result_path is None
+
+
+def test_generated_workflow_skips_opendrive_mcp_without_xodr(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    original_build = generated_scenario_module.build_openscenario
+
+    def build_without_xodr(spec, output_dir):
+        return replace(original_build(spec, output_dir), xodr_path=None)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("OpenDRIVE MCP sidecar requires an XODR artifact")
+
+    monkeypatch.setattr(generated_scenario_module, "build_openscenario", build_without_xodr)
+    monkeypatch.setattr(
+        generated_scenario_module,
+        "run_opendrive_mcp_sidecar",
+        forbidden,
+        raising=False,
+    )
+
+    result = run_generated_scenario_workflow(
+        ScenarioWorkflowRequest(
+            scenario_text="A rainy pedestrian occlusion scenario.",
+            output_dir=tmp_path,
+            provider_name="mock",
+            options=ScenarioWorkflowOptions(
+                run_preview=False,
+                run_runtime_checks=False,
+                run_report=False,
+                run_opendrive_mcp=True,
+            ),
+        )
+    )
+
+    assert result.opendrive_mcp_result is None
+    assert result.terminal_status == "passed"
+
+
+def test_opendrive_mcp_failure_is_report_only_evidence(monkeypatch, tmp_path: Path) -> None:
+    def fake_sidecar(file_path, *, config=None, output_path=None):
+        evidence = _opendrive_mcp_evidence(Path(file_path), passed=False)
+        assert output_path is not None
+        output_path.write_text(evidence.to_json() + "\n", encoding="utf-8")
+        return evidence
+
+    monkeypatch.setattr(
+        generated_scenario_module,
+        "run_opendrive_mcp_sidecar",
+        fake_sidecar,
+        raising=False,
+    )
+
+    result = run_generated_scenario_workflow(
+        ScenarioWorkflowRequest(
+            scenario_text="A rainy pedestrian occlusion scenario.",
+            output_dir=tmp_path,
+            provider_name="mock",
+            options=ScenarioWorkflowOptions(
+                run_preview=False,
+                run_runtime_checks=False,
+                run_report=True,
+                run_asam_qc=False,
+                run_esmini=False,
+                run_playback=False,
+                run_opendrive_mcp=True,
+            ),
+        )
+    )
+
+    assert result.terminal_status == "passed"
+    assert result.opendrive_mcp_result is not None
+    assert result.opendrive_mcp_result.passed is False
+    assert "## OpenDRIVE MCP Road Evidence" in result.report_text
+    assert "Sidecar evidence does not determine scenario acceptance" in result.report_text
 
 
 def test_generated_scenario_workflow_writes_preview_report_and_skipped_adapter_results(tmp_path: Path) -> None:

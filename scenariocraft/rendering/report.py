@@ -6,7 +6,12 @@ from collections.abc import Sequence
 
 from scenariocraft.core.schemas import CheckResult, ScenarioSpec
 from scenariocraft.core.templates.pedestrian_occlusion import assess_pedestrian_occlusion_timing
-from scenariocraft.external_tools import AsamQcResult, EsminiPlaybackResult, EsminiResult
+from scenariocraft.external_tools import (
+    AsamQcResult,
+    EsminiPlaybackResult,
+    EsminiResult,
+    OpenDriveMcpEvidence,
+)
 from scenariocraft.core.build import BuildResult
 from scenariocraft.core.checks import SemanticValidationResult
 from scenariocraft.core.metrics import compute_timing_metrics
@@ -24,6 +29,7 @@ def generate_validation_report(
     playback_result: EsminiPlaybackResult | None = None,
     artifact_check_results: Sequence[CheckResult] | None = None,
     runtime_check_results: Sequence[CheckResult] | None = None,
+    opendrive_mcp_result: OpenDriveMcpEvidence | None = None,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     report_path = output_dir / "validation_report.md"
@@ -39,6 +45,7 @@ def generate_validation_report(
             playback_result,
             artifact_check_results,
             runtime_check_results,
+            opendrive_mcp_result,
         ),
         encoding="utf-8",
     )
@@ -56,6 +63,7 @@ def _render_report(
     playback_result: EsminiPlaybackResult | None = None,
     artifact_check_results: Sequence[CheckResult] | None = None,
     runtime_check_results: Sequence[CheckResult] | None = None,
+    opendrive_mcp_result: OpenDriveMcpEvidence | None = None,
 ) -> str:
     semantic_lines = "\n".join(
         f"- [{'x' if check.passed else ' '}] `{check.name}`: {check.message}" for check in semantic_result.checks
@@ -69,6 +77,7 @@ def _render_report(
     check_section = _check_section(check_results)
     artifact_check_section = _artifact_check_section(artifact_check_results)
     runtime_check_section = _runtime_check_section(runtime_check_results)
+    opendrive_mcp_section = _opendrive_mcp_section(opendrive_mcp_result)
     return f"""# scenarioCraft Validation Report
 
 ## Input Scenario Intent
@@ -96,7 +105,9 @@ def _render_report(
 - `qc_report.json`
 - `qc_result.xqar`, if ASAM QC runs
 - `esmini_log.txt`
+- `opendrive_mcp_result.json`, if OpenDRIVE MCP runs
 - `validation_report.md`
+{opendrive_mcp_section}
 
 ## ASAM Quality Check
 
@@ -170,6 +181,25 @@ def _timing_section(spec: ScenarioSpec) -> str:
     derivation = _timing_derivation(spec)
     if derivation:
         lines.append(f"- Trigger-time estimate formula: `{derivation}`")
+    return "\n".join(lines)
+
+
+def _opendrive_mcp_section(result: OpenDriveMcpEvidence | None) -> str:
+    if result is None:
+        return ""
+    tool_names = tuple(dict.fromkeys(tool.tool_name for tool in result.tools))
+    lines = [
+        "",
+        "## OpenDRIVE MCP Road Evidence",
+        "",
+        f"- Available: `{result.available}`",
+        f"- Passed: `{result.passed}`",
+        f"- Backend: `{result.backend_name or 'unavailable'}`",
+        f"- Tools: `{', '.join(tool_names) or 'none'}`",
+    ]
+    if result.error_message:
+        lines.append(f"- Error: `{result.error_message}`")
+    lines.append("- Sidecar evidence does not determine scenario acceptance in this phase.")
     return "\n".join(lines)
 
 

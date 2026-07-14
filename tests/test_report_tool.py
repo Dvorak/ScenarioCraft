@@ -11,7 +11,7 @@ from scenariocraft.core.schemas import CheckResult
 from scenariocraft.core.build import build_openscenario
 from scenariocraft.rendering import generate_validation_report
 from scenariocraft.core.checks import validate_semantics
-from scenariocraft.external_tools import AsamQcResult
+from scenariocraft.external_tools import AsamQcResult, OpenDriveMcpEvidence, OpenDriveMcpToolEvidence
 from scenariocraft.external_tools import EsminiPlaybackResult, EsminiResult
 
 
@@ -51,6 +51,49 @@ def test_report_includes_missing_tool_warnings(tmp_path: Path) -> None:
     assert "Predicted trigger time: `3` s" in report
     assert "Timing classification: `preferred`" in report
     assert "Template-Aware Checks" not in report
+
+
+def test_report_includes_concise_opendrive_mcp_sidecar_evidence(tmp_path: Path) -> None:
+    spec = generate_default_pedestrian_occlusion_spec("scenario text")
+    build_result = build_openscenario(spec, tmp_path)
+    qc_result = AsamQcResult(False, ["asam-qc"], None, "", "", None)
+    esmini_result = EsminiResult(False, ["esmini"], None, None, "", "", None, None, None)
+    evidence = OpenDriveMcpEvidence(
+        available=True,
+        passed=True,
+        backend_name="libOpenDRIVE",
+        file_path=str(build_result.xodr_path),
+        command=("python", "-m", "opendrive_mcp.server", "--mcp"),
+        tools=(
+            OpenDriveMcpToolEvidence(
+                "validate_basic",
+                {"file_path": str(build_result.xodr_path)},
+                True,
+                {"ok": True, "valid": True, "backend": {"name": "libOpenDRIVE"}},
+            ),
+        ),
+    )
+
+    report_path = generate_validation_report(
+        "scenario text",
+        spec,
+        build_result,
+        qc_result,
+        esmini_result,
+        validate_semantics(spec),
+        tmp_path,
+        opendrive_mcp_result=evidence,
+    )
+
+    report = report_path.read_text(encoding="utf-8")
+    assert "## OpenDRIVE MCP Road Evidence" in report
+    assert "`opendrive_mcp_result.json`, if OpenDRIVE MCP runs" in report
+    assert "Available: `True`" in report
+    assert "Passed: `True`" in report
+    assert "Backend: `libOpenDRIVE`" in report
+    assert "Tools: `validate_basic`" in report
+    assert "Sidecar evidence does not determine scenario acceptance" in report
+    assert '"backend"' not in report.split("## OpenDRIVE MCP Road Evidence", 1)[1]
 
 
 def test_report_handles_legacy_layout_free_timing_metrics_gracefully(tmp_path: Path) -> None:

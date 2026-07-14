@@ -301,6 +301,8 @@ def _workflow_options(value: object) -> ScenarioWorkflowOptions:
     unknown = sorted(set(value) - allowed)
     if unknown:
         raise ValueError(f"Unknown workflow options: {', '.join(unknown)}")
+    if "run_opendrive_mcp" in value and not isinstance(value["run_opendrive_mcp"], bool):
+        raise ValueError("run_opendrive_mcp must be a boolean.")
     return ScenarioWorkflowOptions(**{**defaults, **dict(value)})
 
 
@@ -313,6 +315,7 @@ def _artifact_paths(artifacts: object) -> dict[str, Path]:
         "xodr": getattr(artifacts, "xodr_path", None),
         "scenario_spec": getattr(artifacts, "scenario_spec_path", None),
         "playback_result": getattr(artifacts, "playback_result_path", None),
+        "opendrive_mcp_result": getattr(artifacts, "opendrive_mcp_result_path", None),
     }
     return {
         name: Path(path).resolve()

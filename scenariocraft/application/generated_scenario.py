@@ -28,6 +28,7 @@ from scenariocraft.external_tools import (
     run_asam_qc,
     run_esmini,
     run_esmini_playback,
+    run_opendrive_mcp_sidecar,
 )
 from scenariocraft.core.schemas import ScenarioSpec
 from scenariocraft.core.checks import SemanticValidationResult
@@ -61,9 +62,15 @@ def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> Scenari
     esmini_result = None
     playback_result = None
     runtime_results = ()
+    opendrive_mcp_result = None
     report_path = None
     report_text = ""
 
+    if options.run_opendrive_mcp and build_result.xodr_path is not None and not skip_optional:
+        opendrive_mcp_result = run_opendrive_mcp_sidecar(
+            build_result.xodr_path,
+            output_path=output_dir / "opendrive_mcp_result.json",
+        )
     if options.run_asam_qc and not skip_optional:
         qc_result = run_asam_qc(build_result.xosc_path, output_dir)
     if options.run_esmini and not skip_optional:
@@ -109,6 +116,7 @@ def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> Scenari
             playback_result=playback_result,
             artifact_check_results=artifact_results,
             runtime_check_results=runtime_results,
+            opendrive_mcp_result=opendrive_mcp_result,
         )
         semantic_result = semantic_for_report
         qc_result = qc_for_report
@@ -129,6 +137,9 @@ def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> Scenari
         if (output_dir / "esmini_playback_result.json").exists()
         else None,
         playback_path=Path(playback_result.playback_path) if playback_result and playback_result.playback_path else None,
+        opendrive_mcp_result_path=output_dir / "opendrive_mcp_result.json"
+        if (output_dir / "opendrive_mcp_result.json").exists()
+        else None,
     )
     status = _workflow_status(prepared_case, semantic_result, geometry_results, artifact_results, skip_optional)
     candidate_trace = build_candidate_acceptance_trace(
@@ -156,6 +167,7 @@ def run_generated_scenario_workflow(request: ScenarioWorkflowRequest) -> Scenari
         qc_result=qc_result,
         esmini_result=esmini_result,
         playback_result=playback_result,
+        opendrive_mcp_result=opendrive_mcp_result,
         xosc_text=xosc_text,
         report_text=report_text,
     )

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from starlette.testclient import TestClient
 
-from scenariocraft.api.app import create_http_app
+from scenariocraft.api.app import _workflow_options, create_http_app
 from scenariocraft.providers.openai_intent import (
     LocalLlmConfigurationHint,
     OpenAIIntentProviderExecutionError,
@@ -26,6 +27,13 @@ def _fast_options() -> dict[str, bool]:
         "run_playback": False,
         "run_runtime_checks": False,
     }
+
+
+def test_workflow_options_validate_opendrive_mcp_boolean() -> None:
+    assert _workflow_options({"run_opendrive_mcp": True}).run_opendrive_mcp is True
+
+    with pytest.raises(ValueError, match="run_opendrive_mcp must be a boolean"):
+        _workflow_options({"run_opendrive_mcp": "false"})
 
 
 def test_health_and_capabilities_expose_delivery_state(tmp_path: Path) -> None:
