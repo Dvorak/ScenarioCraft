@@ -50,7 +50,7 @@ def _print_next_steps(project_root: Path) -> None:
     print("")
     print("Then start the Web UI:")
     print("  .venv/bin/just web")
-    print("  open http://localhost:8501")
+    print("  open http://localhost:3000")
 
 
 if __name__ == "__main__":

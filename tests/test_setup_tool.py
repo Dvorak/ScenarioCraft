@@ -27,7 +27,7 @@ def test_setup_tool_runs_optional_tool_installers(monkeypatch, tmp_path: Path, c
         ("asamqc", ["--project-root", str(tmp_path)]),
     ]
     stdout = capsys.readouterr().out
-    assert "http://localhost:8501" in stdout
+    assert "http://localhost:3000" in stdout
     assert ".venv/bin/just web" in stdout
 
 
