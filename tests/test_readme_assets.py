@@ -45,7 +45,7 @@ def test_readme_embeds_an_optimized_animated_web_walkthrough() -> None:
     with Image.open(gif_path) as image:
         assert image.format == "GIF"
         assert image.is_animated
-        assert image.n_frames >= 5
+        assert image.n_frames >= 13
         assert image.size == (1152, 720)
         total_duration_ms = 0
         for frame_index in range(image.n_frames):
