@@ -1,4 +1,4 @@
-# README Scenario Production Loop Design
+# README ScenarioCraft Architecture Design
 
 ## Purpose
 
@@ -12,7 +12,8 @@ The primary audience is:
 - research reviewers evaluating the method;
 - product reviewers evaluating the system promise.
 
-The initial version prioritizes a correct story over visual polish.
+The diagram preserves the approachable card-based visual language of the
+existing PNG while updating the underlying system story.
 
 ## Core Promise
 
@@ -34,6 +35,10 @@ Goal
 -> Evidence
 -> Quality Gate
 ```
+
+An optional LLM may propose `ScenarioIntent` at the entry point or `PatchSpec`
+inside the repair path. It never builds artifacts, evaluates evidence, or
+accepts a scenario.
 
 The quality gate has four explicit outcomes:
 
@@ -68,6 +73,12 @@ story:
 - `PatchSpec` repair re-entry;
 - explicit unresolved termination.
 
+The primary row uses large cards for `Intent`, `ScenarioSpec`, deterministic
+production, the evidence gate, and the accepted scenario. A blue variant loop
+returns from acceptance to intent. An orange repair loop returns from failed
+evidence through a repair provider and constrained `PatchSpec` to
+`ScenarioSpec`. Optional providers and tools use smaller, dashed connections.
+
 The diagram does not include package boundaries, delivery surfaces, RAG,
 external-XOSC inspection, detailed tool names, or implementation modules. Those
 belong in contributor and detailed architecture diagrams.
@@ -89,31 +100,27 @@ evidence is required for a particular run.
 
 ## Editable Source and Generated Assets
 
-Mermaid is the initial authoritative format because the first milestone is
-logical clarity, it is easy to review as text, and it expresses branching and
-feedback loops without a custom renderer.
+D2 is the only authoritative format. It provides editable text while allowing
+the card styling, color semantics, icon-like labels, and controlled feedback
+loops needed for a reader-friendly README diagram.
 
 Planned files:
 
 ```text
-docs/diagrams/scenario-production-loop.mmd
-docs/assets/scenario-production-loop.svg
-docs/assets/scenario-production-loop.png
+docs/diagrams/scenariocraft-architecture.d2
+docs/assets/scenariocraft-architecture.svg
+docs/assets/scenariocraft-architecture.png
 ```
 
-The Mermaid source is authoritative. SVG and PNG are generated artifacts. The
-README references the SVG and links to the Mermaid source. PNG remains available
-for contexts that cannot display SVG.
-
-D2 remains a future rendering option if visual control becomes important. A
-future D2 migration must preserve the approved concepts and edge semantics; it
-must not create a second architecture source of truth.
+The D2 source is authoritative. SVG and PNG are generated artifacts. The README
+references the SVG and links to both the D2 source and PNG fallback. No Mermaid
+architecture source is retained.
 
 ## README Integration
 
-The existing architecture image is replaced by the generated SVG. A nearby link
-opens the editable Mermaid source so readers can inspect the model without
-searching through the repository.
+The existing architecture image is replaced by the generated SVG. Nearby links
+open the editable D2 source and PNG fallback without making readers search the
+repository.
 
 The short explanatory text next to the diagram states:
 
@@ -134,14 +141,14 @@ ScenarioCraft owns deterministic build, evaluation, and acceptance.
 
 Implementation is complete when:
 
-1. The Mermaid source renders without errors.
-2. SVG and PNG are reproducibly generated from the committed Mermaid source.
-3. The README uses the SVG and links to the `.mmd` file.
+1. The D2 source renders without errors.
+2. SVG and PNG are generated from the committed D2 source.
+3. The README uses the SVG and links to the `.d2` source and PNG fallback.
 4. At README width, the flow and all outcome labels remain legible.
 5. Variant and repair are visibly distinct and both re-enter evaluation.
 6. The unresolved path cannot be mistaken for acceptance.
-7. Existing README link and asset tests pass, with new checks added for the
-   Mermaid source and generated assets.
+7. Existing README link and asset tests pass for the D2 source and generated
+   assets.
 
 Visual styling beyond basic legibility is intentionally out of scope for the
 first implementation.
