@@ -18,6 +18,9 @@ examples/
 scenariocraft/
   Python package source.
 
+web/
+  Optional pinned React frontend Git submodule.
+
 tests/
   Unit and workflow tests.
 

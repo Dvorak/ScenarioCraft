@@ -49,7 +49,7 @@ prototype for structured scenario generation workflows.
 ### 1. Clone
 
 ```bash
-git clone https://github.com/<your-org>/ScenarioCraft-Agent.git
+git clone https://github.com/Dvorak/ScenarioCraft-Agent.git
 cd ScenarioCraft-Agent
 ```
 
@@ -60,7 +60,14 @@ Python 3.11 or 3.12 is recommended.
 ```bash
 python3.11 -m venv .venv
 .venv/bin/python -m pip install -U pip uv
-UV_CACHE_DIR=.uv-cache .venv/bin/uv sync --extra dev --extra web --extra openai --extra qc
+UV_CACHE_DIR=.uv-cache .venv/bin/uv sync --extra api --extra dev --extra web --extra openai --extra qc
+```
+
+This is enough for CLI use. To enable the optional React frontend, initialize
+its pinned submodule and install its Node dependencies:
+
+```bash
+.venv/bin/just setup-web
 ```
 
 ### 3. Install Optional Local Tools
@@ -76,7 +83,7 @@ It prints the environment variables to export for:
 - `ESMINI_BIN`
 - `ASAM_QC_OPENSCENARIOXML_BIN`
 
-The basic mock workflow works without these tools, but esmini and ASAM QC are
+The controlled-case workflow works without these tools, but esmini and ASAM QC are
 recommended for full local reproduction.
 
 ### 4. Start the Web UI
@@ -88,12 +95,14 @@ recommended for full local reproduction.
 Then open:
 
 ```text
-http://localhost:8501
+http://localhost:3000
 ```
 
-The Web workspace lets you generate a scenario, inspect the selected family,
-view Preview 2D, run controlled cases, and inspect runtime media when esmini is
-configured.
+The React workspace lets you generate all five controlled families or use a
+configured Local LLM, inspect the typed result and checks, view real Preview 2D
+and playback artifacts, create variants, and inspect pipeline evidence in the
+Advanced view. The frozen Streamlit debug surface remains available with
+`.venv/bin/just web-legacy` at `http://localhost:8501`.
 
 ### 5. Run the CLI
 
@@ -163,12 +172,15 @@ See [Architecture](docs/architecture.md) for the longer overview.
 ```text
 scenariocraft/
   core/             scenario contracts, templates, checks, repair, build, metrics
-  web/              Streamlit UI
+  application/      shared generation/revision/repair workflows
+  api/              thin localhost HTTP delivery adapter
+  _legacy_streamlit/ temporary internal regression surface
 
 assets/roads/       road assets used by generated scenarios
 examples/           small CLI request examples
 tests/              unit and workflow tests
 outputs/            generated artifacts, gitignored
+web/                pinned React frontend Git submodule
 ```
 
 For a slightly longer public structure overview, see

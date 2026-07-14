@@ -32,3 +32,11 @@ def test_setup_web_recipe_uses_the_public_frontend_checkout() -> None:
     assert "setup-web:" in justfile
     assert "git submodule update --init --recursive web" in justfile
     assert "npm --prefix web ci" in justfile
+
+
+def test_readme_explains_optional_react_and_legacy_streamlit_paths() -> None:
+    readme = Path("README.md").read_text(encoding="utf-8")
+
+    assert ".venv/bin/just setup-web" in readme
+    assert ".venv/bin/just web-legacy" in readme
+    assert "web/                pinned React frontend Git submodule" in readme

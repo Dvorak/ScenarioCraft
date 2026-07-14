@@ -59,9 +59,15 @@ scenariocraft/providers
 scenariocraft/rendering
   deterministic previews and reports
 
-scenariocraft/web
-  Streamlit delivery surface
+scenariocraft/api
+  thin localhost HTTP delivery adapter
+
+web
+  independently versioned React frontend submodule
 ```
+
+The private `scenariocraft/_legacy_streamlit` package is a temporary regression
+surface, not a long-term architecture boundary.
 
 `scenariocraft/core` should remain independent of Streamlit, provider SDKs,
 subprocess execution, local simulator binaries, and Web session state.
