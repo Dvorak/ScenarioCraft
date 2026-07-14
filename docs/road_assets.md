@@ -28,6 +28,28 @@ WorldPosition remains the baseline placement mechanism. OpenDRIVE binding adds
 road geometry and rendering context; it does not yet imply full LanePosition,
 RoadPosition, map matching, route planning, or imported-map adaptation.
 
+## Optional OpenDRIVE MCP Evidence
+
+Generated-scenario workflows can ask a local `opendrive-mcp` installation to
+inspect the emitted XODR artifact. This integration is disabled by default. Set
+the following environment variables before starting ScenarioCraft:
+
+```bash
+export SCENARIOCRAFT_OPENDRIVE_MCP_PYTHON=/path/to/opendrive-mcp/.venv/bin/python
+export SCENARIOCRAFT_OPENDRIVE_MCP_CWD=/path/to/opendrive-mcp
+```
+
+Then set `run_opendrive_mcp` to `true` in the workflow options. ScenarioCraft
+calls `validate_basic`, `summarize_map`, and `list_roads`, followed by
+`list_lanes` for every returned road. Detailed responses are written to
+`opendrive_mcp_result.json` and a concise status is included in
+`validation_report.md`.
+
+This Phase 1 sidecar output is report-only road evidence. MCP availability or
+failure does not change scenario acceptance, and MCP does not select scenario
+families, modify actor placement, or replace the project-owned canonical road
+assets.
+
 ## Deferred Road Scope
 
 - generic OpenDRIVE parsing;
