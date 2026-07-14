@@ -101,6 +101,31 @@ def test_esmini_resolves_local_prebuilt_binary(monkeypatch, tmp_path) -> None:
     assert resolved == local_bin.resolve()
 
 
+def test_esmini_default_search_root_matches_repository_root() -> None:
+    repository_root = Path(__file__).resolve().parents[1]
+
+    assert esmini_tool._project_root() == repository_root
+
+
+def test_esmini_local_marker_precedes_cached_version_scan(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("ESMINI_BIN", raising=False)
+    monkeypatch.setattr("shutil.which", lambda _binary: None)
+    old_binary = tmp_path / "third_party" / "esmini" / "v3.3.0" / "bin" / "esmini"
+    selected_binary = tmp_path / "third_party" / "esmini" / "v3.5.0" / "bin" / "esmini"
+    for binary in (old_binary, selected_binary):
+        binary.parent.mkdir(parents=True)
+        binary.write_text("#!/bin/sh\n", encoding="utf-8")
+        binary.chmod(0o755)
+    (tmp_path / "third_party" / "esmini" / "ESMINI_BIN").write_text(
+        str(selected_binary),
+        encoding="utf-8",
+    )
+
+    resolved = resolve_esmini_binary(search_root=tmp_path)
+
+    assert resolved == selected_binary.resolve()
+
+
 def test_esmini_failure(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr("shutil.which", lambda _binary: "/fake/esmini")
     monkeypatch.setattr(

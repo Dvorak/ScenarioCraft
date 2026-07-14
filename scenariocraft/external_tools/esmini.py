@@ -1296,6 +1296,15 @@ def resolve_esmini_binary(binary: str | None = None, search_root: Path | None = 
 def _find_esmini_executable(search_dir: Path) -> Path | None:
     if not search_dir.exists():
         return None
+    marker = search_dir / "ESMINI_BIN"
+    if marker.is_file():
+        marker_value = marker.read_text(encoding="utf-8").strip()
+        if marker_value:
+            marked_path = Path(marker_value).expanduser()
+            if not marked_path.is_absolute():
+                marked_path = search_dir / marked_path
+            if marked_path.is_file() and os.access(marked_path, os.X_OK):
+                return marked_path.resolve()
     names = {"esmini", "esmini.exe"}
     for path in sorted(search_dir.rglob("*")):
         if path.name in names and path.is_file() and os.access(path, os.X_OK):
@@ -1304,7 +1313,7 @@ def _find_esmini_executable(search_dir: Path) -> Path | None:
 
 
 def _project_root() -> Path:
-    return Path(__file__).resolve().parents[3]
+    return Path(__file__).resolve().parents[2]
 
 
 def _display_path(path: Path) -> str:
