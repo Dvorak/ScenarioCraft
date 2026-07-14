@@ -35,7 +35,7 @@ web:
 
 streamlit:
     echo "ScenarioCraft Web UI: http://localhost:8501"
-    {{python}} -m streamlit run scenariocraft/web/app.py --server.address localhost --server.port 8501
+    {{python}} -m streamlit run scenariocraft/_legacy_streamlit/app.py --server.address localhost --server.port 8501
 
 clean:
     find . -type d -name __pycache__ -prune -exec rm -rf {} +

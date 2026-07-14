@@ -5,7 +5,7 @@ from pathlib import Path
 
 from scenariocraft.references.metadata_extractor import XoscMetadata
 from scenariocraft.external_tools import AsamQcResult, EsminiPlaybackResult, EsminiResult
-from scenariocraft.web.app import (
+from scenariocraft._legacy_streamlit.app import (
     PREVIEW_VISUAL_CAPTION,
     RUNTIME_VISUAL_CAPTION,
     WEB_PREVIEW_DISPLAY_ORIENTATION,
@@ -14,8 +14,8 @@ from scenariocraft.web.app import (
     _should_render_frame_sequence,
     _verified_esmini_frame_paths,
 )
-from scenariocraft.web.external_view import _recommended_reference_examples
-from scenariocraft.web.view_models import (
+from scenariocraft._legacy_streamlit.external_view import _recommended_reference_examples
+from scenariocraft._legacy_streamlit.view_models import (
     build_external_scenario_view_model,
     build_generated_scenario_view_model,
     compatibility_product_label,

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import scenariocraft.web.app as web_app
+import scenariocraft._legacy_streamlit.app as web_app
 from scenariocraft.core.templates import generate_default_pedestrian_occlusion_spec
-from scenariocraft.web.app import _run_demo_experiment_if_requested
-from scenariocraft.web.view_models import build_generated_scenario_view_model
+from scenariocraft._legacy_streamlit.app import _run_demo_experiment_if_requested
+from scenariocraft._legacy_streamlit.view_models import build_generated_scenario_view_model
 
 
 def test_demo_experiment_does_nothing_without_explicit_request(

@@ -13,7 +13,7 @@ def test_core_candidate_modules_do_not_import_delivery_or_runtime_adapters() -> 
     ]
     forbidden = (
         "import streamlit",
-        "scenariocraft.web",
+        "scenariocraft._legacy_streamlit",
         "scenariocraft.application",
         "from openai import",
         "import openai",

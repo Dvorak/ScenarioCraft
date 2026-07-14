@@ -24,7 +24,7 @@ DELIVERY_ADAPTER_MODULES = (
     "scenariocraft.application",
     "scenariocraft.main",
     "scenariocraft.application.orchestrator",
-    "scenariocraft.web",
+    "scenariocraft._legacy_streamlit",
 )
 
 EXTERNAL_TOOL_MODULES = (
@@ -100,7 +100,7 @@ TOOL_SEMANTIC_GROUPS = {
 FORBIDDEN_CORE_IMPORT_PATTERNS = (
     "import streamlit",
     "from streamlit",
-    "scenariocraft.web",
+    "scenariocraft._legacy_streamlit",
     "scenariocraft.application",
     "scenariocraft.providers",
     "scenariocraft.external_tools",
@@ -114,7 +114,7 @@ FORBIDDEN_CORE_IMPORT_PATTERNS = (
 FORBIDDEN_PROVIDER_IMPORT_PATTERNS = (
     "import streamlit",
     "from streamlit",
-    "scenariocraft.web",
+    "scenariocraft._legacy_streamlit",
     "scenariocraft.external_tools",
     "scenariocraft.rendering",
     "scenariocraft.core.build",
@@ -123,7 +123,7 @@ FORBIDDEN_PROVIDER_IMPORT_PATTERNS = (
 FORBIDDEN_EXTERNAL_TOOL_IMPORT_PATTERNS = (
     "import streamlit",
     "from streamlit",
-    "scenariocraft.web",
+    "scenariocraft._legacy_streamlit",
     "scenariocraft.providers",
     "scenariocraft.core.templates",
 )
@@ -131,7 +131,7 @@ FORBIDDEN_EXTERNAL_TOOL_IMPORT_PATTERNS = (
 FORBIDDEN_RENDERING_IMPORT_PATTERNS = (
     "import streamlit",
     "from streamlit",
-    "scenariocraft.web",
+    "scenariocraft._legacy_streamlit",
     "scenariocraft.providers",
 )
 

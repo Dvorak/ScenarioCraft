@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from scenariocraft.web.state import WORKSPACE_DESKTOP_HEIGHT, WORKSPACE_MEDIA_ASPECT_RATIO
+from scenariocraft._legacy_streamlit.state import WORKSPACE_DESKTOP_HEIGHT, WORKSPACE_MEDIA_ASPECT_RATIO
 
 
 def inject_css() -> None:

@@ -15,7 +15,7 @@ def test_streamlit_recipe_remains_an_explicit_debug_fallback() -> None:
     justfile = Path("justfile").read_text(encoding="utf-8")
 
     assert "streamlit:" in justfile
-    assert "scenariocraft/web/app.py" in justfile
+    assert "scenariocraft/_legacy_streamlit/app.py" in justfile
     assert "--server.port 8501" in justfile
 
 

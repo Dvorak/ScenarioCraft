@@ -14,7 +14,7 @@ from scenariocraft.application.controlled_cases import (
 from scenariocraft.application.demo_cases import PreparedDemoCase
 from scenariocraft.core.schemas import ScenarioSpec
 from scenariocraft.providers.openai_intent import local_llm_configuration_hint
-from scenariocraft.web.state import (
+from scenariocraft._legacy_streamlit.state import (
     WORKSPACE_GENERATE_ICON,
     WORKSPACE_PROVIDER,
     WORKSPACE_PROVIDER_OPTIONS,
@@ -22,11 +22,11 @@ from scenariocraft.web.state import (
     WORKSPACE_REPAIR_ICON,
     reset_workspace_candidate_state,
 )
-from scenariocraft.web.view_models import (
+from scenariocraft._legacy_streamlit.view_models import (
     GeneratedScenarioViewModel,
     build_workspace_repair_view_model,
 )
-from scenariocraft.web.workspace_components import (
+from scenariocraft._legacy_streamlit.workspace_components import (
     render_workspace_brief_panel,
     render_workspace_repair_panel,
     render_workspace_status_panel,

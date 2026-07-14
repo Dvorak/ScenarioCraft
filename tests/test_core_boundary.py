@@ -19,7 +19,7 @@ def test_core_boundary_manifest_names_stable_extraction_groups() -> None:
     assert "scenariocraft.core.loop" in CORE_PACKAGE_MODULES
     assert "scenariocraft.core.build" in CORE_PACKAGE_MODULES
     assert "scenariocraft.core.checks" in CORE_PACKAGE_MODULES
-    assert "scenariocraft.web" in DELIVERY_ADAPTER_MODULES
+    assert "scenariocraft._legacy_streamlit" in DELIVERY_ADAPTER_MODULES
     assert "scenariocraft.application" in DELIVERY_ADAPTER_MODULES
     assert "scenariocraft.application.orchestrator" in DELIVERY_ADAPTER_MODULES
     assert "scenariocraft.external_tools" in EXTERNAL_TOOL_MODULES
@@ -168,7 +168,7 @@ def test_pre_release_compatibility_facades_are_not_used_by_source() -> None:
         "scenariocraft.core.probes",
         "scenariocraft.core.validation",
         "scenariocraft.core.schemas.scenario_spec",
-        "scenariocraft.web.demo_cases",
+        "scenariocraft._legacy_streamlit.demo_cases",
     )
 
     offenders = {

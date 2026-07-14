@@ -8,9 +8,9 @@ import streamlit as st
 
 from scenariocraft.application.demo_cases import PreparedDemoCase
 from scenariocraft.core.schemas import ScenarioSpec
-from scenariocraft.web.media_view import render_workspace_runtime_media
-from scenariocraft.web.state import WORKSPACE_MEDIA_TITLES
-from scenariocraft.web.view_models import (
+from scenariocraft._legacy_streamlit.media_view import render_workspace_runtime_media
+from scenariocraft._legacy_streamlit.state import WORKSPACE_MEDIA_TITLES
+from scenariocraft._legacy_streamlit.view_models import (
     GeneratedScenarioViewModel,
     build_workspace_repair_view_model,
     build_workspace_status_view_model,

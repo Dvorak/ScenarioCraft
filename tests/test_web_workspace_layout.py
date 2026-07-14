@@ -15,7 +15,7 @@ from scenariocraft.application.demo_cases import (
     execute_prepared_demo_case,
     prepare_demo_case,
 )
-from scenariocraft.web.app import (
+from scenariocraft._legacy_streamlit.app import (
     WORKSPACE_DESKTOP_HEIGHT,
     WORKSPACE_GENERATE_ICON,
     WORKSPACE_MEDIA_TITLES,
@@ -27,7 +27,7 @@ from scenariocraft.web.app import (
     WEB_PREVIEW_PRESENTATION_STYLE,
     workspace_case_options,
 )
-from scenariocraft.web.view_models import (
+from scenariocraft._legacy_streamlit.view_models import (
     build_generated_scenario_view_model,
     build_workspace_repair_view_model,
     build_workspace_status_view_model,
@@ -48,7 +48,7 @@ def test_workspace_navigation_and_media_contract() -> None:
 
 
 def test_workspace_media_copy_uses_playback_esmini_naming() -> None:
-    source = Path("scenariocraft/web/media_view.py").read_text(encoding="utf-8")
+    source = Path("scenariocraft/_legacy_streamlit/media_view.py").read_text(encoding="utf-8")
 
     assert "Playback Esmini" in source
     assert "esmini Runtime Playback" not in source
@@ -57,7 +57,7 @@ def test_workspace_media_copy_uses_playback_esmini_naming() -> None:
 
 
 def test_workspace_is_default_and_has_one_controlled_case_selector() -> None:
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=10).run()
+    app = AppTest.from_file("scenariocraft/_legacy_streamlit/app.py", default_timeout=10).run()
 
     assert not app.exception
     assert [item.label for item in app.selectbox] == ["Provider", "Controlled Case"]
@@ -99,7 +99,7 @@ def test_workspace_local_llm_provider_uses_text_without_demo_case_selector(monke
 
     monkeypatch.setattr(OpenAIIntentProvider, "from_env", classmethod(lambda cls: StaticIntentProvider()))
     monkeypatch.setattr(
-        "scenariocraft.web.workspace_view.local_llm_configuration_hint",
+        "scenariocraft._legacy_streamlit.workspace_view.local_llm_configuration_hint",
         lambda timeout_s=0.35: LocalLlmConfigurationHint(
             server_url="http://localhost:11434/v1",
             reachable=True,
@@ -107,7 +107,7 @@ def test_workspace_local_llm_provider_uses_text_without_demo_case_selector(monke
             message="Local LLM model is configured as `qwen2.5:7b`.",
         ),
     )
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app = AppTest.from_file("scenariocraft/_legacy_streamlit/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
     app.text_area[0].set_value("生成一个城市道路同车道跟驰场景，前车突然急刹。")
     app.selectbox[0].select("LLM").run()
@@ -152,7 +152,7 @@ def test_workspace_local_llm_unsupported_intent_does_not_generate_spec(monkeypat
     from scenariocraft.providers.openai_intent import OpenAIIntentProvider
 
     monkeypatch.setattr(OpenAIIntentProvider, "from_env", classmethod(lambda cls: UnsupportedIntentProvider()))
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app = AppTest.from_file("scenariocraft/_legacy_streamlit/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
     app.text_area[0].set_value("Generate a highway cut-in with three lanes.")
     app.selectbox[0].select("LLM").run()
@@ -198,7 +198,7 @@ def test_workspace_refinement_suggestion_updates_request_without_generating(monk
     from scenariocraft.providers.openai_intent import OpenAIIntentProvider
 
     monkeypatch.setattr(OpenAIIntentProvider, "from_env", classmethod(lambda cls: ClarifyingIntentProvider()))
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app = AppTest.from_file("scenariocraft/_legacy_streamlit/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
     app.text_area[0].set_value("urban scenario")
     app.selectbox[0].select("LLM").run()
@@ -238,7 +238,7 @@ def test_workspace_revision_loop_uses_generation_provider_without_patch_repair(m
     from scenariocraft.providers.openai_intent import OpenAIIntentProvider
 
     monkeypatch.setattr(OpenAIIntentProvider, "from_env", classmethod(lambda cls: provider))
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app = AppTest.from_file("scenariocraft/_legacy_streamlit/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
     app.text_area[0].set_value("An ego vehicle follows a lead vehicle that suddenly brakes.")
     app.selectbox[0].select("LLM").run()
@@ -260,7 +260,7 @@ def test_workspace_revision_loop_uses_generation_provider_without_patch_repair(m
 
 
 def test_workspace_playback_panel_explains_preview_fallback_after_generation(tmp_path: Path) -> None:
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app = AppTest.from_file("scenariocraft/_legacy_streamlit/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
     next(button for button in app.button if button.label == "Generate").click().run()
 
@@ -272,7 +272,7 @@ def test_workspace_playback_panel_explains_preview_fallback_after_generation(tmp
 
 
 def test_web_app_removes_legacy_generated_pipeline_helpers() -> None:
-    source = Path("scenariocraft/web/app.py").read_text(encoding="utf-8")
+    source = Path("scenariocraft/_legacy_streamlit/app.py").read_text(encoding="utf-8")
 
     for helper_name in (
         "_generate_and_run",
@@ -294,8 +294,8 @@ def test_web_app_removes_legacy_generated_pipeline_helpers() -> None:
 
 
 def test_workspace_visual_components_are_extracted_from_page_composition() -> None:
-    workspace_source = Path("scenariocraft/web/workspace_view.py").read_text(encoding="utf-8")
-    component_source = Path("scenariocraft/web/workspace_components.py").read_text(encoding="utf-8")
+    workspace_source = Path("scenariocraft/_legacy_streamlit/workspace_view.py").read_text(encoding="utf-8")
+    component_source = Path("scenariocraft/_legacy_streamlit/workspace_components.py").read_text(encoding="utf-8")
 
     assert "render_workspace_status_panel" in workspace_source
     assert "render_workspace_repair_panel" in workspace_source
@@ -311,7 +311,7 @@ def test_workspace_visual_components_are_extracted_from_page_composition() -> No
 
 
 def test_advanced_page_retains_diagnostic_artifact_sections() -> None:
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=10).run()
+    app = AppTest.from_file("scenariocraft/_legacy_streamlit/app.py", default_timeout=10).run()
     app.session_state["active_page"] = "Advanced"
     app.run()
 
@@ -340,7 +340,7 @@ def test_advanced_page_retains_diagnostic_artifact_sections() -> None:
 
 
 def test_advanced_page_exposes_capability_tree_and_family_readiness() -> None:
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=10).run()
+    app = AppTest.from_file("scenariocraft/_legacy_streamlit/app.py", default_timeout=10).run()
     app.session_state["active_page"] = "Advanced"
     app.run()
 
@@ -383,7 +383,7 @@ def test_advanced_page_exposes_candidate_acceptance_trace(monkeypatch, tmp_path:
     from scenariocraft.providers.openai_intent import OpenAIIntentProvider
 
     monkeypatch.setattr(OpenAIIntentProvider, "from_env", classmethod(lambda cls: StaticIntentProvider()))
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app = AppTest.from_file("scenariocraft/_legacy_streamlit/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
     app.text_area[0].set_value("An ego vehicle follows a lead vehicle that suddenly brakes.")
     app.selectbox[0].select("LLM").run()
@@ -421,7 +421,7 @@ def test_advanced_page_exposes_candidate_fallback_trace(monkeypatch, tmp_path: P
     from scenariocraft.providers.openai_intent import OpenAIIntentProvider
 
     monkeypatch.setattr(OpenAIIntentProvider, "from_env", classmethod(lambda cls: InvalidParameterProvider()))
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app = AppTest.from_file("scenariocraft/_legacy_streamlit/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
     app.text_area[0].set_value("An ego vehicle follows a lead vehicle that suddenly brakes.")
     app.selectbox[0].select("LLM").run()
@@ -436,7 +436,7 @@ def test_advanced_page_exposes_candidate_fallback_trace(monkeypatch, tmp_path: P
 
 
 def test_workspace_controlled_cases_do_not_expose_repair_experiment_actions(tmp_path: Path) -> None:
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app = AppTest.from_file("scenariocraft/_legacy_streamlit/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
     next(button for button in app.button if button.label == "Generate").click().run()
 
@@ -447,7 +447,7 @@ def test_workspace_controlled_cases_do_not_expose_repair_experiment_actions(tmp_
 
 
 def test_workspace_brief_uses_explicit_timing_metric_labels(tmp_path: Path) -> None:
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app = AppTest.from_file("scenariocraft/_legacy_streamlit/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
     next(button for button in app.button if button.label == "Generate").click().run()
 
@@ -461,7 +461,7 @@ def test_workspace_brief_uses_explicit_timing_metric_labels(tmp_path: Path) -> N
 
 
 def test_workspace_repair_experiments_are_not_controlled_case_options(tmp_path: Path) -> None:
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app = AppTest.from_file("scenariocraft/_legacy_streamlit/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
 
     assert not app.exception
@@ -471,7 +471,7 @@ def test_workspace_repair_experiments_are_not_controlled_case_options(tmp_path: 
 
 
 def test_workspace_css_hides_streamlit_chrome_and_scopes_icon_controls() -> None:
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=10).run()
+    app = AppTest.from_file("scenariocraft/_legacy_streamlit/app.py", default_timeout=10).run()
     css = "\n".join(item.value for item in app.markdown if "<style>" in item.value)
 
     assert "--sc-bg: #fbfaf7" in css
@@ -535,7 +535,7 @@ def test_workspace_css_hides_streamlit_chrome_and_scopes_icon_controls() -> None
 
 
 def test_workspace_status_is_loop_aware_pipeline_strip() -> None:
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=10).run()
+    app = AppTest.from_file("scenariocraft/_legacy_streamlit/app.py", default_timeout=10).run()
     status_markup = next(
         item.value
         for item in app.markdown

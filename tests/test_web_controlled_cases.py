@@ -13,7 +13,7 @@ from scenariocraft.application.controlled_cases import (
 )
 from scenariocraft.application.demo_cases import DEMO_CASES
 from scenariocraft.core.templates.registry import registered_templates
-from scenariocraft.web.state import WORKSPACE_PROVIDER_OPTIONS
+from scenariocraft._legacy_streamlit.state import WORKSPACE_PROVIDER_OPTIONS
 
 
 EXPECTED_FAMILY_IDS = {
@@ -69,7 +69,7 @@ def test_workspace_defaults_to_provider_first_with_controlled_case_fallback() ->
 
 
 def test_workspace_controlled_case_selector_lists_five_golden_families(tmp_path: Path) -> None:
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app = AppTest.from_file("scenariocraft/_legacy_streamlit/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
 
     labels = [item.label for item in app.selectbox]
@@ -94,7 +94,7 @@ def test_workspace_controlled_case_selector_lists_five_golden_families(tmp_path:
 
 
 def test_workspace_controlled_case_selection_updates_request_text(tmp_path: Path) -> None:
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app = AppTest.from_file("scenariocraft/_legacy_streamlit/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
 
     app.selectbox[1].select("crossing_vehicle").run()
@@ -106,7 +106,7 @@ def test_workspace_controlled_case_selection_updates_request_text(tmp_path: Path
 
 
 def test_workspace_controlled_case_selection_clears_stale_generated_result(tmp_path: Path) -> None:
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app = AppTest.from_file("scenariocraft/_legacy_streamlit/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
     next(button for button in app.button if button.label == "Generate").click().run()
 
@@ -122,7 +122,7 @@ def test_workspace_controlled_case_selection_clears_stale_generated_result(tmp_p
 
 
 def test_workspace_default_request_comes_from_selected_controlled_case(tmp_path: Path) -> None:
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app = AppTest.from_file("scenariocraft/_legacy_streamlit/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
 
     selected_case_id = app.session_state["selected_demo_case_id"]
@@ -132,7 +132,7 @@ def test_workspace_default_request_comes_from_selected_controlled_case(tmp_path:
 
 
 def test_workspace_can_shuffle_controlled_case_prompt_variant(tmp_path: Path) -> None:
-    app = AppTest.from_file("scenariocraft/web/app.py", default_timeout=20).run()
+    app = AppTest.from_file("scenariocraft/_legacy_streamlit/app.py", default_timeout=20).run()
     app.session_state["output_root"] = str(tmp_path)
 
     before = app.session_state["scenario_text"]

@@ -15,13 +15,13 @@ from scenariocraft.application import (
 from scenariocraft.references import ReferenceScenarioOption, XoscMetadata, discover_external_scenarios, extract_xosc_metadata
 from scenariocraft.core.build import BuildResult
 from scenariocraft.external_tools import AsamQcResult, EsminiResult
-from scenariocraft.web.state import (
+from scenariocraft._legacy_streamlit.state import (
     CURATED_REFERENCE_EXAMPLES_PATH,
     RECOMMENDED_EXAMPLE_FILES,
     REFERENCE_CATEGORIES,
     REFERENCE_SOURCES,
 )
-from scenariocraft.web.view_models import (
+from scenariocraft._legacy_streamlit.view_models import (
     ExternalScenarioViewModel,
     StatusCardViewModel,
     build_external_scenario_view_model,

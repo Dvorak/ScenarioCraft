@@ -36,15 +36,15 @@ from scenariocraft.providers.openai_intent import local_llm_configuration_hint
 from scenariocraft.core.schemas import ScenarioSpec
 from scenariocraft.core.checks import SemanticValidationResult
 from scenariocraft.core.checks import validate_semantics
-from scenariocraft.web.actions import run_runtime_checks_for_generated_scenario, write_generated_validation_report
-from scenariocraft.web.advanced_view import render_advanced_page
-from scenariocraft.web.media_view import (
+from scenariocraft._legacy_streamlit.actions import run_runtime_checks_for_generated_scenario, write_generated_validation_report
+from scenariocraft._legacy_streamlit.advanced_view import render_advanced_page
+from scenariocraft._legacy_streamlit.media_view import (
     _frame_sequence_state,
     _playback_media_label,
     _should_render_frame_sequence,
     _verified_esmini_frame_paths,
 )
-from scenariocraft.web.state import (
+from scenariocraft._legacy_streamlit.state import (
     CRITICALITY_MAX_TTC_S,
     DEFAULT_OUTPUT_ROOT,
     PREVIEW_VISUAL_CAPTION,
@@ -63,15 +63,15 @@ from scenariocraft.web.state import (
     ensure_session_state,
     reset_generated_scenario_state,
 )
-from scenariocraft.web.styles import inject_css
-from scenariocraft.web.view_models import (
+from scenariocraft._legacy_streamlit.styles import inject_css
+from scenariocraft._legacy_streamlit.view_models import (
     DemoExperimentTraceViewModel,
     GeneratedScenarioViewModel,
     RepairCheckTraceViewModel,
     build_demo_experiment_trace_view_model,
     build_generated_scenario_view_model,
 )
-from scenariocraft.web.workspace_view import render_workspace, workspace_case_options
+from scenariocraft._legacy_streamlit.workspace_view import render_workspace, workspace_case_options
 
 
 def main() -> None:

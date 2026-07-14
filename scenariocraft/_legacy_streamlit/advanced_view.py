@@ -14,7 +14,7 @@ from scenariocraft.core.checks import SemanticValidationResult
 from scenariocraft.application.demo_cases import PreparedDemoCase
 from scenariocraft.application.demo_cases import DEMO_CASES
 from scenariocraft.core.templates import family_asset_readiness_report
-from scenariocraft.web.view_models import DemoExperimentTraceViewModel
+from scenariocraft._legacy_streamlit.view_models import DemoExperimentTraceViewModel
 
 
 def render_advanced_page(
