@@ -11,9 +11,8 @@ setup-full:
     {{python}} -m scenariocraft.tooling.setup_tools
 
 setup-web:
-    mkdir -p web-ref
-    if [ ! -d web-ref/scenariocraft-web/.git ]; then git clone https://github.com/Dvorak/scenariocraft-web.git web-ref/scenariocraft-web; fi
-    npm --prefix web-ref/scenariocraft-web ci
+    git submodule update --init --recursive web
+    npm --prefix web ci
 
 setup-openai:
     UV_CACHE_DIR=.uv-cache {{uv}} sync --extra dev --extra web --extra openai
@@ -27,14 +26,18 @@ test:
 smoke:
     {{python}} -m scenariocraft.main --input examples/pedestrian_occlusion.txt --out outputs/demo --provider mock
 
+api:
+    echo "ScenarioCraft API: http://localhost:8000"
+    {{python}} -m uvicorn scenariocraft.api.app:app --host 127.0.0.1 --port 8000
+
 web:
-    test -f web-ref/scenariocraft-web/package.json || (echo "React frontend is missing; run: .venv/bin/just setup-web" && exit 1)
+    test -f web/package.json || (echo "React frontend is not initialized; run: .venv/bin/just setup-web" && exit 1)
     echo "ScenarioCraft Web UI: http://localhost:3000"
     echo "ScenarioCraft API: http://localhost:8000"
-    {{python}} -m uvicorn scenariocraft.http_api:app --host 127.0.0.1 --port 8000 & api_pid=$!; trap 'kill "$api_pid" 2>/dev/null || true' EXIT INT TERM; npm --prefix web-ref/scenariocraft-web run dev -- --host 127.0.0.1 --port 3000
+    {{python}} -m uvicorn scenariocraft.api.app:app --host 127.0.0.1 --port 8000 & api_pid=$!; trap 'kill "$api_pid" 2>/dev/null || true' EXIT INT TERM; npm --prefix web run dev -- --host 127.0.0.1 --port 3000
 
-streamlit:
-    echo "ScenarioCraft Web UI: http://localhost:8501"
+web-legacy:
+    echo "ScenarioCraft legacy Streamlit UI: http://localhost:8501"
     {{python}} -m streamlit run scenariocraft/_legacy_streamlit/app.py --server.address localhost --server.port 8501
 
 clean:

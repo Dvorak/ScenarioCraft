@@ -206,7 +206,7 @@ def test_canonical_source_package_directories_are_present() -> None:
     expected_dirs = (
         "core",
         "application",
-        "web",
+        "api",
         "external_tools",
         "providers",
         "rendering",

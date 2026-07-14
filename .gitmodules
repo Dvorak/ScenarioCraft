@@ -1,0 +1,4 @@
+[submodule "web"]
+	path = web
+	url = https://github.com/Dvorak/scenariocraft-web.git
+	branch = main

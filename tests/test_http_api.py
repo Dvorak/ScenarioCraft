@@ -4,7 +4,7 @@ from pathlib import Path
 
 from starlette.testclient import TestClient
 
-from scenariocraft.http_api import create_http_app
+from scenariocraft.api.app import create_http_app
 from scenariocraft.providers.openai_intent import (
     LocalLlmConfigurationHint,
     OpenAIIntentProviderExecutionError,
@@ -160,7 +160,7 @@ def test_provider_execution_failure_is_not_reported_as_unsupported_intent(
             raise OpenAIIntentProviderExecutionError("OpenAI-compatible request timed out.")
 
     monkeypatch.setattr(
-        "scenariocraft.http_api.OpenAIIntentProvider.from_env",
+        "scenariocraft.api.app.OpenAIIntentProvider.from_env",
         lambda: _FailingProvider(),
     )
     client = TestClient(create_http_app(output_root=tmp_path, provider_hint=_provider_hint))
